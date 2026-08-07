@@ -18,6 +18,7 @@ When code is added to the repository, create focused docs here instead of overlo
 - [`codex-workflows.md`](./codex-workflows.md): repository conventions for subagents, prompt reuse, and work-unit commits
 - [`tech-stack.md`](./tech-stack.md): concrete implementation stack choices for the MVP
 - [`architecture-overview.md`](./architecture-overview.md): target MVP architecture and subsystem boundaries
+- [`local-development.md`](./local-development.md): local infra and backend development commands
 - [`database-schema.md`](./database-schema.md): initial Flyway schema and relational design notes
 - [`data-model-erd.md`](./data-model-erd.md): ERD and storage modeling notes
 - [`decision-state-machine.md`](./decision-state-machine.md): authoritative decision lifecycle and transition rules

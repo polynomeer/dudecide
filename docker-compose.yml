@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: dudecide-postgres
+    environment:
+      POSTGRES_DB: dudecide
+      POSTGRES_USER: dudecide
+      POSTGRES_PASSWORD: dudecide
+    ports:
+      - "5432:5432"
+    volumes:
+      - dudecide-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dudecide -d dudecide"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:8.0-alpine
+    container_name: dudecide-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - dudecide-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:RELEASE.2026-07-25T15-33-41Z
+    container_name: dudecide-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: dudecide
+      MINIO_ROOT_PASSWORD: dudecide123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - dudecide-minio-data:/data
+
+volumes:
+  dudecide-postgres-data:
+  dudecide-redis-data:
+  dudecide-minio-data:
