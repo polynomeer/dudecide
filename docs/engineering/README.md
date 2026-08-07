@@ -16,3 +16,8 @@ When code is added to the repository, create focused docs here instead of overlo
 ## Current Files
 
 - [`codex-workflows.md`](./codex-workflows.md): repository conventions for subagents, prompt reuse, and work-unit commits
+- [`architecture-overview.md`](./architecture-overview.md): target MVP architecture and subsystem boundaries
+- [`data-model-erd.md`](./data-model-erd.md): ERD and storage modeling notes
+- [`api-and-events.md`](./api-and-events.md): API surface and async event contracts
+- [`ai-pipeline.md`](./ai-pipeline.md): AI extraction, summary, and decision suggestion flow
+- [`mvp-delivery-plan.md`](./mvp-delivery-plan.md): implementation phases, milestones, and testing focus
