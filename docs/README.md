@@ -11,3 +11,4 @@
 - Put stable context here so future Codex tasks do not depend on prior chat history.
 - Prefer updating an existing document before creating a new top-level category.
 - When adding a high-value document, link it from this index.
+- For Codex operating guidance, start with [`engineering/codex-workflows.md`](./engineering/codex-workflows.md).
