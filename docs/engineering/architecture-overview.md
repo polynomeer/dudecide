@@ -19,7 +19,7 @@ This document defines the target MVP architecture for Dudecide.
 
 ### Backend
 
-- `NestJS` modular monolith application on `Fastify`
+- `Kotlin + Spring Boot` modular monolith application
 - REST API for core workflows
 - SSE first for realtime room updates, with WebSocket as a later upgrade if needed
 - async worker for AI, notifications, and report refresh
@@ -41,6 +41,21 @@ Benefits:
 - simpler local development and testing
 - easier transactional consistency for decision confirmation and evidence writes
 - clean later extraction path for AI or search if needed
+- Kotlin and Spring provide a stronger foundation for long-lived relational business logic
+
+## Shared-Schema Strategy
+
+The frontend and backend will not share runtime application code directly.
+
+Shared contract rules:
+
+- `OpenAPI` is the source of truth for HTTP request and response contracts
+- backend DTOs and enums are authored in Kotlin first
+- frontend API types and clients are generated from the published OpenAPI spec
+- async worker payloads use explicit JSON contracts and documented event schemas
+- AI structured outputs are validated on the backend before persistence
+
+This keeps business ownership on the Kotlin side while preserving strong frontend type safety.
 
 ## System Context
 
@@ -129,7 +144,7 @@ flowchart TB
     end
 
     subgraph server["Modular Monolith"]
-        gateway["HTTP API + SSE"]
+        gateway["Spring Boot API + SSE"]
         meeting["Meeting Module"]
         thread["Thread Module"]
         decision["Decision Module"]
@@ -226,6 +241,12 @@ Reasons:
 - decision confirmations must reliably trigger report refresh and notifications
 - event publication should remain consistent with transaction commits
 
+Recommended implementation:
+
+- Spring-managed transaction boundary
+- PostgreSQL outbox table
+- relay into worker queue after commit
+
 ## Non-Goals For MVP
 
 - independent deployable microservices
@@ -256,3 +277,4 @@ Reasons:
 - invite links should be revocable and optionally expire
 - message content sent to AI providers must be auditable and minimized where possible
 - evidence snapshots should preserve enough context for trust without leaking deleted content incorrectly
+- generated frontend clients should be versioned against the OpenAPI contract to prevent silent drift

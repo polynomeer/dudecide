@@ -4,11 +4,11 @@ This document fixes the initial MVP implementation stack for Dudecide.
 
 ## Decision Summary
 
-### Monorepo And Language
+### Repository And Build
 
-- `TypeScript`
-- `pnpm` workspace
-- `Turborepo`
+- `Gradle` multi-module for backend and backend-shared libraries
+- separate `Next.js` web app in the same repository
+- repository-level orchestration may be added later, but contract ownership stays with backend schemas
 
 ### Client
 
@@ -18,27 +18,26 @@ This document fixes the initial MVP implementation stack for Dudecide.
 - `Tailwind CSS`
 - `TanStack Query`
 - `React Hook Form`
-- `Zod`
 
 ### Backend
 
-- `NestJS`
-- `Fastify` adapter
-- `TypeScript`
-- `Zod` for boundary validation
+- `Kotlin`
+- `Spring Boot 3`
+- `Spring MVC`
+- modular monolith with `Spring Modulith` style boundaries
 
 ### Data And Infra
 
 - `PostgreSQL`
 - `pgvector`
 - `Redis`
-- `BullMQ`
+- queue-backed async worker
 - `S3-compatible object storage`
 
 ### Persistence And SQL Tooling
 
-- `Drizzle ORM`
-- `drizzle-kit`
+- `jOOQ`
+- `Flyway`
 
 ### Search
 
@@ -47,12 +46,14 @@ This document fixes the initial MVP implementation stack for Dudecide.
 
 ### AI Integration
 
-- official `OpenAI` JavaScript SDK
+- official server-side `OpenAI` SDK
 - async AI orchestration through worker jobs
 
 ### Testing And Quality
 
-- `Vitest`
+- `JUnit 5`
+- `Kotest`
+- `Testcontainers`
 - `Playwright`
 - `ESLint`
 - `Prettier`
@@ -61,13 +62,13 @@ This document fixes the initial MVP implementation stack for Dudecide.
 
 The product needs:
 
-- one language across frontend, backend, worker, and AI integration
-- strong modular backend structure
-- fast UI iteration on web
-- first-class async job support
-- a low-friction path for hybrid semantic search
+- strong domain modeling for decision, vote, and evidence workflows
+- robust transactional consistency
+- long-lived backend maintainability
+- safe async AI integration
+- clean contract boundaries between frontend and backend
 
-This stack optimizes for shipping a real MVP without introducing infrastructure that is harder than the product itself.
+This stack optimizes for a durable backend while keeping the frontend web-first and fast to iterate.
 
 ## Workspace Shape
 
@@ -76,35 +77,66 @@ Recommended repository shape:
 ```text
 apps/
   web/
-  api/
+backend/
+  app/
   worker/
-packages/
-  config/
-  ui/
-  domain/
-  schemas/
-  prompts/
+  modules/
+    meeting/
+    thread/
+    decision/
+    vote/
+    search/
+    report/
+    notification/
+    ai/
+  shared/
+contracts/
+  openapi/
+  events/
 ```
 
-## Concrete Choices
+## Shared-Schema Strategy
 
-## 1. Package Manager And Monorepo
+### Decision
 
-### Choice
-
-- `pnpm` for package management
-- `Turborepo` for task orchestration and caching
+- do not share runtime validation code between TypeScript and Kotlin
+- backend Kotlin DTOs and enums define the authoritative HTTP contract
+- `OpenAPI` generated from backend code is the shared API contract
+- frontend uses generated TypeScript types and API clients from OpenAPI
+- async jobs and internal events use explicit JSON payload contracts
 
 ### Why
 
-- efficient workspace dependency handling
-- fast installs and predictable lockfile behavior
-- simple separation of `web`, `api`, and `worker`
+- cross-language teams should share contracts, not implementation types
+- backend remains authoritative over business and transport rules
+- frontend keeps strong typing without forcing backend model design
+
+### Rules
+
+- transport DTO changes require OpenAPI regeneration
+- frontend should consume generated client types for server payloads
+- backend validates AI outputs before mapping into domain objects
+- event payloads are versioned and treated as contracts, not ad hoc maps
+
+## Concrete Choices
+
+## 1. Repository And Build Strategy
+
+### Choice
+
+- Kotlin backend on `Gradle` multi-module
+- standalone `Next.js` web app in the same repository
+
+### Why
+
+- Gradle is the natural build tool for Spring and Kotlin
+- backend modules stay explicit and testable
+- frontend and backend still share one repository without forcing one toolchain
 
 ### Rejected Alternatives
 
-- `npm workspaces`: workable, but less efficient for multi-app iteration
-- `Nx`: stronger enterprise tooling than needed for this MVP stage
+- TypeScript-only monorepo as the main architecture
+- forcing frontend builds into Gradle
 
 ## 2. Frontend Framework
 
@@ -116,114 +148,144 @@ packages/
 
 ### Why
 
-- good fit for invite-link entry flows and shareable meeting pages
-- easy deployment and SEO-friendly landing or invite pages if needed later
-- mature ecosystem for auth, routing, and web app ergonomics
+- strong fit for invite-link entry flows and shareable meeting pages
+- easy deployment and good support for public entry surfaces
+- mature web ecosystem and strong developer velocity
 
 ### UI Layer
 
 - `Tailwind CSS` for rapid product iteration
-- shared UI package under `packages/ui`
-- no heavy component framework at the start
+- repository-local UI components, extracted only if reuse pressure appears
 
 ### State And Data Fetching
 
-- `TanStack Query` for client cache and mutation handling
-- local UI state kept in React components or lightweight stores only when truly needed
+- `TanStack Query` for cache and mutation handling
 
 ### Forms
 
-- `React Hook Form` plus `Zod` for meeting setup, vote input, and admin actions
+- `React Hook Form` for meeting setup, vote input, and admin actions
 
 ### Rejected Alternatives
 
-- pure `Vite` SPA: lighter, but worse fit for invite entry and future shareable routes
-- `Remix`: solid data model, but the team advantage versus Next.js is smaller here
-- React Native first: too early before the core behavior is validated
+- pure `Vite` SPA
+- `Remix`
+- React Native first
 
 ## 3. Backend Framework
 
 ### Choice
 
-- `NestJS` on `Fastify`
+- `Kotlin`
+- `Spring Boot 3`
+- `Spring MVC`
 
 ### Why
 
-- module system fits the planned modular monolith
-- clean dependency injection for domain modules and worker coordination
-- built-in support for structured controllers, providers, and testing
-- Fastify keeps the HTTP layer leaner than Express
+- excellent fit for transaction-heavy relational domain logic
+- strong testability and operational maturity
+- better long-term structure for a growing planning platform
+
+### Why Not WebFlux For MVP
+
+- current flows are request-response and queue-driven
+- SSE works without a fully reactive stack
+- reactive complexity is not justified yet
 
 ### Rejected Alternatives
 
-- raw `Fastify`: faster to start small, but easier to drift into ad hoc architecture
-- `Express`: weaker default structure for the size this app will reach quickly
-- `tRPC` as the primary backend contract: useful in fullstack TS apps, but less ideal for SSE, worker boundaries, and explicit external API contracts
+- `NestJS`
+- raw `Ktor`
+- `Spring WebFlux` for the initial MVP
 
-## 4. Database And ORM
+## 4. Modularity Strategy
+
+### Choice
+
+- modular monolith
+- module boundaries enforced through package structure and tests
+- `Spring Modulith` conventions where useful
+
+### Why
+
+- aligns with the architecture docs
+- keeps meeting, thread, decision, vote, and AI boundaries explicit
+- avoids microservice overhead while preserving extraction paths
+
+## 5. Database And SQL Access
 
 ### Choice
 
 - `PostgreSQL`
-- `Drizzle ORM`
-- `drizzle-kit` migrations
+- `jOOQ`
+- `Flyway`
 
 ### Why PostgreSQL
 
 - strong relational model for meetings, memberships, decisions, votes, and evidence
-- good support for JSON fields where structured payloads vary
-- works well with full-text search and `pgvector`
+- native path to full-text search and `pgvector`
+- strong transactional guarantees
 
-### Why Drizzle
+### Why jOOQ
 
-- SQL-first and transparent schema definitions
-- easier control over migrations and database shape than heavier ORM abstractions
-- good fit when the domain contains many stateful relational rules
+- SQL-first and type-safe without hiding the database
+- strong fit for scoring queries, search projections, and evidence-heavy joins
+- good control over advanced SQL and indexing
+
+### Why Flyway
+
+- predictable SQL migration workflow
+- easy schema review in pull requests
 
 ### Rejected Alternatives
 
-- `Prisma`: productive, but less SQL-transparent and less attractive for advanced indexing and constraint-heavy domain modeling
-- `TypeORM`: weaker fit than Drizzle for modern migration discipline
+- `Spring Data JPA`
+- `Exposed`
 
-## 5. Search Strategy
+## 6. Search Strategy
 
 ### Choice
 
 - PostgreSQL full-text search for keyword retrieval
 - `pgvector` for semantic retrieval
-- hybrid ranking in application code or SQL views
+- hybrid ranking in SQL and application code
 
 ### Why
 
-- avoids operating a separate search cluster in MVP
-- keeps source-of-truth data close to searchable projections
+- avoids a separate search cluster in MVP
+- keeps searchable projections close to the source-of-truth database
 - enough for message, summary, and decision retrieval at MVP scale
 
 ### Rejected Alternatives
 
-- dedicated vector database from day one: unnecessary operational overhead
-- Elasticsearch/OpenSearch: too much infrastructure before product fit is proven
+- dedicated vector database from day one
+- Elasticsearch/OpenSearch
 
-## 6. Queue And Worker
+## 7. Queue And Worker
 
 ### Choice
 
-- `BullMQ`
-- `Redis`
-- dedicated `worker` app in the same workspace
+- Redis-backed queue
+- dedicated Kotlin worker process
 
 ### Why
 
 - good fit for AI classification, summaries, notifications, and report refresh
-- straightforward retry and dead-letter handling
-- simple local development story
+- preserves one backend language for business-side async logic
+- supports retries and dead-letter handling
+
+### Implementation Direction
+
+- start with a simple Redis-backed queue library or Spring-compatible job runner
+- keep job payloads explicit and versioned
+- use PostgreSQL outbox plus relay where delivery guarantees matter
 
 ### Rejected Alternatives
 
-- database-only polling jobs: too brittle for AI-heavy async work
-- heavyweight workflow engines: too much platform cost this early
+- database-only polling jobs
+- heavyweight workflow engines
+- separate TypeScript worker
 
-## 7. Realtime Transport
+## 8. Realtime Transport
 
 ### Choice
 
@@ -241,7 +303,7 @@ Move to WebSocket only if:
 - typing or presence becomes essential
 - client-server bidirectional signaling grows materially
 
-## 8. Auth And Session Approach
+## 9. Auth And Session Approach
 
 ### Choice
 
@@ -252,14 +314,14 @@ Move to WebSocket only if:
 ### Why
 
 - keeps invite and meeting-role logic inside the core domain
-- avoids early dependency on a third-party auth product before the user funnel is stable
+- avoids early dependency on a third-party auth product
 
 ### Near-Term Implementation Suggestion
 
-- email magic link or simple social login later
 - signed HTTP-only cookie sessions for MVP
+- email magic link or social login after core room flows stabilize
 
-## 9. Object Storage
+## 10. Object Storage
 
 ### Choice
 
@@ -267,14 +329,14 @@ Move to WebSocket only if:
 
 ### Why
 
-- keeps attachment and export handling portable across local, staging, and production
+- portable across local, staging, and production
 - works with MinIO locally and cloud object stores later
 
-## 10. AI SDK And Model Integration
+## 11. AI SDK And Model Integration
 
 ### Choice
 
-- official `OpenAI` JavaScript SDK
+- official provider SDK from server-side runtime only
 - model access only from backend or worker
 
 ### Why
@@ -287,39 +349,44 @@ Move to WebSocket only if:
 - smaller structured calls for classification and extraction
 - larger reasoning calls for summaries and report generation
 
-## 11. Validation And Shared Schemas
+## 12. Contract And Validation Strategy
 
 ### Choice
 
-- `Zod` in shared packages
+- backend-owned DTO validation in Kotlin
+- OpenAPI-generated client types on the frontend
+- explicit event payload contracts for async boundaries
 
 ### Why
 
-- one runtime validation language across web, API, and worker
-- useful for API DTO validation, form validation, and AI output schema checking
+- shared schema should mean stable contracts, not shared source code
+- backend stays authoritative over business and transport rules
+- frontend gains type safety without dictating backend model design
 
-## 12. Testing Stack
+## 13. Testing Stack
 
 ### Choice
 
-- `Vitest` for unit and module tests
+- `JUnit 5` and `Kotest` for backend tests
+- `Testcontainers` for PostgreSQL and Redis-backed tests
 - `Playwright` for end-to-end scenario tests
 
 ### Why
 
-- fast TS-native unit test workflow
-- strong browser automation for invite, voting, and decision flows
+- strong JVM testing ecosystem for transaction-heavy behavior
+- realistic infrastructure testing without fragile local assumptions
+- browser automation for invite, voting, and decision flows
 
-## 13. Local Development Baseline
+## 14. Local Development Baseline
 
 ### Choice
 
 - `Docker Compose` for PostgreSQL, Redis, and local object storage
-- app processes run with native Node tooling
+- backend and frontend run with native Gradle and Node tooling
 
 ### Why
 
-- keep app hot-reload fast
+- keep app hot-reload practical
 - containerize only the infra pieces that benefit from standardization
 
 ## Service Boundary Mapping
@@ -332,29 +399,20 @@ Move to WebSocket only if:
 - vote UX
 - report UX
 
-### `apps/api`
+### `backend/app`
 
 - REST API
 - SSE endpoint
 - auth/session handling
 - core domain orchestration
 
-### `apps/worker`
+### `backend/worker`
 
 - message classification
 - summary generation
 - decision suggestions
 - notification jobs
 - report refresh jobs
-
-## Initial Library Baseline
-
-Recommended first install set:
-
-- web: `next react react-dom @tanstack/react-query react-hook-form zod tailwindcss`
-- api: `@nestjs/core @nestjs/common @nestjs/platform-fastify @nestjs/config zod drizzle-orm pg ioredis bullmq`
-- worker: `bullmq ioredis zod openai`
-- shared: `typescript vitest eslint prettier`
 
 ## Things We Are Explicitly Not Choosing Yet
 
