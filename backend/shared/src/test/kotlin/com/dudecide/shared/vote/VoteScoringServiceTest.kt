@@ -45,7 +45,7 @@ class VoteScoringServiceTest {
         )
 
         assertEquals("A", ranked.first().optionId)
-        assertEquals(3.1, ranked.first().rawScore)
+        assertEquals(3.1, ranked.first().rawScore, 0.0001)
     }
 
     @Test
