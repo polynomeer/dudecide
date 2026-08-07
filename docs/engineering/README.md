@@ -20,6 +20,8 @@ When code is added to the repository, create focused docs here instead of overlo
 - [`architecture-overview.md`](./architecture-overview.md): target MVP architecture and subsystem boundaries
 - [`database-schema.md`](./database-schema.md): initial Flyway schema and relational design notes
 - [`data-model-erd.md`](./data-model-erd.md): ERD and storage modeling notes
+- [`decision-state-machine.md`](./decision-state-machine.md): authoritative decision lifecycle and transition rules
+- [`vote-scoring-rules.md`](./vote-scoring-rules.md): date and location vote scoring formulas and early-close rules
 - [`api-and-events.md`](./api-and-events.md): API surface and async event contracts
 - [`ai-pipeline.md`](./ai-pipeline.md): AI extraction, summary, and decision suggestion flow
 - [`mvp-delivery-plan.md`](./mvp-delivery-plan.md): implementation phases, milestones, and testing focus
