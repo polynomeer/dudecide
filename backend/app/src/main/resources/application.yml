@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: dudecide-app
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/dudecide}
+    username: ${DB_USER:dudecide}
+    password: ${DB_PASSWORD:dudecide}
+  flyway:
+    enabled: true
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

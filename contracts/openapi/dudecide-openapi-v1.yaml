@@ -1,0 +1,238 @@
+openapi: 3.1.0
+info:
+  title: Dudecide API
+  version: 0.1.0
+  description: Draft MVP contract for meeting, decision, and vote flows.
+servers:
+  - url: /api/v1
+paths:
+  /meetings:
+    post:
+      operationId: createMeeting
+      summary: Create a meeting
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMeetingRequest'
+      responses:
+        '201':
+          description: Meeting created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeetingResponse'
+  /meetings/{meetingId}/decisions:
+    get:
+      operationId: listDecisions
+      summary: List decisions for a meeting
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '200':
+          description: Decision list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DecisionResponse'
+  /decisions/{decisionId}/confirm:
+    post:
+      operationId: confirmDecision
+      summary: Confirm a decision
+      parameters:
+        - $ref: '#/components/parameters/DecisionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmDecisionRequest'
+      responses:
+        '200':
+          description: Decision confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResponse'
+  /votes/{voteId}/responses/me:
+    put:
+      operationId: submitVoteResponses
+      summary: Submit or replace current user vote responses
+      parameters:
+        - $ref: '#/components/parameters/VoteId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoteSubmissionRequest'
+      responses:
+        '200':
+          description: Vote updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteResponseView'
+components:
+  parameters:
+    MeetingId:
+      name: meetingId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DecisionId:
+      name: decisionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    VoteId:
+      name: voteId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    CreateMeetingRequest:
+      type: object
+      required:
+        - title
+        - meetingType
+      properties:
+        title:
+          type: string
+        meetingType:
+          type: string
+        expectedHeadcount:
+          type: integer
+          minimum: 1
+        originRegion:
+          type: string
+        budget:
+          $ref: '#/components/schemas/BudgetRange'
+    BudgetRange:
+      type: object
+      properties:
+        min:
+          type: number
+        max:
+          type: number
+    MeetingResponse:
+      type: object
+      required:
+        - id
+        - title
+        - meetingType
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        meetingType:
+          type: string
+        status:
+          $ref: '#/components/schemas/MeetingStatus'
+    DecisionResponse:
+      type: object
+      required:
+        - id
+        - meetingId
+        - threadId
+        - decisionType
+        - title
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        meetingId:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+          format: uuid
+        decisionType:
+          $ref: '#/components/schemas/DecisionType'
+        title:
+          type: string
+        status:
+          $ref: '#/components/schemas/DecisionStatus'
+        proposedResult:
+          type: object
+          additionalProperties: true
+        confirmedResult:
+          type: object
+          additionalProperties: true
+        decidedAt:
+          type: string
+          format: date-time
+    ConfirmDecisionRequest:
+      type: object
+      required:
+        - confirmedResult
+      properties:
+        confirmedResult:
+          type: object
+          additionalProperties: true
+        reason:
+          type: string
+    VoteSubmissionRequest:
+      type: object
+      required:
+        - responses
+      properties:
+        responses:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoteSubmissionItem'
+    VoteSubmissionItem:
+      type: object
+      required:
+        - optionId
+        - responseValue
+      properties:
+        optionId:
+          type: string
+          format: uuid
+        responseValue:
+          $ref: '#/components/schemas/VoteResponseValue'
+    VoteResponseView:
+      type: object
+      required:
+        - voteId
+        - status
+        - responses
+      properties:
+        voteId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/VoteStatus'
+        responses:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoteSubmissionItem'
+    MeetingStatus:
+      type: string
+      enum: [draft, active, finalizing, completed, archived]
+    DecisionStatus:
+      type: string
+      enum: [proposed, in_discussion, voting, confirmed, on_hold, needs_reconsideration]
+    DecisionType:
+      type: string
+      enum: [date, location, lodging, transport, budget, task, other]
+    VoteStatus:
+      type: string
+      enum: [draft, open, closed, superseded]
+    VoteResponseValue:
+      type: string
+      enum: [available, maybe, unavailable, good, okay, dislike, yes, no]
