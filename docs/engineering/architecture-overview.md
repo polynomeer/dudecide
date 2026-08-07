@@ -14,22 +14,22 @@ This document defines the target MVP architecture for Dudecide.
 
 ### Client
 
-- web-first responsive client for MVP
+- `Next.js` web-first responsive client for MVP
 - optionally packaged later as React Native or native shell once usage is validated
 
 ### Backend
 
-- modular monolith application
+- `NestJS` modular monolith application on `Fastify`
 - REST API for core workflows
 - SSE first for realtime room updates, with WebSocket as a later upgrade if needed
 - async worker for AI, notifications, and report refresh
 
 ### Data
 
-- PostgreSQL for transactional source of truth
-- Redis for rate limits, ephemeral presence, job queue coordination, and hot room state
-- vector index for semantic retrieval over message and summary embeddings
-- object storage for attachments and exported reports
+- `PostgreSQL` for transactional source of truth
+- `Redis` for rate limits, ephemeral presence, job queue coordination, and hot room state
+- `pgvector` for semantic retrieval over message and summary embeddings
+- S3-compatible object storage for attachments and exported reports
 
 ## Why Modular Monolith
 
