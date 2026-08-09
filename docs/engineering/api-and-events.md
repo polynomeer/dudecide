@@ -116,6 +116,7 @@ This document defines the MVP external API surface and internal async events.
 `GET /api/v1/votes/{voteId}`
 
 - get vote status and aggregated results
+- returns option metadata, caller's current responses, and aggregate ranking snapshot
 
 `PUT /api/v1/votes/{voteId}/responses/me`
 

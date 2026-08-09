@@ -76,6 +76,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VoteResponseView'
+  /votes/{voteId}:
+    get:
+      operationId: getVote
+      summary: Get vote detail and aggregated results
+      parameters:
+        - $ref: '#/components/parameters/VoteId'
+      responses:
+        '200':
+          description: Vote detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteResponseView'
 components:
   parameters:
     MeetingId:
@@ -209,18 +222,112 @@ components:
       type: object
       required:
         - voteId
+        - meetingId
+        - threadId
+        - voteType
         - status
+        - options
         - responses
       properties:
         voteId:
           type: string
           format: uuid
+        meetingId:
+          type: string
+          format: uuid
+        decisionId:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+          format: uuid
+        voteType:
+          type: string
+        opensAt:
+          type: string
+          format: date-time
+        deadlineAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
         status:
           $ref: '#/components/schemas/VoteStatus'
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoteOptionView'
         responses:
           type: array
           items:
             $ref: '#/components/schemas/VoteSubmissionItem'
+        aggregates:
+          $ref: '#/components/schemas/VoteAggregateView'
+    VoteOptionView:
+      type: object
+      required:
+        - id
+        - optionType
+        - label
+        - payload
+      properties:
+        id:
+          type: string
+          format: uuid
+        optionType:
+          type: string
+        label:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+    VoteAggregateView:
+      type: object
+      required:
+        - totalParticipants
+        - respondedParticipants
+        - unresolvedParticipants
+        - leadingOptionIds
+        - options
+      properties:
+        totalParticipants:
+          type: integer
+        respondedParticipants:
+          type: integer
+        unresolvedParticipants:
+          type: integer
+        canEarlyClose:
+          type: boolean
+        leadingOptionIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/VoteAggregateOptionView'
+    VoteAggregateOptionView:
+      type: object
+      required:
+        - optionId
+        - label
+        - counts
+      properties:
+        optionId:
+          type: string
+          format: uuid
+        label:
+          type: string
+        counts:
+          type: object
+          additionalProperties:
+            type: integer
+        rawScore:
+          type: number
+        rank:
+          type: integer
     MeetingStatus:
       type: string
       enum: [draft, active, finalizing, completed, archived]
