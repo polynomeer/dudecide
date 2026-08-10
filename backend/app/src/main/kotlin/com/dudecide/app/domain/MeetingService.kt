@@ -8,6 +8,7 @@ import com.dudecide.app.api.dto.MeetingDetailResponse
 import com.dudecide.app.api.dto.MeetingResponse
 import com.dudecide.app.api.dto.MeetingStatusDto
 import com.dudecide.app.api.dto.MembershipResponse
+import com.dudecide.app.api.dto.UpdateMeetingRequest
 import com.dudecide.app.api.dto.ThreadSummaryView
 import com.dudecide.app.api.dto.UpdateMembershipRequest
 import com.dudecide.app.jooq.enums.AttendanceStatus
@@ -141,6 +142,50 @@ class MeetingService(
             openVoteCount = openVoteCount,
             threads = threads,
         )
+    }
+
+    @Transactional
+    fun updateMeeting(meetingId: UUID, request: UpdateMeetingRequest): MeetingDetailResponse {
+        val actorId = meetingAccessService.requireMeetingHostOrCoHost(meetingId)
+        val current = requireMeeting(meetingId)
+        validateMeetingUpdate(request)
+        val nextStatus = request.status?.let(::parseMeetingStatus) ?: requireNotNull(current.status)
+
+        dsl.update(MEETING)
+            .set(MEETING.TITLE, request.title ?: requireNotNull(current.title))
+            .set(MEETING.MEETING_TYPE, request.meetingType ?: requireNotNull(current.meetingType))
+            .set(MEETING.STATUS, nextStatus)
+            .set(MEETING.ORIGIN_REGION, request.originRegion ?: current.originRegion)
+            .set(MEETING.EXPECTED_HEADCOUNT, request.expectedHeadcount ?: current.expectedHeadcount)
+            .set(MEETING.BUDGET_MIN, request.budget?.min?.toBigDecimal() ?: current.budgetMin)
+            .set(MEETING.BUDGET_MAX, request.budget?.max?.toBigDecimal() ?: current.budgetMax)
+            .set(MEETING.STARTS_AT, request.startsAt ?: current.startsAt)
+            .set(MEETING.ENDS_AT, request.endsAt ?: current.endsAt)
+            .where(MEETING.ID.eq(meetingId))
+            .execute()
+
+        val updated = requireMeeting(meetingId)
+        outboxService.append(
+            aggregateType = "meeting",
+            aggregateId = meetingId,
+            eventType = "MeetingUpdated",
+            payload = mapOf(
+                "meetingId" to meetingId,
+                "actorUserId" to actorId,
+                "status" to nextStatus.literal,
+                "title" to requireNotNull(updated.title),
+            ),
+        )
+        eventStreamService.publish(
+            meetingId = meetingId,
+            eventType = "meeting.updated",
+            payload = mapOf(
+                "meetingId" to meetingId,
+                "status" to nextStatus.literal,
+                "kind" to "meeting.updated",
+            ),
+        )
+        return getMeeting(meetingId)
     }
 
     @Transactional
@@ -352,6 +397,24 @@ class MeetingService(
     private fun parseMeetingRole(raw: String): MeetingRole =
         runCatching { MeetingRole.valueOf(raw.lowercase()) }
             .getOrElse { throw ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid meeting role: $raw") }
+
+    private fun parseMeetingStatus(raw: String): MeetingStatus =
+        runCatching { MeetingStatus.valueOf(raw.lowercase()) }
+            .getOrElse { throw ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid meeting status: $raw") }
+
+    private fun validateMeetingUpdate(request: UpdateMeetingRequest) {
+        if (request.expectedHeadcount != null && request.expectedHeadcount <= 0) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "expectedHeadcount must be positive")
+        }
+        val minBudget = request.budget?.min
+        val maxBudget = request.budget?.max
+        if (minBudget != null && maxBudget != null && minBudget > maxBudget) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "budget.min must be less than or equal to budget.max")
+        }
+        if (request.startsAt != null && request.endsAt != null && request.startsAt.isAfter(request.endsAt)) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "startsAt must be before or equal to endsAt")
+        }
+    }
 
     private fun parseAttendanceStatus(raw: String): AttendanceStatus =
         runCatching { AttendanceStatus.valueOf(raw.lowercase()) }

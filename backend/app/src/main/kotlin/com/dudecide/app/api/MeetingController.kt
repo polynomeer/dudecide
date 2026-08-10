@@ -6,6 +6,7 @@ import com.dudecide.app.api.dto.MeetingDetailResponse
 import com.dudecide.app.api.dto.MeetingResponse
 import com.dudecide.app.api.dto.InviteLinkResponse
 import com.dudecide.app.api.dto.MembershipResponse
+import com.dudecide.app.api.dto.UpdateMeetingRequest
 import com.dudecide.app.api.dto.UpdateMembershipRequest
 import com.dudecide.app.domain.IdempotencyService
 import com.dudecide.app.domain.IdempotentResponse
@@ -60,6 +61,14 @@ class MeetingController(
         }
         return ResponseEntity.status(response.status).body(response.body)
     }
+
+    @PatchMapping("/{meetingId}")
+    @Operation(summary = "Update meeting metadata")
+    fun updateMeeting(
+        @PathVariable meetingId: UUID,
+        @RequestBody request: UpdateMeetingRequest,
+    ): ResponseEntity<MeetingDetailResponse> =
+        ResponseEntity.ok(meetingService.updateMeeting(meetingId, request))
 
     @PatchMapping("/{meetingId}/members/{memberId}")
     @Operation(summary = "Update meeting member role or attendance")

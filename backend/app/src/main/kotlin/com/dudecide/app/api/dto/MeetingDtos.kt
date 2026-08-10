@@ -16,6 +16,17 @@ data class CreateMeetingRequest(
     val budget: BudgetRangeDto? = null,
 )
 
+data class UpdateMeetingRequest(
+    val title: String? = null,
+    val meetingType: String? = null,
+    val status: String? = null,
+    val originRegion: String? = null,
+    val expectedHeadcount: Int? = null,
+    val budget: BudgetRangeDto? = null,
+    val startsAt: OffsetDateTime? = null,
+    val endsAt: OffsetDateTime? = null,
+)
+
 data class BudgetRangeDto(
     val min: Double? = null,
     val max: Double? = null,

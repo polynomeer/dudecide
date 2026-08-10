@@ -12,7 +12,9 @@ import com.dudecide.app.api.dto.CreateVoteOptionRequest
 import com.dudecide.app.api.dto.CreateVoteRequest
 import com.dudecide.app.api.dto.JoinInviteRequest
 import com.dudecide.app.api.dto.ReconsiderDecisionRequest
+import com.dudecide.app.api.dto.MeetingStatusDto
 import com.dudecide.app.api.dto.UpdateMessageRequest
+import com.dudecide.app.api.dto.UpdateMeetingRequest
 import com.dudecide.app.api.dto.UpdateTaskRequest
 import com.dudecide.app.api.dto.UpdateMembershipRequest
 import com.dudecide.app.api.dto.AddDecisionEvidenceRequest
@@ -117,6 +119,32 @@ class AppServicesIntegrationTest {
             assertEquals("participant", updated.role)
             assertEquals("tentative", updated.attendanceStatus)
             assertEquals(4, context.dsl.fetchCount(OUTBOX_EVENT, OUTBOX_EVENT.AGGREGATE_ID.eq(meeting.id)))
+        }
+    }
+
+    @Test
+    fun `meeting service updates metadata and status`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(title = "Mutable Meeting", meetingType = "trip"),
+            )
+
+            val updated = context.meetingService.updateMeeting(
+                meeting.id,
+                UpdateMeetingRequest(
+                    title = "Updated Meeting",
+                    status = "active",
+                    originRegion = "Busan",
+                    expectedHeadcount = 8,
+                    budget = BudgetRangeDto(min = 100000.0, max = 150000.0),
+                ),
+            )
+
+            assertEquals("Updated Meeting", updated.title)
+            assertEquals(MeetingStatusDto.ACTIVE, updated.status)
+            assertEquals("Busan", updated.originRegion)
+            assertEquals(8, updated.expectedHeadcount)
+            assertEquals(2, context.dsl.fetchCount(OUTBOX_EVENT, OUTBOX_EVENT.AGGREGATE_ID.eq(meeting.id)))
         }
     }
 

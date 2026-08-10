@@ -50,7 +50,10 @@ This document defines the MVP external API surface and internal async events.
 - returns thread-level counts so the client can render planning progress without separate summary calls
 - requires meeting membership
 
-- `PATCH /api/v1/meetings/{meetingId}` is not implemented yet
+`PATCH /api/v1/meetings/{meetingId}`
+
+- update meeting metadata and status
+- requires `host` or `co_host`
 
 ### Invites And Membership
 
