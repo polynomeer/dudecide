@@ -16,12 +16,13 @@ class NotificationService(
     private val dsl: DSLContext,
     private val objectMapper: ObjectMapper,
     private val localActorProvider: LocalActorProvider,
+    private val meetingAccessService: MeetingAccessService,
     private val eventStreamService: EventStreamService,
 ) {
 
     @Transactional(readOnly = true)
     fun listNotifications(meetingId: UUID): List<NotificationView> {
-        val recipientUserId = localActorProvider.ensureHostUser()
+        val recipientUserId = meetingAccessService.requireMeetingMember(meetingId)
         return dsl.selectFrom(NOTIFICATION)
             .where(NOTIFICATION.MEETING_ID.eq(meetingId))
             .and(NOTIFICATION.RECIPIENT_USER_ID.eq(recipientUserId))
@@ -45,7 +46,7 @@ class NotificationService(
         meetingId: UUID,
         type: NotificationType,
         payload: Map<String, Any?>,
-        recipientUserId: UUID = localActorProvider.ensureHostUser(),
+        recipientUserId: UUID = localActorProvider.currentUserId(),
     ) {
         val notificationId = UUID.randomUUID()
         dsl.insertInto(NOTIFICATION)

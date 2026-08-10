@@ -21,6 +21,7 @@ import java.util.UUID
 class ReportService(
     private val dsl: DSLContext,
     private val objectMapper: ObjectMapper,
+    private val meetingAccessService: MeetingAccessService,
     private val outboxService: OutboxService,
     private val eventStreamService: EventStreamService,
     private val notificationService: NotificationService,
@@ -28,6 +29,7 @@ class ReportService(
 
     @Transactional(readOnly = true)
     fun getLatestReport(meetingId: UUID): MeetingReportResponse {
+        meetingAccessService.requireMeetingMember(meetingId)
         requireMeeting(meetingId)
 
         val report = dsl.selectFrom(MEETING_REPORT)
@@ -42,6 +44,7 @@ class ReportService(
 
     @Transactional
     fun refreshReport(meetingId: UUID): MeetingReportResponse {
+        meetingAccessService.requireMeetingHostOrCoHost(meetingId)
         val meeting = dsl.selectFrom(MEETING)
             .where(MEETING.ID.eq(meetingId))
             .fetchOne()

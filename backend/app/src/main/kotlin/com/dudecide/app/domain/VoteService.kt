@@ -46,6 +46,7 @@ class VoteService(
     private val dsl: DSLContext,
     private val objectMapper: ObjectMapper,
     private val localActorProvider: LocalActorProvider,
+    private val meetingAccessService: MeetingAccessService,
     private val outboxService: OutboxService,
     private val eventStreamService: EventStreamService,
     private val notificationService: NotificationService,
@@ -54,7 +55,7 @@ class VoteService(
 
     @Transactional
     fun createVote(meetingId: UUID, request: CreateVoteRequest): VoteResponseView {
-        val actorId = localActorProvider.ensureHostUser()
+        val actorId = meetingAccessService.requireMeetingHostOrCoHost(meetingId)
         requireMeeting(meetingId)
         requireThread(meetingId, request.threadId)
 
@@ -118,7 +119,7 @@ class VoteService(
 
     @Transactional(readOnly = true)
     fun getVote(voteId: UUID): VoteResponseView {
-        val actorId = localActorProvider.ensureHostUser()
+        val actorId = meetingAccessService.requireVoteMember(voteId)
         val vote = getRequiredVote(voteId)
         val options = getVoteOptions(voteId)
         return buildVoteResponse(vote, options, actorId)
@@ -126,7 +127,7 @@ class VoteService(
 
     @Transactional
     fun submitResponses(voteId: UUID, request: VoteSubmissionRequest): VoteResponseView {
-        val actorId = localActorProvider.ensureHostUser()
+        val actorId = meetingAccessService.requireVoteMember(voteId)
         val vote = getRequiredVote(voteId)
 
         if (vote.status != VoteStatus.open) {
@@ -181,7 +182,7 @@ class VoteService(
 
     @Transactional
     fun closeVote(voteId: UUID): VoteResponseView {
-        val actorId = localActorProvider.ensureHostUser()
+        val actorId = meetingAccessService.requireVoteHostOrCoHost(voteId)
         val vote = getRequiredVote(voteId)
 
         if (vote.status == VoteStatus.closed || vote.status == VoteStatus.superseded) {

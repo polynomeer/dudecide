@@ -1,6 +1,7 @@
 package com.dudecide.app.api
 
 import com.dudecide.app.domain.EventStreamService
+import com.dudecide.app.domain.MeetingAccessService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.http.MediaType
@@ -16,10 +17,13 @@ import java.util.UUID
 @Tag(name = "Realtime")
 class RealtimeController(
     private val eventStreamService: EventStreamService,
+    private val meetingAccessService: MeetingAccessService,
 ) {
 
     @GetMapping(produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     @Operation(summary = "Open a meeting SSE stream")
-    fun stream(@PathVariable meetingId: UUID): SseEmitter =
-        eventStreamService.open(meetingId)
+    fun stream(@PathVariable meetingId: UUID): SseEmitter {
+        meetingAccessService.requireMeetingMember(meetingId)
+        return eventStreamService.open(meetingId)
+    }
 }

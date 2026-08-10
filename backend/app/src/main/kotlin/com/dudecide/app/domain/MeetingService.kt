@@ -36,6 +36,7 @@ import java.util.UUID
 class MeetingService(
     private val dsl: DSLContext,
     private val localActorProvider: LocalActorProvider,
+    private val meetingAccessService: MeetingAccessService,
     private val outboxService: OutboxService,
     private val eventStreamService: EventStreamService,
     private val notificationService: NotificationService,
@@ -43,7 +44,7 @@ class MeetingService(
 
     @Transactional
     fun createMeeting(request: CreateMeetingRequest): MeetingResponse {
-        val ownerId = localActorProvider.ensureHostUser()
+        val ownerId = localActorProvider.currentUserId()
         val meetingId = UUID.randomUUID()
 
         dsl.insertInto(MEETING)
@@ -96,6 +97,7 @@ class MeetingService(
 
     @Transactional(readOnly = true)
     fun getMeeting(meetingId: UUID): MeetingDetailResponse {
+        meetingAccessService.requireMeetingMember(meetingId)
         val record = requireMeeting(meetingId)
 
         val memberCount = dsl.fetchCount(MEMBERSHIP, MEMBERSHIP.MEETING_ID.eq(meetingId))
@@ -143,6 +145,7 @@ class MeetingService(
 
     @Transactional
     fun createInviteLink(meetingId: UUID, request: CreateInviteLinkRequest): InviteLinkResponse {
+        meetingAccessService.requireMeetingHostOrCoHost(meetingId)
         requireMeeting(meetingId)
 
         val inviteId = UUID.randomUUID()
@@ -265,6 +268,7 @@ class MeetingService(
 
     @Transactional
     fun updateMembership(meetingId: UUID, memberId: UUID, request: UpdateMembershipRequest): MembershipResponse {
+        meetingAccessService.requireMeetingHostOrCoHost(meetingId)
         requireMeeting(meetingId)
 
         val membership = dsl.select(MEMBERSHIP.asterisk(), APP_USER.DISPLAY_NAME)

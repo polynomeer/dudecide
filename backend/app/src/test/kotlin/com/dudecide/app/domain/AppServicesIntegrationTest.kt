@@ -40,8 +40,14 @@ import org.jooq.conf.Settings
 import org.jooq.impl.DSL
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.springframework.mock.web.MockHttpServletRequest
+import org.springframework.web.context.request.RequestAttributes
+import org.springframework.web.context.request.RequestContextHolder
+import org.springframework.web.context.request.ServletRequestAttributes
+import org.springframework.web.server.ResponseStatusException
 import java.io.StringReader
 import java.util.UUID
 
@@ -415,6 +421,32 @@ class AppServicesIntegrationTest {
         }
     }
 
+    @Test
+    fun `participant cannot execute host only meeting mutations`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(title = "Access Flow", meetingType = "trip"),
+            )
+            val invite = context.meetingService.createInviteLink(meeting.id, CreateInviteLinkRequest())
+            val joined = context.meetingService.joinWithInvite(
+                invite.token,
+                JoinInviteRequest(displayName = "Participant User"),
+            )
+
+            val error = withActor(joined.userId, "Participant User") {
+                assertThrows(ResponseStatusException::class.java) {
+                    context.meetingService.createInviteLink(meeting.id, CreateInviteLinkRequest())
+                }
+            }
+
+            assertEquals(403, error.statusCode.value())
+            val detail = withActor(joined.userId, "Participant User") {
+                context.meetingService.getMeeting(meeting.id)
+            }
+            assertEquals(meeting.id, detail.id)
+        }
+    }
+
     private fun testContext(): TestContext {
         val dataSource = JdbcDataSource().apply {
             setURL("jdbc:h2:mem:${UUID.randomUUID()};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1")
@@ -434,22 +466,41 @@ class AppServicesIntegrationTest {
         )
         val eventStreamService = EventStreamService(objectMapper)
         val localActorProvider = LocalActorProvider(dsl)
+        val meetingAccessService = MeetingAccessService(dsl, localActorProvider)
         val outboxService = OutboxService(dsl, objectMapper)
-        val notificationService = NotificationService(dsl, objectMapper, localActorProvider, eventStreamService)
+        val notificationService = NotificationService(dsl, objectMapper, localActorProvider, meetingAccessService, eventStreamService)
 
         return TestContext(
             dsl = dsl,
             objectMapper = objectMapper,
-            meetingService = MeetingService(dsl, localActorProvider, outboxService, eventStreamService, notificationService),
-            voteService = VoteService(dsl, objectMapper, localActorProvider, outboxService, eventStreamService, notificationService),
-            decisionService = DecisionService(dsl, objectMapper, localActorProvider, outboxService, eventStreamService, notificationService),
-            messageService = MessageService(dsl, objectMapper, localActorProvider, outboxService, eventStreamService),
-            threadService = ThreadService(dsl, outboxService, eventStreamService),
-            reportService = ReportService(dsl, objectMapper, outboxService, eventStreamService, notificationService),
-            searchService = SearchService(dsl),
-            taskService = TaskService(dsl, outboxService, eventStreamService),
+            meetingService = MeetingService(dsl, localActorProvider, meetingAccessService, outboxService, eventStreamService, notificationService),
+            voteService = VoteService(dsl, objectMapper, localActorProvider, meetingAccessService, outboxService, eventStreamService, notificationService),
+            decisionService = DecisionService(dsl, objectMapper, localActorProvider, meetingAccessService, outboxService, eventStreamService, notificationService),
+            messageService = MessageService(dsl, objectMapper, localActorProvider, meetingAccessService, outboxService, eventStreamService),
+            threadService = ThreadService(dsl, meetingAccessService, outboxService, eventStreamService),
+            reportService = ReportService(dsl, objectMapper, meetingAccessService, outboxService, eventStreamService, notificationService),
+            searchService = SearchService(dsl, meetingAccessService),
+            taskService = TaskService(dsl, meetingAccessService, outboxService, eventStreamService),
             notificationService = notificationService,
         )
+    }
+
+    private fun <T> withActor(actorUserId: UUID, displayName: String, block: () -> T): T {
+        val previous: RequestAttributes? = RequestContextHolder.getRequestAttributes()
+        val request = MockHttpServletRequest().apply {
+            addHeader("X-Actor-Id", actorUserId.toString())
+            addHeader("X-Actor-Name", displayName)
+        }
+        RequestContextHolder.setRequestAttributes(ServletRequestAttributes(request))
+        return try {
+            block()
+        } finally {
+            if (previous != null) {
+                RequestContextHolder.setRequestAttributes(previous)
+            } else {
+                RequestContextHolder.resetRequestAttributes()
+            }
+        }
     }
 
     private fun transformedSchemaSql(): String {

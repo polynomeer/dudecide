@@ -35,7 +35,8 @@ class WorkerFlowTest {
         val objectMapper = ObjectMapper().findAndRegisterModules()
         val eventStreamService = EventStreamService(objectMapper)
         val localActorProvider = LocalActorProvider(dsl)
-        val notificationService = NotificationService(dsl, objectMapper, localActorProvider, eventStreamService)
+        val meetingAccessService = MeetingAccessService(dsl, localActorProvider)
+        val notificationService = NotificationService(dsl, objectMapper, localActorProvider, meetingAccessService, eventStreamService)
         val worker = NotificationDispatchWorker(notificationService)
 
         val meetingId = UUID.randomUUID()

@@ -33,23 +33,27 @@ class DecisionService(
     private val dsl: DSLContext,
     private val objectMapper: ObjectMapper,
     private val localActorProvider: LocalActorProvider,
+    private val meetingAccessService: MeetingAccessService,
     private val outboxService: OutboxService,
     private val eventStreamService: EventStreamService,
     private val notificationService: NotificationService,
 ) {
 
     @Transactional(readOnly = true)
-    fun listDecisions(meetingId: UUID): List<DecisionResponse> =
-        dsl.selectFrom(DECISION)
+    fun listDecisions(meetingId: UUID): List<DecisionResponse> {
+        meetingAccessService.requireMeetingMember(meetingId)
+        return dsl.selectFrom(DECISION)
             .where(DECISION.MEETING_ID.eq(meetingId))
             .orderBy(DECISION.CREATED_AT.asc())
             .fetch()
             .map { record ->
                 toResponse(record)
             }
+    }
 
     @Transactional
     fun createDecision(meetingId: UUID, request: CreateDecisionRequest): DecisionResponse {
+        val actorId = meetingAccessService.requireMeetingHostOrCoHost(meetingId)
         requireMeeting(meetingId)
         requireThread(meetingId, request.threadId)
 
@@ -73,7 +77,7 @@ class DecisionService(
         dsl.insertInto(DECISION_HISTORY)
             .set(DECISION_HISTORY.ID, UUID.randomUUID())
             .set(DECISION_HISTORY.DECISION_ID, decisionId)
-            .set(DECISION_HISTORY.ACTOR_USER_ID, localActorProvider.ensureHostUser())
+            .set(DECISION_HISTORY.ACTOR_USER_ID, actorId)
             .set(DECISION_HISTORY.ACTION, DecisionHistoryAction.drafted)
             .set(DECISION_HISTORY.BEFORE_STATE, JSON.valueOf("{}"))
             .set(DECISION_HISTORY.AFTER_STATE, jsonOf(snapshot))
@@ -105,7 +109,7 @@ class DecisionService(
 
     @Transactional
     fun confirmDecision(decisionId: UUID, request: ConfirmDecisionRequest): DecisionResponse {
-        val actorId = localActorProvider.ensureHostUser()
+        val actorId = meetingAccessService.requireDecisionHostOrCoHost(decisionId)
         val now = OffsetDateTime.now()
 
         val record = requireDecision(decisionId)
@@ -166,7 +170,7 @@ class DecisionService(
 
     @Transactional
     fun reconsiderDecision(decisionId: UUID, request: ReconsiderDecisionRequest): DecisionResponse {
-        val actorId = localActorProvider.ensureHostUser()
+        val actorId = meetingAccessService.requireDecisionHostOrCoHost(decisionId)
         val record = requireDecision(decisionId)
 
         if (record.status != DecisionStatus.confirmed) {
@@ -220,6 +224,7 @@ class DecisionService(
 
     @Transactional
     fun addEvidence(decisionId: UUID, request: AddDecisionEvidenceRequest): DecisionEvidenceView {
+        meetingAccessService.requireDecisionHostOrCoHost(decisionId)
         val record = requireDecision(decisionId)
         val message = dsl.selectFrom(MESSAGE)
             .where(MESSAGE.ID.eq(request.messageId))
@@ -281,6 +286,7 @@ class DecisionService(
 
     @Transactional(readOnly = true)
     fun getDecision(decisionId: UUID): DecisionDetailResponse {
+        meetingAccessService.requireDecisionMember(decisionId)
         val record = requireDecision(decisionId)
 
         val evidence = dsl.selectFrom(DECISION_EVIDENCE)

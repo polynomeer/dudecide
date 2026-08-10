@@ -21,12 +21,14 @@ class MessageService(
     private val dsl: DSLContext,
     private val objectMapper: ObjectMapper,
     private val localActorProvider: LocalActorProvider,
+    private val meetingAccessService: MeetingAccessService,
     private val outboxService: OutboxService,
     private val eventStreamService: EventStreamService,
 ) {
 
     @Transactional(readOnly = true)
     fun listMessages(threadId: UUID): List<MessageView> {
+        meetingAccessService.requireThreadMember(threadId)
         requireThread(threadId)
 
         return dsl.selectFrom(MESSAGE)
@@ -49,7 +51,8 @@ class MessageService(
 
     @Transactional
     fun postMessage(threadId: UUID, request: CreateMessageRequest): MessageView {
-        val senderUserId = localActorProvider.ensureHostUser()
+        meetingAccessService.requireThreadMember(threadId)
+        val senderUserId = localActorProvider.currentUserId()
         val thread = requireThread(threadId)
 
         val messageId = UUID.randomUUID()
@@ -106,6 +109,7 @@ class MessageService(
 
     @Transactional
     fun updateMessage(messageId: UUID, request: UpdateMessageRequest): MessageView {
+        meetingAccessService.requireMessageEditor(messageId)
         val record = dsl.selectFrom(MESSAGE)
             .where(MESSAGE.ID.eq(messageId))
             .fetchOne()

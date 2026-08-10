@@ -16,9 +16,12 @@ This document defines the MVP external API surface and internal async events.
 
 ## Auth Model
 
-- current implementation uses a development-only local actor model backed by `LocalActorProvider`
+- current implementation uses header-resolved development actors backed by `LocalActorProvider`
+- `X-Actor-Id` selects the caller user identity and auto-provisions the user row if needed
+- `X-Actor-Name` updates or seeds the caller display name for local development
 - invite token join is implemented and creates guest membership records
-- authenticated user sessions and real meeting-scope authorization remain follow-up work
+- meeting-scope authorization is enforced through membership role checks
+- production-grade authenticated sessions remain follow-up work
 
 ## Core Resources
 
@@ -45,6 +48,7 @@ This document defines the MVP external API surface and internal async events.
 
 - get meeting summary and progress
 - returns thread-level counts so the client can render planning progress without separate summary calls
+- requires meeting membership
 
 - `PATCH /api/v1/meetings/{meetingId}` is not implemented yet
 
@@ -53,6 +57,7 @@ This document defines the MVP external API surface and internal async events.
 `POST /api/v1/meetings/{meetingId}/invite-links`
 
 - create invite link
+- requires `host` or `co_host`
 
 `POST /api/v1/invite-links/{token}/join`
 
@@ -61,56 +66,68 @@ This document defines the MVP external API surface and internal async events.
 `PATCH /api/v1/meetings/{meetingId}/members/{memberId}`
 
 - update role or attendance state
+- requires `host` or `co_host`
 
 ### Threads And Messages
 
 `GET /api/v1/meetings/{meetingId}/threads`
 
 - list threads with badges and activity state
+- requires meeting membership
 
 `POST /api/v1/meetings/{meetingId}/threads`
 
 - create thread
+- requires `host` or `co_host`
 
 `GET /api/v1/threads/{threadId}/messages`
 
 - list paginated messages
 - current implementation returns chronological thread messages without pagination
+- requires meeting membership
 
 `POST /api/v1/threads/{threadId}/messages`
 
 - post message
 - writes `MessageCreated` into the outbox for downstream AI and notification workers
+- requires meeting membership
 
 `PATCH /api/v1/messages/{messageId}`
 
 - edit message
+- allowed for the original sender, `host`, or `co_host`
 
 ### Decisions
 
 `GET /api/v1/meetings/{meetingId}/decisions`
 
 - list decision board items
+- requires meeting membership
 
 `POST /api/v1/meetings/{meetingId}/decisions`
 
 - create manual or AI-originated draft decision
+- requires `host` or `co_host`
 
 `GET /api/v1/decisions/{decisionId}`
 
 - get decision detail with evidence and history
+- requires meeting membership
 
 `POST /api/v1/decisions/{decisionId}/confirm`
 
 - confirm decision
+- requires `host` or `co_host`
 
 `POST /api/v1/decisions/{decisionId}/reconsider`
 
 - reopen a confirmed decision with reason
+- requires `host` or `co_host`
 
 `POST /api/v1/decisions/{decisionId}/evidence`
 
 - link a thread message as decision evidence
+- requires `host` or `co_host`
 
 ### Votes
 
@@ -119,20 +136,24 @@ This document defines the MVP external API surface and internal async events.
 - create vote
 - creates a linked decision automatically when `decisionId` is omitted
 - stores deterministic scoring-rule metadata on the vote row
+- requires `host` or `co_host`
 
 `GET /api/v1/votes/{voteId}`
 
 - get vote status and aggregated results
 - returns option metadata, caller's current responses, and aggregate ranking snapshot
+- requires meeting membership
 
 `PUT /api/v1/votes/{voteId}/responses/me`
 
 - submit or replace caller responses
+- requires meeting membership
 
 `POST /api/v1/votes/{voteId}/close`
 
 - manually close vote
 - freezes `closed_at` and persists a decision-facing vote snapshot into `decision.proposed_result`
+- requires `host` or `co_host`
 
 ### Search And Reports
 
@@ -140,30 +161,37 @@ This document defines the MVP external API surface and internal async events.
 
 - current implementation performs keyword search across messages, decisions, and tasks
 - semantic search remains follow-up work
+- requires meeting membership
 
 `GET /api/v1/meetings/{meetingId}/tasks`
 
 - list meeting tasks
+- requires meeting membership
 
 `POST /api/v1/meetings/{meetingId}/tasks`
 
 - create task
+- requires `host` or `co_host`
 
 `PATCH /api/v1/tasks/{taskId}`
 
 - update task title, status, owner, or due date
+- requires `host` or `co_host`
 
 `GET /api/v1/meetings/{meetingId}/notifications`
 
 - list notifications for the current local actor
+- requires meeting membership
 
 `GET /api/v1/meetings/{meetingId}/reports/latest`
 
 - get latest materialized report
+- requires meeting membership
 
 `POST /api/v1/meetings/{meetingId}/reports/refresh`
 
 - trigger report regeneration
+- requires `host` or `co_host`
 
 ### Realtime
 
@@ -172,6 +200,7 @@ This document defines the MVP external API surface and internal async events.
 - SSE stream for room events
 - current implementation is in-memory per application instance
 - reconnect replay and broker-backed fan-out remain follow-up work
+- requires meeting membership
 
 ## Sample Shapes
 

@@ -20,18 +20,14 @@ import java.util.UUID
 @Service
 class ThreadService(
     private val dsl: DSLContext,
+    private val meetingAccessService: MeetingAccessService,
     private val outboxService: OutboxService,
     private val eventStreamService: EventStreamService,
 ) {
 
     @Transactional(readOnly = true)
     fun listThreads(meetingId: UUID): List<ThreadSummaryView> {
-        val exists = dsl.fetchExists(
-            dsl.selectOne().from(MEETING).where(MEETING.ID.eq(meetingId)),
-        )
-        if (!exists) {
-            throw ResponseStatusException(HttpStatus.NOT_FOUND, "meeting not found")
-        }
+        meetingAccessService.requireMeetingMember(meetingId)
 
         return dsl.selectFrom(TOPIC_THREAD)
             .where(TOPIC_THREAD.MEETING_ID.eq(meetingId))
@@ -42,6 +38,7 @@ class ThreadService(
 
     @Transactional
     fun createThread(meetingId: UUID, request: CreateThreadRequest): ThreadSummaryView {
+        meetingAccessService.requireMeetingHostOrCoHost(meetingId)
         requireMeeting(meetingId)
 
         val threadId = UUID.randomUUID()

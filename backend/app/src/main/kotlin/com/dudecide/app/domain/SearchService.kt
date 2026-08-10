@@ -20,10 +20,12 @@ import java.util.UUID
 @Service
 class SearchService(
     private val dsl: DSLContext,
+    private val meetingAccessService: MeetingAccessService,
 ) {
 
     @Transactional(readOnly = true)
     fun search(meetingId: UUID, query: String): SearchResponse {
+        meetingAccessService.requireMeetingMember(meetingId)
         requireMeeting(meetingId)
         val normalized = query.trim()
         if (normalized.isBlank()) {

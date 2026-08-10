@@ -28,7 +28,7 @@ Current implementation snapshot:
 
 - one Spring Boot application currently hosts meeting, thread, decision, vote, search, task, report, notification, and SSE endpoints
 - SSE fan-out is in-memory and scoped to a single process
-- async worker responsibilities are still performed inline or represented only through outbox rows
+- scheduled outbox and notification workers now mark durable records as dispatched inside the monolith
 
 ### Data
 
@@ -94,7 +94,9 @@ flowchart LR
 Current implementation note:
 
 - invite token validation and membership writes exist
-- authenticated sessions and role enforcement beyond the local development actor are not implemented yet
+- development-only header-based actor resolution exists through `LocalActorProvider`
+- membership role enforcement exists for meeting-scoped reads and protected mutations
+- production-grade authenticated sessions remain follow-up work
 
 ### Meeting Lifecycle
 

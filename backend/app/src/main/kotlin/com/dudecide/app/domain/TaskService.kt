@@ -16,12 +16,14 @@ import java.util.UUID
 @Service
 class TaskService(
     private val dsl: DSLContext,
+    private val meetingAccessService: MeetingAccessService,
     private val outboxService: OutboxService,
     private val eventStreamService: EventStreamService,
 ) {
 
     @Transactional(readOnly = true)
     fun listTasks(meetingId: UUID): List<TaskView> {
+        meetingAccessService.requireMeetingMember(meetingId)
         requireMeeting(meetingId)
         return dsl.selectFrom(TASK_ITEM)
             .where(TASK_ITEM.MEETING_ID.eq(meetingId))
@@ -32,6 +34,7 @@ class TaskService(
 
     @Transactional
     fun createTask(meetingId: UUID, request: CreateTaskRequest): TaskView {
+        meetingAccessService.requireMeetingHostOrCoHost(meetingId)
         requireMeeting(meetingId)
         val taskId = UUID.randomUUID()
 
@@ -70,6 +73,7 @@ class TaskService(
 
     @Transactional
     fun updateTask(taskId: UUID, request: UpdateTaskRequest): TaskView {
+        meetingAccessService.requireTaskHostOrCoHost(taskId)
         val current = requireTask(taskId)
         val nextStatus = request.status?.let(::parseStatus) ?: requireNotNull(current.status)
 
