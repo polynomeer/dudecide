@@ -28,6 +28,7 @@ dependencies {
     jooqGenerator("org.jooq:jooq-meta-extensions:$jooqVersion")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("com.h2database:h2")
 }
 
 jooq {
