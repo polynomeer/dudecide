@@ -1,5 +1,6 @@
 package com.dudecide.app.api
 
+import com.dudecide.app.api.dto.CreateVoteRequest
 import com.dudecide.app.domain.VoteService
 import com.dudecide.app.api.dto.VoteResponseView
 import com.dudecide.app.api.dto.VoteSubmissionRequest
@@ -8,6 +9,7 @@ import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -21,6 +23,14 @@ class VoteController(
     private val voteService: VoteService,
 ) {
 
+    @PostMapping("/meetings/{meetingId}/votes")
+    @Operation(summary = "Create a vote and attach it to a decision")
+    fun createVote(
+        @PathVariable meetingId: UUID,
+        @RequestBody request: CreateVoteRequest,
+    ): ResponseEntity<VoteResponseView> =
+        ResponseEntity.ok(voteService.createVote(meetingId, request))
+
     @GetMapping("/votes/{voteId}")
     @Operation(summary = "Get vote detail and aggregated results")
     fun getVote(@PathVariable voteId: UUID): ResponseEntity<VoteResponseView> =
@@ -33,4 +43,9 @@ class VoteController(
         @RequestBody request: VoteSubmissionRequest,
     ): ResponseEntity<VoteResponseView> =
         ResponseEntity.ok(voteService.submitResponses(voteId, request))
+
+    @PostMapping("/votes/{voteId}/close")
+    @Operation(summary = "Close a vote and freeze aggregated results")
+    fun closeVote(@PathVariable voteId: UUID): ResponseEntity<VoteResponseView> =
+        ResponseEntity.ok(voteService.closeVote(voteId))
 }

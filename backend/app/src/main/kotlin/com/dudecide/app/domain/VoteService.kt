@@ -1,5 +1,7 @@
 package com.dudecide.app.domain
 
+import com.dudecide.app.api.dto.CreateVoteOptionRequest
+import com.dudecide.app.api.dto.CreateVoteRequest
 import com.dudecide.app.api.dto.VoteAggregateOptionView
 import com.dudecide.app.api.dto.VoteAggregateView
 import com.dudecide.app.api.dto.VoteOptionView
@@ -8,14 +10,18 @@ import com.dudecide.app.api.dto.VoteStatusDto
 import com.dudecide.app.api.dto.VoteSubmissionItem
 import com.dudecide.app.api.dto.VoteSubmissionRequest
 import com.dudecide.app.jooq.enums.DecisionStatus
+import com.dudecide.app.jooq.enums.DecisionType
 import com.dudecide.app.jooq.enums.VoteResponseValue
 import com.dudecide.app.jooq.enums.VoteStatus
 import com.dudecide.app.jooq.enums.VoteType
 import com.dudecide.app.jooq.tables.Decision.Companion.DECISION
+import com.dudecide.app.jooq.tables.Meeting.Companion.MEETING
 import com.dudecide.app.jooq.tables.Membership.Companion.MEMBERSHIP
+import com.dudecide.app.jooq.tables.TopicThread.Companion.TOPIC_THREAD
 import com.dudecide.app.jooq.tables.Vote.Companion.VOTE
 import com.dudecide.app.jooq.tables.VoteOption.Companion.VOTE_OPTION
 import com.dudecide.app.jooq.tables.VoteResponse.Companion.VOTE_RESPONSE
+import com.dudecide.app.jooq.tables.records.DecisionRecord
 import com.dudecide.app.jooq.tables.records.VoteOptionRecord
 import com.dudecide.app.jooq.tables.records.VoteRecord
 import com.dudecide.app.jooq.tables.records.VoteResponseRecord
@@ -31,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.OffsetDateTime
 import java.util.UUID
 
 @Service
@@ -40,6 +47,49 @@ class VoteService(
     private val localActorProvider: LocalActorProvider,
 ) {
     private val voteScoringService = VoteScoringService()
+
+    @Transactional
+    fun createVote(meetingId: UUID, request: CreateVoteRequest): VoteResponseView {
+        val actorId = localActorProvider.ensureHostUser()
+        requireMeeting(meetingId)
+        requireThread(meetingId, request.threadId)
+
+        val now = OffsetDateTime.now()
+        validateCreateRequest(request, now)
+        val voteType = request.voteType.toVoteType()
+        val decisionId = ensureDecision(meetingId, request, voteType)
+        val voteId = UUID.randomUUID()
+        val status = if (request.opensAt == null || !request.opensAt.isAfter(now)) VoteStatus.open else VoteStatus.draft
+
+        dsl.insertInto(VOTE)
+            .set(VOTE.ID, voteId)
+            .set(VOTE.MEETING_ID, meetingId)
+            .set(VOTE.DECISION_ID, decisionId)
+            .set(VOTE.THREAD_ID, request.threadId)
+            .set(VOTE.VOTE_TYPE, voteType)
+            .set(VOTE.STATUS, status)
+            .set(VOTE.SCORING_RULE, jsonOf(defaultScoringRule(voteType)))
+            .set(VOTE.OPENS_AT, request.opensAt)
+            .set(VOTE.DEADLINE_AT, request.deadlineAt)
+            .execute()
+
+        request.options.forEachIndexed { index, option ->
+            dsl.insertInto(VOTE_OPTION)
+                .set(VOTE_OPTION.ID, UUID.randomUUID())
+                .set(VOTE_OPTION.VOTE_ID, voteId)
+                .set(VOTE_OPTION.OPTION_TYPE, option.optionType)
+                .set(VOTE_OPTION.LABEL, option.label)
+                .set(VOTE_OPTION.PAYLOAD, jsonOf(option.payload))
+                .set(VOTE_OPTION.SORT_ORDER, option.sortOrder ?: index)
+                .execute()
+        }
+
+        val vote = getRequiredVote(voteId)
+        val options = getVoteOptions(voteId)
+        val response = buildVoteResponse(vote, options, actorId)
+        updateLinkedDecisionSnapshot(vote, response, closedByHost = false)
+        return response
+    }
 
     @Transactional(readOnly = true)
     fun getVote(voteId: UUID): VoteResponseView {
@@ -78,8 +128,83 @@ class VoteService(
         }
 
         val response = buildVoteResponse(vote, options, actorId)
-        updateLinkedDecisionSnapshot(vote, response)
+        updateLinkedDecisionSnapshot(vote, response, closedByHost = false)
         return response
+    }
+
+    @Transactional
+    fun closeVote(voteId: UUID): VoteResponseView {
+        val actorId = localActorProvider.ensureHostUser()
+        val vote = getRequiredVote(voteId)
+
+        if (vote.status == VoteStatus.closed || vote.status == VoteStatus.superseded) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "vote is already closed")
+        }
+
+        val closedAt = OffsetDateTime.now()
+        dsl.update(VOTE)
+            .set(VOTE.STATUS, VoteStatus.closed)
+            .set(VOTE.CLOSED_AT, closedAt)
+            .where(VOTE.ID.eq(voteId))
+            .execute()
+
+        val closedVote = getRequiredVote(voteId)
+        val options = getVoteOptions(voteId)
+        val response = buildVoteResponse(closedVote, options, actorId)
+        updateLinkedDecisionSnapshot(closedVote, response, closedByHost = true)
+        return response
+    }
+
+    private fun validateCreateRequest(request: CreateVoteRequest, now: OffsetDateTime) {
+        if (request.options.isEmpty()) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "at least one vote option is required")
+        }
+
+        if (request.deadlineAt != null && request.opensAt != null && request.deadlineAt.isBefore(request.opensAt)) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "deadlineAt must be after opensAt")
+        }
+
+        if (request.deadlineAt != null && request.deadlineAt.isBefore(now)) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "deadlineAt cannot be in the past")
+        }
+
+        val duplicateLabels = request.options.groupBy { it.label.trim() }.filterValues { it.size > 1 }.keys
+        if (duplicateLabels.isNotEmpty()) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "duplicate vote option labels are not allowed")
+        }
+    }
+
+    private fun ensureDecision(meetingId: UUID, request: CreateVoteRequest, voteType: VoteType): UUID {
+        request.decisionId?.let { decisionId ->
+            val existing = dsl.selectFrom(DECISION)
+                .where(DECISION.ID.eq(decisionId))
+                .and(DECISION.MEETING_ID.eq(meetingId))
+                .and(DECISION.THREAD_ID.eq(request.threadId))
+                .fetchOne()
+                ?: throw ResponseStatusException(HttpStatus.BAD_REQUEST, "decision does not belong to the meeting thread")
+
+            if (existing.status == DecisionStatus.confirmed) {
+                throw ResponseStatusException(HttpStatus.CONFLICT, "confirmed decision cannot be linked to a new vote")
+            }
+
+            return decisionId
+        }
+
+        val decisionType = request.decisionType?.toDecisionType() ?: defaultDecisionType(voteType)
+        val decisionId = UUID.randomUUID()
+
+        dsl.insertInto(DECISION)
+            .set(DECISION.ID, decisionId)
+            .set(DECISION.MEETING_ID, meetingId)
+            .set(DECISION.THREAD_ID, request.threadId)
+            .set(DECISION.DECISION_TYPE, decisionType)
+            .set(DECISION.TITLE, request.title)
+            .set(DECISION.STATUS, DecisionStatus.voting)
+            .set(DECISION.PROPOSED_RESULT, JSON.valueOf("{}"))
+            .set(DECISION.CONFIRMED_RESULT, JSON.valueOf("{}"))
+            .execute()
+
+        return decisionId
     }
 
     private fun validateSubmission(
@@ -174,20 +299,17 @@ class VoteService(
         unresolvedParticipants: Int,
     ): VoteAggregateView {
         val countsByOption = buildCountsByOption(options, responses)
-
-        val scored = voteScoringService.scoreDates(
-            options.map { option ->
-                val counts = countsByOption.getValue(option.id)
-                DateVoteCounts(
-                    date = option.extractDate(),
-                    available = counts["available"] ?: 0,
-                    maybe = counts["maybe"] ?: 0,
-                    unavailable = counts["unavailable"] ?: 0,
-                )
-            },
-        )
-
-        val rankedByDate = scored.associateBy { it.date }
+        val scoredCounts = options.map { option ->
+            val counts = countsByOption.getValue(option.id)
+            DateVoteCounts(
+                date = option.extractDate(),
+                available = counts["available"] ?: 0,
+                maybe = counts["maybe"] ?: 0,
+                unavailable = counts["unavailable"] ?: 0,
+            )
+        }
+        val ranked = voteScoringService.scoreDates(scoredCounts)
+        val rankedByDate = ranked.associateBy { it.date }
         val rankedOptionViews = options
             .sortedWith(compareBy<VoteOptionView> { rankedByDate.getValue(it.extractDate()).unavailable }
                 .thenByDescending { rankedByDate.getValue(it.extractDate()).rawScore }
@@ -209,19 +331,10 @@ class VoteService(
             totalParticipants = totalParticipants,
             respondedParticipants = respondedParticipants,
             unresolvedParticipants = unresolvedParticipants,
-            canEarlyClose = if (rankedOptionViews.isNotEmpty()) {
-                voteScoringService.canEarlyCloseDateVote(scored.map {
-                    DateVoteCounts(
-                        date = it.date,
-                        available = it.available,
-                        maybe = it.maybe,
-                        unavailable = it.unavailable,
-                    )
-                }, unresolvedParticipants)
-            } else {
-                null
+            canEarlyClose = if (rankedOptionViews.isNotEmpty()) voteScoringService.canEarlyCloseDateVote(scoredCounts, unresolvedParticipants) else null,
+            leadingOptionIds = rankedOptionViews.takeWhile { it.rank == 1 }.map { it.optionId }.ifEmpty {
+                rankedOptionViews.firstOrNull()?.let { listOf(it.optionId) } ?: emptyList()
             },
-            leadingOptionIds = rankedOptionViews.firstOrNull()?.let { listOf(it.optionId) } ?: emptyList(),
             options = rankedOptionViews,
         )
     }
@@ -234,23 +347,20 @@ class VoteService(
         unresolvedParticipants: Int,
     ): VoteAggregateView {
         val countsByOption = buildCountsByOption(options, responses)
-
-        val scored = voteScoringService.scoreLocations(
-            options.map { option ->
-                val counts = countsByOption.getValue(option.id)
-                val payload = option.payload
-                LocationVoteCounts(
-                    optionId = option.id.toString(),
-                    good = counts["good"] ?: 0,
-                    okay = counts["okay"] ?: 0,
-                    dislike = counts["dislike"] ?: 0,
-                    maxBudget = payload["maxBudget"].toIntValue(),
-                    travelMinutes = payload["travelMinutes"].toIntValue(),
-                )
-            },
-        )
-
-        val rankedByOptionId = scored.associateBy { UUID.fromString(it.optionId) }
+        val scoredCounts = options.map { option ->
+            val counts = countsByOption.getValue(option.id)
+            val payload = option.payload
+            LocationVoteCounts(
+                optionId = option.id.toString(),
+                good = counts["good"] ?: 0,
+                okay = counts["okay"] ?: 0,
+                dislike = counts["dislike"] ?: 0,
+                maxBudget = payload["maxBudget"].toIntValue(),
+                travelMinutes = payload["travelMinutes"].toIntValue(),
+            )
+        }
+        val ranked = voteScoringService.scoreLocations(scoredCounts)
+        val rankedByOptionId = ranked.associateBy { UUID.fromString(it.optionId) }
         val rankedOptionViews = options
             .sortedWith(compareBy<VoteOptionView> { rankedByOptionId.getValue(it.id).dislike }
                 .thenByDescending { rankedByOptionId.getValue(it.id).rawScore }
@@ -272,21 +382,10 @@ class VoteService(
             totalParticipants = totalParticipants,
             respondedParticipants = respondedParticipants,
             unresolvedParticipants = unresolvedParticipants,
-            canEarlyClose = if (rankedOptionViews.isNotEmpty()) {
-                voteScoringService.canEarlyCloseLocationVote(scored.map {
-                    LocationVoteCounts(
-                        optionId = it.optionId,
-                        good = it.good,
-                        okay = it.okay,
-                        dislike = it.dislike,
-                        maxBudget = it.maxBudget,
-                        travelMinutes = it.travelMinutes,
-                    )
-                }, unresolvedParticipants)
-            } else {
-                null
+            canEarlyClose = if (rankedOptionViews.isNotEmpty()) voteScoringService.canEarlyCloseLocationVote(scoredCounts, unresolvedParticipants) else null,
+            leadingOptionIds = rankedOptionViews.takeWhile { it.rank == 1 }.map { it.optionId }.ifEmpty {
+                rankedOptionViews.firstOrNull()?.let { listOf(it.optionId) } ?: emptyList()
             },
-            leadingOptionIds = rankedOptionViews.firstOrNull()?.let { listOf(it.optionId) } ?: emptyList(),
             options = rankedOptionViews,
         )
     }
@@ -309,7 +408,7 @@ class VoteService(
                     optionId = option.id,
                     label = option.label,
                     counts = counts,
-                    rawScore = (counts["yes"] ?: 0) - (counts["no"] ?: 0).toDouble(),
+                    rawScore = (counts["yes"] ?: 0).toDouble() - (counts["no"] ?: 0).toDouble(),
                     rank = index + 1,
                 )
             }
@@ -319,7 +418,9 @@ class VoteService(
             respondedParticipants = respondedParticipants,
             unresolvedParticipants = unresolvedParticipants,
             canEarlyClose = null,
-            leadingOptionIds = rankedOptionViews.firstOrNull()?.let { listOf(it.optionId) } ?: emptyList(),
+            leadingOptionIds = rankedOptionViews.takeWhile { it.rank == 1 }.map { it.optionId }.ifEmpty {
+                rankedOptionViews.firstOrNull()?.let { listOf(it.optionId) } ?: emptyList()
+            },
             options = rankedOptionViews,
         )
     }
@@ -337,30 +438,62 @@ class VoteService(
         }
     }
 
-    private fun updateLinkedDecisionSnapshot(vote: VoteRecord, response: VoteResponseView) {
+    private fun updateLinkedDecisionSnapshot(vote: VoteRecord, response: VoteResponseView, closedByHost: Boolean) {
         val decisionId = vote.decisionId ?: return
-
-        val payload = linkedMapOf(
-            "voteId" to response.voteId,
-            "voteType" to response.voteType,
-            "status" to response.status.name.lowercase(),
-            "leadingOptionIds" to response.aggregates?.leadingOptionIds.orEmpty(),
-            "aggregates" to response.aggregates,
-        )
-
         val decisionRecord = dsl.selectFrom(DECISION)
             .where(DECISION.ID.eq(decisionId))
             .fetchOne()
             ?: return
 
+        val payload = linkedMapOf(
+            "phase" to "vote",
+            "decisionId" to decisionId,
+            "vote" to linkedMapOf(
+                "voteId" to response.voteId,
+                "title" to decisionRecord.title,
+                "voteType" to response.voteType,
+                "status" to response.status.name.lowercase(),
+                "opensAt" to response.opensAt?.toString(),
+                "deadlineAt" to response.deadlineAt?.toString(),
+                "closedAt" to response.closedAt?.toString(),
+                "closedByHost" to closedByHost,
+                "leadingOptionIds" to response.aggregates?.leadingOptionIds.orEmpty(),
+                "leadingOptions" to response.aggregates?.options.orEmpty().filter { it.rank == 1 },
+                "aggregate" to response.aggregates,
+            ),
+        )
+
         val update = dsl.update(DECISION)
-            .set(DECISION.PROPOSED_RESULT, JSON.valueOf(objectMapper.writeValueAsString(payload)))
+            .set(DECISION.PROPOSED_RESULT, jsonOf(payload))
 
         if (decisionRecord.status == DecisionStatus.proposed || decisionRecord.status == DecisionStatus.in_discussion || decisionRecord.status == DecisionStatus.voting) {
             update.set(DECISION.STATUS, DecisionStatus.voting)
         }
 
         update.where(DECISION.ID.eq(decisionId)).execute()
+    }
+
+    private fun requireMeeting(meetingId: UUID) {
+        val exists = dsl.fetchExists(
+            dsl.selectOne()
+                .from(MEETING)
+                .where(MEETING.ID.eq(meetingId)),
+        )
+        if (!exists) {
+            throw ResponseStatusException(HttpStatus.NOT_FOUND, "meeting not found")
+        }
+    }
+
+    private fun requireThread(meetingId: UUID, threadId: UUID) {
+        val exists = dsl.fetchExists(
+            dsl.selectOne()
+                .from(TOPIC_THREAD)
+                .where(TOPIC_THREAD.ID.eq(threadId))
+                .and(TOPIC_THREAD.MEETING_ID.eq(meetingId)),
+        )
+        if (!exists) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "thread does not belong to the meeting")
+        }
     }
 
     private fun getRequiredVote(voteId: UUID): VoteRecord =
@@ -375,6 +508,32 @@ class VoteService(
             .orderBy(VOTE_OPTION.SORT_ORDER.asc(), VOTE_OPTION.LABEL.asc())
             .fetch()
 
+    private fun defaultScoringRule(voteType: VoteType): Map<String, Any> =
+        when (voteType) {
+            VoteType.date_matrix -> mapOf(
+                "version" to "mvp-v1",
+                "model" to "date_matrix",
+                "weights" to mapOf("available" to 1.0, "maybe" to 0.5, "unavailable" to -2.0),
+            )
+            VoteType.package_preference -> mapOf(
+                "version" to "mvp-v1",
+                "model" to "package_preference",
+                "weights" to mapOf("good" to 1.0, "okay" to 0.2, "dislike" to -1.5),
+            )
+            VoteType.binary_confirm -> mapOf(
+                "version" to "mvp-v1",
+                "model" to "binary_confirm",
+                "weights" to mapOf("yes" to 1.0, "no" to -1.0),
+            )
+        }
+
+    private fun defaultDecisionType(voteType: VoteType): DecisionType =
+        when (voteType) {
+            VoteType.date_matrix -> DecisionType.date
+            VoteType.package_preference -> DecisionType.location
+            VoteType.binary_confirm -> DecisionType.other
+        }
+
     private fun allowedResponseValues(voteType: VoteType): Set<String> =
         when (voteType) {
             VoteType.date_matrix -> setOf("available", "maybe", "unavailable")
@@ -388,6 +547,20 @@ class VoteService(
             VoteStatus.open -> VoteStatusDto.OPEN
             VoteStatus.closed -> VoteStatusDto.CLOSED
             VoteStatus.superseded -> VoteStatusDto.SUPERSEDED
+        }
+
+    private fun String.toVoteType(): VoteType =
+        try {
+            VoteType.valueOf(this)
+        } catch (_: IllegalArgumentException) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported vote type: $this")
+        }
+
+    private fun String.toDecisionType(): DecisionType =
+        try {
+            DecisionType.valueOf(this)
+        } catch (_: IllegalArgumentException) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported decision type: $this")
         }
 
     private fun String.toVoteResponseValue(): VoteResponseValue =
@@ -416,6 +589,8 @@ class VoteService(
             is String -> this.toIntOrNull() ?: 0
             else -> 0
         }
+
+    private fun jsonOf(value: Any): JSON = JSON.valueOf(objectMapper.writeValueAsString(value))
 
     private fun jsonToMap(value: JSON?): Map<String, Any?> {
         if (value == null || value.data().isBlank()) {

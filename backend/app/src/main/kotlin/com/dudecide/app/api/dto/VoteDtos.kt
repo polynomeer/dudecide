@@ -4,6 +4,25 @@ import io.swagger.v3.oas.annotations.media.Schema
 import java.time.OffsetDateTime
 import java.util.UUID
 
+data class CreateVoteRequest(
+    val threadId: UUID,
+    val decisionId: UUID? = null,
+    val decisionType: String? = null,
+    val title: String,
+    @field:Schema(allowableValues = ["date_matrix", "package_preference", "binary_confirm"])
+    val voteType: String,
+    val opensAt: OffsetDateTime? = null,
+    val deadlineAt: OffsetDateTime? = null,
+    val options: List<CreateVoteOptionRequest>,
+)
+
+data class CreateVoteOptionRequest(
+    val optionType: String,
+    val label: String,
+    val payload: Map<String, Any?> = emptyMap(),
+    val sortOrder: Int? = null,
+)
+
 data class VoteSubmissionRequest(
     val responses: List<VoteSubmissionItem>,
 )

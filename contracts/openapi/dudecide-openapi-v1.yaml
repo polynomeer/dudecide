@@ -38,6 +38,25 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/DecisionResponse'
+  /meetings/{meetingId}/votes:
+    post:
+      operationId: createVote
+      summary: Create a vote and attach it to a decision
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVoteRequest'
+      responses:
+        '200':
+          description: Vote created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteResponseView'
   /decisions/{decisionId}/confirm:
     post:
       operationId: confirmDecision
@@ -85,6 +104,19 @@ paths:
       responses:
         '200':
           description: Vote detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteResponseView'
+  /votes/{voteId}/close:
+    post:
+      operationId: closeVote
+      summary: Close a vote and freeze aggregated results
+      parameters:
+        - $ref: '#/components/parameters/VoteId'
+      responses:
+        '200':
+          description: Vote closed
           content:
             application/json:
               schema:
@@ -198,6 +230,52 @@ components:
           additionalProperties: true
         reason:
           type: string
+    CreateVoteRequest:
+      type: object
+      required:
+        - threadId
+        - title
+        - voteType
+        - options
+      properties:
+        threadId:
+          type: string
+          format: uuid
+        decisionId:
+          type: string
+          format: uuid
+        decisionType:
+          $ref: '#/components/schemas/DecisionType'
+        title:
+          type: string
+        voteType:
+          type: string
+          enum: [date_matrix, package_preference, binary_confirm]
+        opensAt:
+          type: string
+          format: date-time
+        deadlineAt:
+          type: string
+          format: date-time
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateVoteOptionRequest'
+    CreateVoteOptionRequest:
+      type: object
+      required:
+        - optionType
+        - label
+      properties:
+        optionType:
+          type: string
+        label:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+        sortOrder:
+          type: integer
     VoteSubmissionRequest:
       type: object
       required:

@@ -112,6 +112,8 @@ This document defines the MVP external API surface and internal async events.
 `POST /api/v1/meetings/{meetingId}/votes`
 
 - create vote
+- creates a linked decision automatically when `decisionId` is omitted
+- stores deterministic scoring-rule metadata on the vote row
 
 `GET /api/v1/votes/{voteId}`
 
@@ -125,6 +127,7 @@ This document defines the MVP external API surface and internal async events.
 `POST /api/v1/votes/{voteId}/close`
 
 - manually close vote
+- freezes `closed_at` and persists a decision-facing vote snapshot into `decision.proposed_result`
 
 ### Search And Reports
 
