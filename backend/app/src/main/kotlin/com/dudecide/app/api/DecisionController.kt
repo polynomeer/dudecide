@@ -1,6 +1,7 @@
 package com.dudecide.app.api
 
 import com.dudecide.app.api.dto.ConfirmDecisionRequest
+import com.dudecide.app.api.dto.DecisionDetailResponse
 import com.dudecide.app.api.dto.DecisionResponse
 import com.dudecide.app.domain.DecisionService
 import io.swagger.v3.oas.annotations.Operation
@@ -20,6 +21,11 @@ import java.util.UUID
 class DecisionController(
     private val decisionService: DecisionService,
 ) {
+
+    @GetMapping("/decisions/{decisionId}")
+    @Operation(summary = "Get decision detail with evidence and history")
+    fun getDecision(@PathVariable decisionId: UUID): ResponseEntity<DecisionDetailResponse> =
+        ResponseEntity.ok(decisionService.getDecision(decisionId))
 
     @GetMapping("/meetings/{meetingId}/decisions")
     @Operation(summary = "List meeting decisions")

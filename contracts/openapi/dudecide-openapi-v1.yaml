@@ -23,6 +23,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MeetingResponse'
+  /meetings/{meetingId}:
+    get:
+      operationId: getMeeting
+      summary: Get meeting summary and progress
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '200':
+          description: Meeting detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeetingDetailResponse'
   /meetings/{meetingId}/decisions:
     get:
       operationId: listDecisions
@@ -76,6 +89,67 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DecisionResponse'
+  /decisions/{decisionId}:
+    get:
+      operationId: getDecision
+      summary: Get decision detail with evidence and history
+      parameters:
+        - $ref: '#/components/parameters/DecisionId'
+      responses:
+        '200':
+          description: Decision detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionDetailResponse'
+  /meetings/{meetingId}/threads:
+    get:
+      operationId: listThreads
+      summary: List threads with badges and activity state
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '200':
+          description: Thread list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ThreadSummaryView'
+  /threads/{threadId}/messages:
+    get:
+      operationId: listMessages
+      summary: List thread messages
+      parameters:
+        - $ref: '#/components/parameters/ThreadId'
+      responses:
+        '200':
+          description: Message list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MessageView'
+    post:
+      operationId: postMessage
+      summary: Post a message
+      parameters:
+        - $ref: '#/components/parameters/ThreadId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMessageRequest'
+      responses:
+        '201':
+          description: Message created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageView'
   /votes/{voteId}/responses/me:
     put:
       operationId: submitVoteResponses
@@ -144,6 +218,13 @@ components:
       schema:
         type: string
         format: uuid
+    ThreadId:
+      name: threadId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
   schemas:
     CreateMeetingRequest:
       type: object
@@ -186,6 +267,47 @@ components:
           type: string
         status:
           $ref: '#/components/schemas/MeetingStatus'
+    MeetingDetailResponse:
+      type: object
+      required:
+        - id
+        - title
+        - meetingType
+        - status
+        - ownerUserId
+        - memberCount
+        - decisionCount
+        - openVoteCount
+        - threads
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        meetingType:
+          type: string
+        status:
+          $ref: '#/components/schemas/MeetingStatus'
+        originRegion:
+          type: string
+        expectedHeadcount:
+          type: integer
+        budget:
+          $ref: '#/components/schemas/BudgetRange'
+        ownerUserId:
+          type: string
+          format: uuid
+        memberCount:
+          type: integer
+        decisionCount:
+          type: integer
+        openVoteCount:
+          type: integer
+        threads:
+          type: array
+          items:
+            $ref: '#/components/schemas/ThreadSummaryView'
     DecisionResponse:
       type: object
       required:
@@ -218,6 +340,154 @@ components:
           type: object
           additionalProperties: true
         decidedAt:
+          type: string
+          format: date-time
+    DecisionDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/DecisionResponse'
+        - type: object
+          required:
+            - evidence
+            - history
+          properties:
+            evidence:
+              type: array
+              items:
+                $ref: '#/components/schemas/DecisionEvidenceView'
+            history:
+              type: array
+              items:
+                $ref: '#/components/schemas/DecisionHistoryView'
+    DecisionEvidenceView:
+      type: object
+      required:
+        - id
+        - messageId
+        - threadId
+        - evidenceType
+        - quoteSnapshot
+      properties:
+        id:
+          type: string
+          format: uuid
+        messageId:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+          format: uuid
+        evidenceType:
+          type: string
+        quoteSnapshot:
+          type: string
+        confidence:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+    DecisionHistoryView:
+      type: object
+      required:
+        - id
+        - action
+      properties:
+        id:
+          type: string
+          format: uuid
+        actorUserId:
+          type: string
+          format: uuid
+        action:
+          type: string
+        reason:
+          type: string
+        beforeState:
+          type: object
+          additionalProperties: true
+        afterState:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+    ThreadSummaryView:
+      type: object
+      required:
+        - id
+        - category
+        - title
+        - status
+        - sortOrder
+        - messageCount
+        - decisionCount
+        - openVoteCount
+      properties:
+        id:
+          type: string
+          format: uuid
+        category:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+        sortOrder:
+          type: integer
+        lastActivityAt:
+          type: string
+          format: date-time
+        messageCount:
+          type: integer
+        decisionCount:
+          type: integer
+        openVoteCount:
+          type: integer
+    CreateMessageRequest:
+      type: object
+      required:
+        - body
+      properties:
+        body:
+          type: string
+        attachments:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    MessageView:
+      type: object
+      required:
+        - id
+        - threadId
+        - senderUserId
+        - body
+        - attachments
+        - aiLabels
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+          format: uuid
+        senderUserId:
+          type: string
+          format: uuid
+        body:
+          type: string
+        attachments:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        aiLabels:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        editedAt:
           type: string
           format: date-time
     ConfirmDecisionRequest:

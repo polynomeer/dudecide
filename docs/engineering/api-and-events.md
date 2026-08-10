@@ -44,6 +44,7 @@ This document defines the MVP external API surface and internal async events.
 `GET /api/v1/meetings/{meetingId}`
 
 - get meeting summary and progress
+- returns thread-level counts so the client can render planning progress without separate summary calls
 
 `PATCH /api/v1/meetings/{meetingId}`
 
@@ -76,10 +77,12 @@ This document defines the MVP external API surface and internal async events.
 `GET /api/v1/threads/{threadId}/messages`
 
 - list paginated messages
+- current implementation returns chronological thread messages without pagination
 
 `POST /api/v1/threads/{threadId}/messages`
 
 - post message
+- writes `MessageCreated` into the outbox for downstream AI and notification workers
 
 `PATCH /api/v1/messages/{messageId}`
 

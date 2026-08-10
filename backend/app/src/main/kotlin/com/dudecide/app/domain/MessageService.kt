@@ -1,0 +1,123 @@
+package com.dudecide.app.domain
+
+import com.dudecide.app.api.dto.CreateMessageRequest
+import com.dudecide.app.api.dto.MessageView
+import com.dudecide.app.jooq.tables.Message.Companion.MESSAGE
+import com.dudecide.app.jooq.tables.TopicThread.Companion.TOPIC_THREAD
+import com.fasterxml.jackson.databind.ObjectMapper
+import org.jooq.DSLContext
+import org.jooq.JSON
+import org.springframework.http.HttpStatus
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.server.ResponseStatusException
+import java.time.OffsetDateTime
+import java.util.UUID
+
+@Service
+class MessageService(
+    private val dsl: DSLContext,
+    private val objectMapper: ObjectMapper,
+    private val localActorProvider: LocalActorProvider,
+    private val outboxService: OutboxService,
+) {
+
+    @Transactional(readOnly = true)
+    fun listMessages(threadId: UUID): List<MessageView> {
+        requireThread(threadId)
+
+        return dsl.selectFrom(MESSAGE)
+            .where(MESSAGE.THREAD_ID.eq(threadId))
+            .orderBy(MESSAGE.CREATED_AT.asc())
+            .fetch()
+            .map { record ->
+                MessageView(
+                    id = requireNotNull(record.id),
+                    threadId = requireNotNull(record.threadId),
+                    senderUserId = requireNotNull(record.senderUserId),
+                    body = requireNotNull(record.body),
+                    attachments = jsonToList(record.attachments),
+                    aiLabels = jsonToMap(record.aiLabels),
+                    createdAt = requireNotNull(record.createdAt),
+                    editedAt = record.editedAt,
+                )
+            }
+    }
+
+    @Transactional
+    fun postMessage(threadId: UUID, request: CreateMessageRequest): MessageView {
+        val senderUserId = localActorProvider.ensureHostUser()
+        requireThread(threadId)
+
+        val messageId = UUID.randomUUID()
+        val now = OffsetDateTime.now()
+        val attachments = JSON.valueOf(objectMapper.writeValueAsString(request.attachments))
+        val aiLabels = JSON.valueOf("{}")
+
+        dsl.insertInto(MESSAGE)
+            .set(MESSAGE.ID, messageId)
+            .set(MESSAGE.THREAD_ID, threadId)
+            .set(MESSAGE.SENDER_USER_ID, senderUserId)
+            .set(MESSAGE.BODY, request.body)
+            .set(MESSAGE.ATTACHMENTS, attachments)
+            .set(MESSAGE.AI_LABELS, aiLabels)
+            .set(MESSAGE.CREATED_AT, now)
+            .execute()
+
+        dsl.update(TOPIC_THREAD)
+            .set(TOPIC_THREAD.LAST_ACTIVITY_AT, now)
+            .where(TOPIC_THREAD.ID.eq(threadId))
+            .execute()
+
+        outboxService.append(
+            aggregateType = "thread",
+            aggregateId = threadId,
+            eventType = "MessageCreated",
+            payload = mapOf(
+                "messageId" to messageId,
+                "threadId" to threadId,
+                "senderUserId" to senderUserId,
+                "createdAt" to now.toString(),
+            ),
+        )
+
+        return MessageView(
+            id = messageId,
+            threadId = threadId,
+            senderUserId = senderUserId,
+            body = request.body,
+            attachments = request.attachments,
+            aiLabels = emptyMap(),
+            createdAt = now,
+        )
+    }
+
+    private fun requireThread(threadId: UUID) {
+        val exists = dsl.fetchExists(
+            dsl.selectOne()
+                .from(TOPIC_THREAD)
+                .where(TOPIC_THREAD.ID.eq(threadId)),
+        )
+        if (!exists) {
+            throw ResponseStatusException(HttpStatus.NOT_FOUND, "thread not found")
+        }
+    }
+
+    private fun jsonToMap(value: JSON?): Map<String, Any?> {
+        if (value == null || value.data().isBlank()) {
+            return emptyMap()
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        return objectMapper.readValue(value.data(), Map::class.java) as Map<String, Any?>
+    }
+
+    private fun jsonToList(value: JSON?): List<Map<String, Any?>> {
+        if (value == null || value.data().isBlank()) {
+            return emptyList()
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        return objectMapper.readValue(value.data(), List::class.java) as List<Map<String, Any?>>
+    }
+}

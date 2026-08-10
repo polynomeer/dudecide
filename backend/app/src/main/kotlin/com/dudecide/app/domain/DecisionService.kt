@@ -1,7 +1,11 @@
 package com.dudecide.app.domain
 
 import com.dudecide.app.api.dto.ConfirmDecisionRequest
+import com.dudecide.app.api.dto.DecisionDetailResponse
+import com.dudecide.app.api.dto.DecisionEvidenceView
+import com.dudecide.app.api.dto.DecisionHistoryView
 import com.dudecide.app.api.dto.DecisionResponse
+import com.dudecide.app.jooq.tables.DecisionEvidence.Companion.DECISION_EVIDENCE
 import com.dudecide.app.jooq.enums.DecisionHistoryAction
 import com.dudecide.app.jooq.tables.Decision.Companion.DECISION
 import com.dudecide.app.jooq.tables.DecisionHistory.Companion.DECISION_HISTORY
@@ -20,6 +24,7 @@ class DecisionService(
     private val dsl: DSLContext,
     private val objectMapper: ObjectMapper,
     private val localActorProvider: LocalActorProvider,
+    private val outboxService: OutboxService,
 ) {
 
     @Transactional(readOnly = true)
@@ -73,6 +78,19 @@ class DecisionService(
             .set(DECISION_HISTORY.REASON, request.reason)
             .execute()
 
+        outboxService.append(
+            aggregateType = "decision",
+            aggregateId = decisionId,
+            eventType = "DecisionConfirmed",
+            payload = mapOf(
+                "decisionId" to decisionId,
+                "meetingId" to requireNotNull(record.meetingId),
+                "threadId" to requireNotNull(record.threadId),
+                "actorUserId" to actorId,
+                "reason" to request.reason,
+            ),
+        )
+
         return DecisionResponse(
             id = requireNotNull(record.id),
             meetingId = requireNotNull(record.meetingId),
@@ -83,6 +101,60 @@ class DecisionService(
             proposedResult = jsonToMap(proposedJson),
             confirmedResult = jsonToMap(confirmedJson),
             decidedAt = now,
+        )
+    }
+
+    @Transactional(readOnly = true)
+    fun getDecision(decisionId: UUID): DecisionDetailResponse {
+        val record = dsl.selectFrom(DECISION)
+            .where(DECISION.ID.eq(decisionId))
+            .fetchOne()
+            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "decision not found")
+
+        val evidence = dsl.selectFrom(DECISION_EVIDENCE)
+            .where(DECISION_EVIDENCE.DECISION_ID.eq(decisionId))
+            .orderBy(DECISION_EVIDENCE.CREATED_AT.asc())
+            .fetch()
+            .map { item ->
+                DecisionEvidenceView(
+                    id = requireNotNull(item.id),
+                    messageId = requireNotNull(item.messageId),
+                    threadId = requireNotNull(item.threadId),
+                    evidenceType = requireNotNull(item.evidenceType).literal,
+                    quoteSnapshot = requireNotNull(item.quoteSnapshot),
+                    confidence = item.confidence?.toDouble(),
+                    createdAt = item.createdAt,
+                )
+            }
+
+        val history = dsl.selectFrom(DECISION_HISTORY)
+            .where(DECISION_HISTORY.DECISION_ID.eq(decisionId))
+            .orderBy(DECISION_HISTORY.CREATED_AT.asc())
+            .fetch()
+            .map { item ->
+                DecisionHistoryView(
+                    id = requireNotNull(item.id),
+                    actorUserId = item.actorUserId,
+                    action = requireNotNull(item.action).literal,
+                    reason = item.reason,
+                    beforeState = jsonToMap(item.beforeState),
+                    afterState = jsonToMap(item.afterState),
+                    createdAt = item.createdAt,
+                )
+            }
+
+        return DecisionDetailResponse(
+            id = requireNotNull(record.id),
+            meetingId = requireNotNull(record.meetingId),
+            threadId = requireNotNull(record.threadId),
+            decisionType = requireNotNull(record.decisionType).literal,
+            title = requireNotNull(record.title),
+            status = com.dudecide.shared.decision.DecisionStatus.valueOf(requireNotNull(record.status).literal.uppercase()),
+            proposedResult = jsonToMap(record.proposedResult),
+            confirmedResult = jsonToMap(record.confirmedResult),
+            decidedAt = record.decidedAt,
+            evidence = evidence,
+            history = history,
         )
     }
 

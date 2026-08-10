@@ -2,6 +2,7 @@ package com.dudecide.app.domain
 
 import com.dudecide.app.api.dto.BudgetRangeDto
 import com.dudecide.app.api.dto.ConfirmDecisionRequest
+import com.dudecide.app.api.dto.CreateMessageRequest
 import com.dudecide.app.api.dto.CreateMeetingRequest
 import com.dudecide.app.api.dto.CreateVoteOptionRequest
 import com.dudecide.app.api.dto.CreateVoteRequest
@@ -13,6 +14,7 @@ import com.dudecide.app.jooq.enums.ThreadCategory
 import com.dudecide.app.jooq.tables.Decision.Companion.DECISION
 import com.dudecide.app.jooq.tables.DecisionHistory.Companion.DECISION_HISTORY
 import com.dudecide.app.jooq.tables.Membership.Companion.MEMBERSHIP
+import com.dudecide.app.jooq.tables.OutboxEvent.Companion.OUTBOX_EVENT
 import com.dudecide.app.jooq.tables.TopicThread.Companion.TOPIC_THREAD
 import com.dudecide.app.jooq.tables.Vote.Companion.VOTE
 import com.dudecide.app.jooq.tables.VoteOption.Companion.VOTE_OPTION
@@ -56,6 +58,11 @@ class AppServicesIntegrationTest {
                 .where(MEMBERSHIP.MEETING_ID.eq(response.id))
                 .fetchOne(MEMBERSHIP.ROLE)
             assertEquals(MeetingRole.host, hostRole)
+
+            val detail = context.meetingService.getMeeting(response.id)
+            assertEquals(5, detail.threads.size)
+            assertEquals(1, detail.memberCount)
+            assertEquals(1, context.dsl.fetchCount(OUTBOX_EVENT, OUTBOX_EVENT.EVENT_TYPE.eq("MeetingCreated")))
         }
     }
 
@@ -111,6 +118,7 @@ class AppServicesIntegrationTest {
             assertEquals("closed", voteSnapshot["status"])
             assertTrue((voteSnapshot["leadingOptionIds"] as List<*>).isNotEmpty())
             assertEquals(DecisionStatus.voting, decisionRecord.status)
+            assertEquals(3, context.dsl.fetchCount(OUTBOX_EVENT, OUTBOX_EVENT.AGGREGATE_ID.eq(createdVote.voteId)))
         }
     }
 
@@ -178,6 +186,30 @@ class AppServicesIntegrationTest {
         }
     }
 
+    @Test
+    fun `message service lists posted messages and writes outbox`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(title = "Message Flow", meetingType = "trip"),
+            )
+            val threadId = context.findThreadId(meeting.id, ThreadCategory.free_chat)
+
+            val posted = context.messageService.postMessage(
+                threadId,
+                CreateMessageRequest(
+                    body = "First planning note",
+                    attachments = listOf(mapOf("type" to "link", "url" to "https://example.com")),
+                ),
+            )
+
+            val messages = context.messageService.listMessages(threadId)
+            assertEquals(1, messages.size)
+            assertEquals(posted.id, messages.first().id)
+            assertEquals("First planning note", messages.first().body)
+            assertEquals(1, context.dsl.fetchCount(OUTBOX_EVENT, OUTBOX_EVENT.EVENT_TYPE.eq("MessageCreated")))
+        }
+    }
+
     private fun testContext(): TestContext {
         val dataSource = JdbcDataSource().apply {
             setURL("jdbc:h2:mem:${UUID.randomUUID()};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1")
@@ -196,13 +228,15 @@ class AppServicesIntegrationTest {
                 .withRenderNameCase(RenderNameCase.LOWER),
         )
         val localActorProvider = LocalActorProvider(dsl)
+        val outboxService = OutboxService(dsl, objectMapper)
 
         return TestContext(
             dsl = dsl,
             objectMapper = objectMapper,
-            meetingService = MeetingService(dsl, localActorProvider),
-            voteService = VoteService(dsl, objectMapper, localActorProvider),
-            decisionService = DecisionService(dsl, objectMapper, localActorProvider),
+            meetingService = MeetingService(dsl, localActorProvider, outboxService),
+            voteService = VoteService(dsl, objectMapper, localActorProvider, outboxService),
+            decisionService = DecisionService(dsl, objectMapper, localActorProvider, outboxService),
+            messageService = MessageService(dsl, objectMapper, localActorProvider, outboxService),
         )
     }
 
@@ -254,6 +288,19 @@ class AppServicesIntegrationTest {
                 last_activity_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT topic_thread_meeting_fk FOREIGN KEY (meeting_id) REFERENCES meeting(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE message (
+                id UUID DEFAULT random_uuid() PRIMARY KEY,
+                thread_id UUID NOT NULL,
+                sender_user_id UUID NOT NULL,
+                body TEXT NOT NULL,
+                attachments JSON NOT NULL DEFAULT JSON '[]',
+                ai_labels JSON NOT NULL DEFAULT JSON '{}',
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                edited_at TIMESTAMP WITH TIME ZONE,
+                CONSTRAINT message_thread_fk FOREIGN KEY (thread_id) REFERENCES topic_thread(id) ON DELETE CASCADE,
+                CONSTRAINT message_sender_fk FOREIGN KEY (sender_user_id) REFERENCES app_user(id)
             );
 
             CREATE TABLE decision (
@@ -326,6 +373,17 @@ class AppServicesIntegrationTest {
                 CONSTRAINT vote_response_user_fk FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE,
                 CONSTRAINT vote_response_vote_option_user_uk UNIQUE (vote_id, option_id, user_id)
             );
+
+            CREATE TABLE outbox_event (
+                id UUID DEFAULT random_uuid() PRIMARY KEY,
+                aggregate_type VARCHAR(64) NOT NULL,
+                aggregate_id UUID NOT NULL,
+                event_type VARCHAR(128) NOT NULL,
+                payload JSON NOT NULL,
+                status VARCHAR(64) NOT NULL DEFAULT 'pending',
+                occurred_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                published_at TIMESTAMP WITH TIME ZONE
+            );
         """.trimIndent()
     }
 
@@ -335,6 +393,7 @@ class AppServicesIntegrationTest {
         val meetingService: MeetingService,
         val voteService: VoteService,
         val decisionService: DecisionService,
+        val messageService: MessageService,
     ) : AutoCloseable {
         override fun close() = Unit
 

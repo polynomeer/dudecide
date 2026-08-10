@@ -28,6 +28,21 @@ data class MeetingResponse(
     val status: MeetingStatusDto,
 )
 
+data class MeetingDetailResponse(
+    val id: UUID,
+    val title: String,
+    val meetingType: String,
+    val status: MeetingStatusDto,
+    val originRegion: String? = null,
+    val expectedHeadcount: Int? = null,
+    val budget: BudgetRangeDto? = null,
+    val ownerUserId: UUID,
+    val memberCount: Int,
+    val decisionCount: Int,
+    val openVoteCount: Int,
+    val threads: List<ThreadSummaryView> = emptyList(),
+)
+
 enum class MeetingStatusDto {
     DRAFT,
     ACTIVE,
@@ -51,4 +66,38 @@ data class DecisionResponse(
     val proposedResult: Map<String, Any?> = emptyMap(),
     val confirmedResult: Map<String, Any?> = emptyMap(),
     val decidedAt: OffsetDateTime? = null,
+)
+
+data class DecisionDetailResponse(
+    val id: UUID,
+    val meetingId: UUID,
+    val threadId: UUID,
+    val decisionType: String,
+    val title: String,
+    val status: DecisionStatus,
+    val proposedResult: Map<String, Any?> = emptyMap(),
+    val confirmedResult: Map<String, Any?> = emptyMap(),
+    val decidedAt: OffsetDateTime? = null,
+    val evidence: List<DecisionEvidenceView> = emptyList(),
+    val history: List<DecisionHistoryView> = emptyList(),
+)
+
+data class DecisionEvidenceView(
+    val id: UUID,
+    val messageId: UUID,
+    val threadId: UUID,
+    val evidenceType: String,
+    val quoteSnapshot: String,
+    val confidence: Double? = null,
+    val createdAt: OffsetDateTime? = null,
+)
+
+data class DecisionHistoryView(
+    val id: UUID,
+    val actorUserId: UUID? = null,
+    val action: String,
+    val reason: String? = null,
+    val beforeState: Map<String, Any?> = emptyMap(),
+    val afterState: Map<String, Any?> = emptyMap(),
+    val createdAt: OffsetDateTime? = null,
 )

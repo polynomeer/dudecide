@@ -45,6 +45,7 @@ class VoteService(
     private val dsl: DSLContext,
     private val objectMapper: ObjectMapper,
     private val localActorProvider: LocalActorProvider,
+    private val outboxService: OutboxService,
 ) {
     private val voteScoringService = VoteScoringService()
 
@@ -88,6 +89,18 @@ class VoteService(
         val options = getVoteOptions(voteId)
         val response = buildVoteResponse(vote, options, actorId)
         updateLinkedDecisionSnapshot(vote, response, closedByHost = false)
+        outboxService.append(
+            aggregateType = "vote",
+            aggregateId = voteId,
+            eventType = "VoteCreated",
+            payload = mapOf(
+                "voteId" to voteId,
+                "meetingId" to meetingId,
+                "decisionId" to decisionId,
+                "threadId" to request.threadId,
+                "voteType" to voteType.literal,
+            ),
+        )
         return response
     }
 
@@ -129,6 +142,19 @@ class VoteService(
 
         val response = buildVoteResponse(vote, options, actorId)
         updateLinkedDecisionSnapshot(vote, response, closedByHost = false)
+        outboxService.append(
+            aggregateType = "vote",
+            aggregateId = voteId,
+            eventType = "VoteResponseUpserted",
+            payload = mapOf(
+                "voteId" to voteId,
+                "meetingId" to requireNotNull(vote.meetingId),
+                "decisionId" to vote.decisionId,
+                "threadId" to requireNotNull(vote.threadId),
+                "actorUserId" to actorId,
+                "responseCount" to request.responses.size,
+            ),
+        )
         return response
     }
 
@@ -152,6 +178,19 @@ class VoteService(
         val options = getVoteOptions(voteId)
         val response = buildVoteResponse(closedVote, options, actorId)
         updateLinkedDecisionSnapshot(closedVote, response, closedByHost = true)
+        outboxService.append(
+            aggregateType = "vote",
+            aggregateId = voteId,
+            eventType = "VoteClosed",
+            payload = mapOf(
+                "voteId" to voteId,
+                "meetingId" to requireNotNull(closedVote.meetingId),
+                "decisionId" to closedVote.decisionId,
+                "threadId" to requireNotNull(closedVote.threadId),
+                "closedAt" to closedAt.toString(),
+                "leadingOptionIds" to response.aggregates?.leadingOptionIds.orEmpty(),
+            ),
+        )
         return response
     }
 
