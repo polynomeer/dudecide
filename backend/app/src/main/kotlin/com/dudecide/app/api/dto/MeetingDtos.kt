@@ -75,6 +75,14 @@ data class UpdateMembershipRequest(
     val attendanceStatus: String? = null,
 )
 
+data class MeetingReportResponse(
+    val id: UUID,
+    val meetingId: UUID,
+    val version: Int,
+    val snapshot: Map<String, Any?> = emptyMap(),
+    val generatedAt: OffsetDateTime,
+)
+
 enum class MeetingStatusDto {
     DRAFT,
     ACTIVE,

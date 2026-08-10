@@ -155,6 +155,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VoteResponseView'
+  /meetings/{meetingId}/reports/latest:
+    get:
+      operationId: getLatestReport
+      summary: Get the latest materialized report
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '200':
+          description: Latest report snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeetingReportResponse'
+  /meetings/{meetingId}/reports/refresh:
+    post:
+      operationId: refreshMeetingReport
+      summary: Materialize a fresh meeting report snapshot
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '201':
+          description: Report refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeetingReportResponse'
   /decisions/{decisionId}/confirm:
     post:
       operationId: confirmDecision
@@ -477,6 +503,30 @@ components:
         attendanceStatus:
           type: string
         joinedAt:
+          type: string
+          format: date-time
+    MeetingReportResponse:
+      type: object
+      required:
+        - id
+        - meetingId
+        - version
+        - snapshot
+        - generatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        meetingId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+        snapshot:
+          type: object
+          additionalProperties: true
+        generatedAt:
           type: string
           format: date-time
     UpdateMembershipRequest:

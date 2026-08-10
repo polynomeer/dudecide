@@ -302,6 +302,34 @@ class AppServicesIntegrationTest {
         }
     }
 
+    @Test
+    fun `report service materializes latest meeting snapshot`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(title = "Report Flow", meetingType = "trip"),
+            )
+            val threadId = context.findThreadId(meeting.id, ThreadCategory.date)
+
+            context.decisionService.createDecision(
+                meeting.id,
+                CreateDecisionRequest(
+                    threadId = threadId,
+                    decisionType = "date",
+                    title = "Pick final weekend",
+                    proposedResult = mapOf("candidate" to "2026-09-12"),
+                ),
+            )
+
+            val refreshed = context.reportService.refreshReport(meeting.id)
+            val latest = context.reportService.getLatestReport(meeting.id)
+
+            assertEquals(1, refreshed.version)
+            assertEquals(refreshed.id, latest.id)
+            assertEquals("Report Flow", ((latest.snapshot["meeting"] as Map<*, *>)["title"]))
+            assertEquals(1, context.dsl.fetchCount(OUTBOX_EVENT, OUTBOX_EVENT.EVENT_TYPE.eq("ReportRefreshed")))
+        }
+    }
+
     private fun testContext(): TestContext {
         val dataSource = JdbcDataSource().apply {
             setURL("jdbc:h2:mem:${UUID.randomUUID()};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1")
@@ -329,6 +357,7 @@ class AppServicesIntegrationTest {
             voteService = VoteService(dsl, objectMapper, localActorProvider, outboxService),
             decisionService = DecisionService(dsl, objectMapper, localActorProvider, outboxService),
             messageService = MessageService(dsl, objectMapper, localActorProvider, outboxService),
+            reportService = ReportService(dsl, objectMapper, outboxService),
         )
     }
 
@@ -477,6 +506,16 @@ class AppServicesIntegrationTest {
                 CONSTRAINT vote_response_vote_option_user_uk UNIQUE (vote_id, option_id, user_id)
             );
 
+            CREATE TABLE meeting_report (
+                id UUID DEFAULT random_uuid() PRIMARY KEY,
+                meeting_id UUID NOT NULL,
+                version INTEGER NOT NULL,
+                snapshot JSON NOT NULL DEFAULT JSON '{}',
+                generated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT meeting_report_meeting_fk FOREIGN KEY (meeting_id) REFERENCES meeting(id) ON DELETE CASCADE,
+                CONSTRAINT meeting_report_meeting_version_uk UNIQUE (meeting_id, version)
+            );
+
             CREATE TABLE outbox_event (
                 id UUID DEFAULT random_uuid() PRIMARY KEY,
                 aggregate_type VARCHAR(64) NOT NULL,
@@ -497,6 +536,7 @@ class AppServicesIntegrationTest {
         val voteService: VoteService,
         val decisionService: DecisionService,
         val messageService: MessageService,
+        val reportService: ReportService,
     ) : AutoCloseable {
         override fun close() = Unit
 
