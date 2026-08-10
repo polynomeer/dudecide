@@ -16,9 +16,9 @@ This document defines the MVP external API surface and internal async events.
 
 ## Auth Model
 
-- authenticated user session for full members
-- invite token bootstrap for guest entry
-- role enforcement at meeting scope
+- current implementation uses a development-only local actor model backed by `LocalActorProvider`
+- invite token join is implemented and creates guest membership records
+- authenticated user sessions and real meeting-scope authorization remain follow-up work
 
 ## Core Resources
 
@@ -33,7 +33,7 @@ This document defines the MVP external API surface and internal async events.
 - search
 - notifications
 
-## Endpoint Draft
+## Implemented Surface
 
 ### Meetings
 
@@ -46,9 +46,7 @@ This document defines the MVP external API surface and internal async events.
 - get meeting summary and progress
 - returns thread-level counts so the client can render planning progress without separate summary calls
 
-`PATCH /api/v1/meetings/{meetingId}`
-
-- update title, budget, or high-level metadata
+- `PATCH /api/v1/meetings/{meetingId}` is not implemented yet
 
 ### Invites And Membership
 
@@ -110,6 +108,10 @@ This document defines the MVP external API surface and internal async events.
 
 - reopen a confirmed decision with reason
 
+`POST /api/v1/decisions/{decisionId}/evidence`
+
+- link a thread message as decision evidence
+
 ### Votes
 
 `POST /api/v1/meetings/{meetingId}/votes`
@@ -136,7 +138,24 @@ This document defines the MVP external API surface and internal async events.
 
 `GET /api/v1/meetings/{meetingId}/search?q=...`
 
-- hybrid keyword and semantic search
+- current implementation performs keyword search across messages, decisions, and tasks
+- semantic search remains follow-up work
+
+`GET /api/v1/meetings/{meetingId}/tasks`
+
+- list meeting tasks
+
+`POST /api/v1/meetings/{meetingId}/tasks`
+
+- create task
+
+`PATCH /api/v1/tasks/{taskId}`
+
+- update task title, status, owner, or due date
+
+`GET /api/v1/meetings/{meetingId}/notifications`
+
+- list notifications for the current local actor
 
 `GET /api/v1/meetings/{meetingId}/reports/latest`
 
@@ -151,6 +170,8 @@ This document defines the MVP external API surface and internal async events.
 `GET /api/v1/meetings/{meetingId}/events`
 
 - SSE stream for room events
+- current implementation is in-memory per application instance
+- reconnect replay and broker-backed fan-out remain follow-up work
 
 ## Sample Shapes
 
@@ -223,6 +244,12 @@ This document defines the MVP external API surface and internal async events.
 
 Use an outbox-backed event stream. These events are internal contracts between the API transaction boundary and async workers.
 
+Current implementation detail:
+
+- mutations write to `outbox_event`
+- selected mutations also publish immediate in-memory SSE updates
+- durable outbox relay workers are not implemented yet
+
 ### Core Events
 
 - `MeetingCreated`
@@ -237,9 +264,12 @@ Use an outbox-backed event stream. These events are internal contracts between t
 - `DecisionDrafted`
 - `DecisionConfirmed`
 - `DecisionReconsiderationRequested`
+- `DecisionEvidenceLinked`
 - `SummaryGenerated`
 - `ReportRefreshed`
 - `NotificationRequested`
+- `TaskCreated`
+- `TaskUpdated`
 
 ## Event Flows
 
@@ -294,12 +324,17 @@ sequenceDiagram
 
 ## Idempotency Guidance
 
-Require idempotency keys for:
+Planned idempotency coverage:
 
 - create meeting
 - create vote
 - confirm decision
 - refresh report
+
+Current implementation:
+
+- no request idempotency key enforcement yet
+- duplicate protection relies only on resource-level constraints and service state checks
 
 This reduces duplicate writes during mobile retry conditions.
 

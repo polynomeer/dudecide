@@ -95,6 +95,25 @@ GRADLE_OPTS='-Djava.io.tmpdir=/private/tmp/dudecide-gradle-tmp' \
 /opt/homebrew/bin/gradle --no-daemon :backend:shared:test :backend:app:compileKotlin
 ```
 
+Current verified command in this repository:
+
+```bash
+GRADLE_USER_HOME=/private/tmp/dudecide-gradle-home \
+GRADLE_OPTS='-Djava.io.tmpdir=/private/tmp/dudecide-gradle-tmp' \
+/opt/homebrew/bin/gradle --no-daemon :backend:app:test
+```
+
+Known local caveat as of August 10, 2026:
+
+- if Docker Desktop is not running, `docker compose up -d` will fail before PostgreSQL, Redis, and MinIO start
+- backend tests do not require Docker because integration coverage currently uses H2
+
+## Current Runtime Notes
+
+- API realtime uses in-memory Spring `SseEmitter` subscriptions
+- notifications are stored in PostgreSQL and exposed through the API, but external delivery is not wired yet
+- the current actor model is development-oriented and uses a single local host identity unless invite join creates additional users
+
 ## Seed Data
 
 For a reusable sample meeting and open vote scenario, use:

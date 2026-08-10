@@ -24,6 +24,12 @@ This document defines the target MVP architecture for Dudecide.
 - SSE first for realtime room updates, with WebSocket as a later upgrade if needed
 - async worker for AI, notifications, and report refresh
 
+Current implementation snapshot:
+
+- one Spring Boot application currently hosts meeting, thread, decision, vote, search, task, report, notification, and SSE endpoints
+- SSE fan-out is in-memory and scoped to a single process
+- async worker responsibilities are still performed inline or represented only through outbox rows
+
 ### Data
 
 - `PostgreSQL` for transactional source of truth
@@ -84,6 +90,11 @@ flowchart LR
 - invite token validation
 - meeting membership
 - role enforcement
+
+Current implementation note:
+
+- invite token validation and membership writes exist
+- authenticated sessions and role enforcement beyond the local development actor are not implemented yet
 
 ### Meeting Lifecycle
 
@@ -246,6 +257,11 @@ Recommended implementation:
 - Spring-managed transaction boundary
 - PostgreSQL outbox table
 - relay into worker queue after commit
+
+Current implementation note:
+
+- `outbox_event` writes are implemented
+- relay workers and external queue publishing remain follow-up work
 
 ## Non-Goals For MVP
 
