@@ -2,10 +2,13 @@ package com.dudecide.app.domain
 
 import com.dudecide.app.api.dto.BudgetRangeDto
 import com.dudecide.app.api.dto.ConfirmDecisionRequest
+import com.dudecide.app.api.dto.CreateInviteLinkRequest
 import com.dudecide.app.api.dto.CreateMessageRequest
 import com.dudecide.app.api.dto.CreateMeetingRequest
 import com.dudecide.app.api.dto.CreateVoteOptionRequest
 import com.dudecide.app.api.dto.CreateVoteRequest
+import com.dudecide.app.api.dto.JoinInviteRequest
+import com.dudecide.app.api.dto.UpdateMembershipRequest
 import com.dudecide.app.api.dto.VoteSubmissionItem
 import com.dudecide.app.api.dto.VoteSubmissionRequest
 import com.dudecide.app.jooq.enums.DecisionStatus
@@ -13,6 +16,7 @@ import com.dudecide.app.jooq.enums.MeetingRole
 import com.dudecide.app.jooq.enums.ThreadCategory
 import com.dudecide.app.jooq.tables.Decision.Companion.DECISION
 import com.dudecide.app.jooq.tables.DecisionHistory.Companion.DECISION_HISTORY
+import com.dudecide.app.jooq.tables.InviteLink.Companion.INVITE_LINK
 import com.dudecide.app.jooq.tables.Membership.Companion.MEMBERSHIP
 import com.dudecide.app.jooq.tables.OutboxEvent.Companion.OUTBOX_EVENT
 import com.dudecide.app.jooq.tables.TopicThread.Companion.TOPIC_THREAD
@@ -63,6 +67,43 @@ class AppServicesIntegrationTest {
             assertEquals(5, detail.threads.size)
             assertEquals(1, detail.memberCount)
             assertEquals(1, context.dsl.fetchCount(OUTBOX_EVENT, OUTBOX_EVENT.EVENT_TYPE.eq("MeetingCreated")))
+        }
+    }
+
+    @Test
+    fun `meeting service supports invite join and membership updates`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(title = "Invite Flow", meetingType = "trip"),
+            )
+
+            val invite = context.meetingService.createInviteLink(
+                meeting.id,
+                CreateInviteLinkRequest(),
+            )
+
+            assertEquals(1, context.dsl.fetchCount(INVITE_LINK, INVITE_LINK.MEETING_ID.eq(meeting.id)))
+
+            val joined = context.meetingService.joinWithInvite(
+                invite.token,
+                JoinInviteRequest(displayName = "Guest User"),
+            )
+
+            assertEquals("guest", joined.role)
+            assertEquals("accepted", joined.attendanceStatus)
+
+            val updated = context.meetingService.updateMembership(
+                meeting.id,
+                joined.id,
+                UpdateMembershipRequest(
+                    role = "participant",
+                    attendanceStatus = "tentative",
+                ),
+            )
+
+            assertEquals("participant", updated.role)
+            assertEquals("tentative", updated.attendanceStatus)
+            assertEquals(4, context.dsl.fetchCount(OUTBOX_EVENT, OUTBOX_EVENT.AGGREGATE_ID.eq(meeting.id)))
         }
     }
 
@@ -276,6 +317,17 @@ class AppServicesIntegrationTest {
                 CONSTRAINT membership_meeting_fk FOREIGN KEY (meeting_id) REFERENCES meeting(id) ON DELETE CASCADE,
                 CONSTRAINT membership_user_fk FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE,
                 CONSTRAINT membership_meeting_user_uk UNIQUE (meeting_id, user_id)
+            );
+
+            CREATE TABLE invite_link (
+                id UUID DEFAULT random_uuid() PRIMARY KEY,
+                meeting_id UUID NOT NULL,
+                token VARCHAR(255) NOT NULL,
+                status VARCHAR(32) NOT NULL DEFAULT 'active',
+                expires_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT invite_link_meeting_fk FOREIGN KEY (meeting_id) REFERENCES meeting(id) ON DELETE CASCADE,
+                CONSTRAINT invite_link_token_uk UNIQUE (token)
             );
 
             CREATE TABLE topic_thread (

@@ -43,6 +43,38 @@ data class MeetingDetailResponse(
     val threads: List<ThreadSummaryView> = emptyList(),
 )
 
+data class CreateInviteLinkRequest(
+    val expiresAt: OffsetDateTime? = null,
+)
+
+data class InviteLinkResponse(
+    val id: UUID,
+    val meetingId: UUID,
+    val token: String,
+    val status: String,
+    val expiresAt: OffsetDateTime? = null,
+    val createdAt: OffsetDateTime,
+)
+
+data class JoinInviteRequest(
+    val displayName: String,
+)
+
+data class MembershipResponse(
+    val id: UUID,
+    val meetingId: UUID,
+    val userId: UUID,
+    val displayName: String,
+    val role: String,
+    val attendanceStatus: String,
+    val joinedAt: OffsetDateTime,
+)
+
+data class UpdateMembershipRequest(
+    val role: String? = null,
+    val attendanceStatus: String? = null,
+)
+
 enum class MeetingStatusDto {
     DRAFT,
     ACTIVE,

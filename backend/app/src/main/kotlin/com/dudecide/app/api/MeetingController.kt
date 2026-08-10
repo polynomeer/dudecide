@@ -1,8 +1,12 @@
 package com.dudecide.app.api
 
 import com.dudecide.app.api.dto.CreateMeetingRequest
+import com.dudecide.app.api.dto.CreateInviteLinkRequest
 import com.dudecide.app.api.dto.MeetingDetailResponse
 import com.dudecide.app.api.dto.MeetingResponse
+import com.dudecide.app.api.dto.InviteLinkResponse
+import com.dudecide.app.api.dto.MembershipResponse
+import com.dudecide.app.api.dto.UpdateMembershipRequest
 import com.dudecide.app.domain.MeetingService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -10,6 +14,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -28,9 +33,26 @@ class MeetingController(
     fun getMeeting(@PathVariable meetingId: UUID): ResponseEntity<MeetingDetailResponse> =
         ResponseEntity.ok(meetingService.getMeeting(meetingId))
 
+    @PostMapping("/{meetingId}/invite-links")
+    @Operation(summary = "Create an invite link")
+    fun createInviteLink(
+        @PathVariable meetingId: UUID,
+        @RequestBody request: CreateInviteLinkRequest,
+    ): ResponseEntity<InviteLinkResponse> =
+        ResponseEntity.status(HttpStatus.CREATED).body(meetingService.createInviteLink(meetingId, request))
+
     @PostMapping
     @Operation(summary = "Create a meeting")
     fun createMeeting(@RequestBody request: CreateMeetingRequest): ResponseEntity<MeetingResponse> {
         return ResponseEntity.status(HttpStatus.CREATED).body(meetingService.createMeeting(request))
     }
+
+    @PatchMapping("/{meetingId}/members/{memberId}")
+    @Operation(summary = "Update meeting member role or attendance")
+    fun updateMembership(
+        @PathVariable meetingId: UUID,
+        @PathVariable memberId: UUID,
+        @RequestBody request: UpdateMembershipRequest,
+    ): ResponseEntity<MembershipResponse> =
+        ResponseEntity.ok(meetingService.updateMembership(meetingId, memberId, request))
 }

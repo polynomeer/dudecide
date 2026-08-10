@@ -36,6 +36,73 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MeetingDetailResponse'
+  /meetings/{meetingId}/invite-links:
+    post:
+      operationId: createInviteLink
+      summary: Create an invite link
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInviteLinkRequest'
+      responses:
+        '201':
+          description: Invite link created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteLinkResponse'
+  /invite-links/{token}/join:
+    post:
+      operationId: joinWithInvite
+      summary: Join meeting via invite token
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinInviteRequest'
+      responses:
+        '201':
+          description: Membership created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipResponse'
+  /meetings/{meetingId}/members/{memberId}:
+    patch:
+      operationId: updateMembership
+      summary: Update member role or attendance
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMembershipRequest'
+      responses:
+        '200':
+          description: Membership updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipResponse'
   /meetings/{meetingId}/decisions:
     get:
       operationId: listDecisions
@@ -308,6 +375,80 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ThreadSummaryView'
+    CreateInviteLinkRequest:
+      type: object
+      properties:
+        expiresAt:
+          type: string
+          format: date-time
+    InviteLinkResponse:
+      type: object
+      required:
+        - id
+        - meetingId
+        - token
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        meetingId:
+          type: string
+          format: uuid
+        token:
+          type: string
+        status:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    JoinInviteRequest:
+      type: object
+      required:
+        - displayName
+      properties:
+        displayName:
+          type: string
+    MembershipResponse:
+      type: object
+      required:
+        - id
+        - meetingId
+        - userId
+        - displayName
+        - role
+        - attendanceStatus
+        - joinedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        meetingId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        role:
+          type: string
+        attendanceStatus:
+          type: string
+        joinedAt:
+          type: string
+          format: date-time
+    UpdateMembershipRequest:
+      type: object
+      properties:
+        role:
+          type: string
+        attendanceStatus:
+          type: string
     DecisionResponse:
       type: object
       required:

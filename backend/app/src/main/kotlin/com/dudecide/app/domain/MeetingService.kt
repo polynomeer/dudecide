@@ -1,14 +1,22 @@
 package com.dudecide.app.domain
 
 import com.dudecide.app.api.dto.CreateMeetingRequest
+import com.dudecide.app.api.dto.CreateInviteLinkRequest
+import com.dudecide.app.api.dto.InviteLinkResponse
+import com.dudecide.app.api.dto.JoinInviteRequest
 import com.dudecide.app.api.dto.MeetingDetailResponse
 import com.dudecide.app.api.dto.MeetingResponse
 import com.dudecide.app.api.dto.MeetingStatusDto
+import com.dudecide.app.api.dto.MembershipResponse
 import com.dudecide.app.api.dto.ThreadSummaryView
+import com.dudecide.app.api.dto.UpdateMembershipRequest
+import com.dudecide.app.jooq.enums.AttendanceStatus
 import com.dudecide.app.jooq.enums.MeetingRole
 import com.dudecide.app.jooq.enums.MeetingStatus
 import com.dudecide.app.jooq.enums.VoteStatus
 import com.dudecide.app.jooq.enums.ThreadCategory
+import com.dudecide.app.jooq.tables.AppUser.Companion.APP_USER
+import com.dudecide.app.jooq.tables.InviteLink.Companion.INVITE_LINK
 import com.dudecide.app.jooq.tables.Decision.Companion.DECISION
 import com.dudecide.app.jooq.tables.Meeting.Companion.MEETING
 import com.dudecide.app.jooq.tables.Membership.Companion.MEMBERSHIP
@@ -20,6 +28,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import java.math.BigDecimal
+import java.time.OffsetDateTime
 import java.util.UUID
 
 @Service
@@ -76,10 +85,7 @@ class MeetingService(
 
     @Transactional(readOnly = true)
     fun getMeeting(meetingId: UUID): MeetingDetailResponse {
-        val record = dsl.selectFrom(MEETING)
-            .where(MEETING.ID.eq(meetingId))
-            .fetchOne()
-            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "meeting not found")
+        val record = requireMeeting(meetingId)
 
         val memberCount = dsl.fetchCount(MEMBERSHIP, MEMBERSHIP.MEETING_ID.eq(meetingId))
         val decisionCount = dsl.fetchCount(DECISION, DECISION.MEETING_ID.eq(meetingId))
@@ -124,6 +130,145 @@ class MeetingService(
         )
     }
 
+    @Transactional
+    fun createInviteLink(meetingId: UUID, request: CreateInviteLinkRequest): InviteLinkResponse {
+        requireMeeting(meetingId)
+
+        val inviteId = UUID.randomUUID()
+        val token = UUID.randomUUID().toString()
+        val createdAt = OffsetDateTime.now()
+
+        dsl.insertInto(INVITE_LINK)
+            .set(INVITE_LINK.ID, inviteId)
+            .set(INVITE_LINK.MEETING_ID, meetingId)
+            .set(INVITE_LINK.TOKEN, token)
+            .set(INVITE_LINK.STATUS, "active")
+            .set(INVITE_LINK.EXPIRES_AT, request.expiresAt)
+            .set(INVITE_LINK.CREATED_AT, createdAt)
+            .execute()
+
+        outboxService.append(
+            aggregateType = "meeting",
+            aggregateId = meetingId,
+            eventType = "InviteLinkCreated",
+            payload = mapOf(
+                "inviteLinkId" to inviteId,
+                "meetingId" to meetingId,
+                "token" to token,
+                "expiresAt" to request.expiresAt?.toString(),
+            ),
+        )
+
+        return InviteLinkResponse(
+            id = inviteId,
+            meetingId = meetingId,
+            token = token,
+            status = "active",
+            expiresAt = request.expiresAt,
+            createdAt = createdAt,
+        )
+    }
+
+    @Transactional
+    fun joinWithInvite(token: String, request: JoinInviteRequest): MembershipResponse {
+        val invite = dsl.selectFrom(INVITE_LINK)
+            .where(INVITE_LINK.TOKEN.eq(token))
+            .fetchOne()
+            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "invite link not found")
+
+        val expiresAt = invite.expiresAt
+        if (invite.status != "active" || (expiresAt != null && expiresAt.isBefore(OffsetDateTime.now()))) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "invite link is no longer valid")
+        }
+
+        val userId = UUID.randomUUID()
+        val membershipId = UUID.randomUUID()
+        val joinedAt = OffsetDateTime.now()
+        val meetingId = requireNotNull(invite.meetingId)
+
+        dsl.insertInto(APP_USER)
+            .set(APP_USER.ID, userId)
+            .set(APP_USER.DISPLAY_NAME, request.displayName)
+            .set(APP_USER.STATUS, "active")
+            .execute()
+
+        dsl.insertInto(MEMBERSHIP)
+            .set(MEMBERSHIP.ID, membershipId)
+            .set(MEMBERSHIP.MEETING_ID, meetingId)
+            .set(MEMBERSHIP.USER_ID, userId)
+            .set(MEMBERSHIP.ROLE, MeetingRole.guest)
+            .set(MEMBERSHIP.ATTENDANCE_STATUS, AttendanceStatus.accepted)
+            .set(MEMBERSHIP.JOINED_AT, joinedAt)
+            .execute()
+
+        outboxService.append(
+            aggregateType = "meeting",
+            aggregateId = meetingId,
+            eventType = "MemberJoinedMeeting",
+            payload = mapOf(
+                "inviteLinkId" to requireNotNull(invite.id),
+                "meetingId" to meetingId,
+                "membershipId" to membershipId,
+                "userId" to userId,
+            ),
+        )
+
+        return MembershipResponse(
+            id = membershipId,
+            meetingId = meetingId,
+            userId = userId,
+            displayName = request.displayName,
+            role = MeetingRole.guest.literal,
+            attendanceStatus = AttendanceStatus.accepted.literal,
+            joinedAt = joinedAt,
+        )
+    }
+
+    @Transactional
+    fun updateMembership(meetingId: UUID, memberId: UUID, request: UpdateMembershipRequest): MembershipResponse {
+        requireMeeting(meetingId)
+
+        val membership = dsl.select(MEMBERSHIP.asterisk(), APP_USER.DISPLAY_NAME)
+            .from(MEMBERSHIP)
+            .join(APP_USER).on(APP_USER.ID.eq(MEMBERSHIP.USER_ID))
+            .where(MEMBERSHIP.ID.eq(memberId))
+            .and(MEMBERSHIP.MEETING_ID.eq(meetingId))
+            .fetchOne()
+            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "membership not found")
+
+        val nextRole = request.role?.let(::parseMeetingRole) ?: requireNotNull(membership.get(MEMBERSHIP.ROLE))
+        val nextAttendanceStatus = request.attendanceStatus?.let(::parseAttendanceStatus)
+            ?: requireNotNull(membership.get(MEMBERSHIP.ATTENDANCE_STATUS))
+
+        dsl.update(MEMBERSHIP)
+            .set(MEMBERSHIP.ROLE, nextRole)
+            .set(MEMBERSHIP.ATTENDANCE_STATUS, nextAttendanceStatus)
+            .where(MEMBERSHIP.ID.eq(memberId))
+            .execute()
+
+        outboxService.append(
+            aggregateType = "meeting",
+            aggregateId = meetingId,
+            eventType = "MembershipUpdated",
+            payload = mapOf(
+                "meetingId" to meetingId,
+                "membershipId" to memberId,
+                "role" to nextRole.literal,
+                "attendanceStatus" to nextAttendanceStatus.literal,
+            ),
+        )
+
+        return MembershipResponse(
+            id = requireNotNull(membership.get(MEMBERSHIP.ID)),
+            meetingId = requireNotNull(membership.get(MEMBERSHIP.MEETING_ID)),
+            userId = requireNotNull(membership.get(MEMBERSHIP.USER_ID)),
+            displayName = requireNotNull(membership.get(APP_USER.DISPLAY_NAME)),
+            role = nextRole.literal,
+            attendanceStatus = nextAttendanceStatus.literal,
+            joinedAt = requireNotNull(membership.get(MEMBERSHIP.JOINED_AT)),
+        )
+    }
+
     private fun createDefaultThreads(meetingId: UUID) {
         val defaults = listOf(
             ThreadSeed(ThreadCategory.date, "Date"),
@@ -145,6 +290,20 @@ class MeetingService(
     }
 
     private fun Double.toBigDecimal(): BigDecimal = BigDecimal.valueOf(this)
+
+    private fun requireMeeting(meetingId: UUID) =
+        dsl.selectFrom(MEETING)
+            .where(MEETING.ID.eq(meetingId))
+            .fetchOne()
+            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "meeting not found")
+
+    private fun parseMeetingRole(raw: String): MeetingRole =
+        runCatching { MeetingRole.valueOf(raw.lowercase()) }
+            .getOrElse { throw ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid meeting role: $raw") }
+
+    private fun parseAttendanceStatus(raw: String): AttendanceStatus =
+        runCatching { AttendanceStatus.valueOf(raw.lowercase()) }
+            .getOrElse { throw ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid attendance status: $raw") }
 
     private fun MeetingStatus.toDto(): MeetingStatusDto =
         when (this) {
