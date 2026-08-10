@@ -1,11 +1,14 @@
 package com.dudecide.app.api
 
 import com.dudecide.app.api.dto.ConfirmDecisionRequest
+import com.dudecide.app.api.dto.CreateDecisionRequest
 import com.dudecide.app.api.dto.DecisionDetailResponse
 import com.dudecide.app.api.dto.DecisionResponse
+import com.dudecide.app.api.dto.ReconsiderDecisionRequest
 import com.dudecide.app.domain.DecisionService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -32,6 +35,14 @@ class DecisionController(
     fun listDecisions(@PathVariable meetingId: UUID): ResponseEntity<List<DecisionResponse>> =
         ResponseEntity.ok(decisionService.listDecisions(meetingId))
 
+    @PostMapping("/meetings/{meetingId}/decisions")
+    @Operation(summary = "Create a manual decision draft")
+    fun createDecision(
+        @PathVariable meetingId: UUID,
+        @RequestBody request: CreateDecisionRequest,
+    ): ResponseEntity<DecisionResponse> =
+        ResponseEntity.status(HttpStatus.CREATED).body(decisionService.createDecision(meetingId, request))
+
     @PostMapping("/decisions/{decisionId}/confirm")
     @Operation(summary = "Confirm a decision")
     fun confirmDecision(
@@ -39,4 +50,12 @@ class DecisionController(
         @RequestBody request: ConfirmDecisionRequest,
     ): ResponseEntity<DecisionResponse> =
         ResponseEntity.ok(decisionService.confirmDecision(decisionId, request))
+
+    @PostMapping("/decisions/{decisionId}/reconsider")
+    @Operation(summary = "Move a confirmed decision into reconsideration")
+    fun reconsiderDecision(
+        @PathVariable decisionId: UUID,
+        @RequestBody request: ReconsiderDecisionRequest,
+    ): ResponseEntity<DecisionResponse> =
+        ResponseEntity.ok(decisionService.reconsiderDecision(decisionId, request))
 }

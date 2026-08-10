@@ -88,6 +88,17 @@ data class ConfirmDecisionRequest(
     val reason: String? = null,
 )
 
+data class CreateDecisionRequest(
+    val threadId: UUID,
+    val decisionType: String,
+    val title: String,
+    val proposedResult: Map<String, Any?> = emptyMap(),
+)
+
+data class ReconsiderDecisionRequest(
+    val reason: String,
+)
+
 data class DecisionResponse(
     val id: UUID,
     val meetingId: UUID,

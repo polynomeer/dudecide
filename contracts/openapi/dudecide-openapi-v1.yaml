@@ -118,6 +118,24 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/DecisionResponse'
+    post:
+      operationId: createDecision
+      summary: Create a manual decision draft
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDecisionRequest'
+      responses:
+        '201':
+          description: Decision created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResponse'
   /meetings/{meetingId}/votes:
     post:
       operationId: createVote
@@ -152,6 +170,25 @@ paths:
       responses:
         '200':
           description: Decision confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResponse'
+  /decisions/{decisionId}/reconsider:
+    post:
+      operationId: reconsiderDecision
+      summary: Move a confirmed decision into reconsideration
+      parameters:
+        - $ref: '#/components/parameters/DecisionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReconsiderDecisionRequest'
+      responses:
+        '200':
+          description: Decision moved to reconsideration
           content:
             application/json:
               schema:
@@ -483,6 +520,30 @@ components:
         decidedAt:
           type: string
           format: date-time
+    CreateDecisionRequest:
+      type: object
+      required:
+        - threadId
+        - decisionType
+        - title
+      properties:
+        threadId:
+          type: string
+          format: uuid
+        decisionType:
+          $ref: '#/components/schemas/DecisionType'
+        title:
+          type: string
+        proposedResult:
+          type: object
+          additionalProperties: true
+    ReconsiderDecisionRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
     DecisionDetailResponse:
       allOf:
         - $ref: '#/components/schemas/DecisionResponse'

@@ -2,12 +2,14 @@ package com.dudecide.app.domain
 
 import com.dudecide.app.api.dto.BudgetRangeDto
 import com.dudecide.app.api.dto.ConfirmDecisionRequest
+import com.dudecide.app.api.dto.CreateDecisionRequest
 import com.dudecide.app.api.dto.CreateInviteLinkRequest
 import com.dudecide.app.api.dto.CreateMessageRequest
 import com.dudecide.app.api.dto.CreateMeetingRequest
 import com.dudecide.app.api.dto.CreateVoteOptionRequest
 import com.dudecide.app.api.dto.CreateVoteRequest
 import com.dudecide.app.api.dto.JoinInviteRequest
+import com.dudecide.app.api.dto.ReconsiderDecisionRequest
 import com.dudecide.app.api.dto.UpdateMembershipRequest
 import com.dudecide.app.api.dto.VoteSubmissionItem
 import com.dudecide.app.api.dto.VoteSubmissionRequest
@@ -224,6 +226,55 @@ class AppServicesIntegrationTest {
 
             assertEquals(vote.options[0].label, confirmedResult["selectedLabel"])
             assertEquals(DecisionStatus.confirmed, storedDecision.status)
+        }
+    }
+
+    @Test
+    fun `decision service creates manual draft and reopens confirmed decisions`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(title = "Decision Flow", meetingType = "trip"),
+            )
+            val threadId = context.findThreadId(meeting.id, ThreadCategory.location)
+
+            val created = context.decisionService.createDecision(
+                meeting.id,
+                CreateDecisionRequest(
+                    threadId = threadId,
+                    decisionType = "location",
+                    title = "Choose final area",
+                    proposedResult = mapOf("candidate" to "Gapyeong"),
+                ),
+            )
+
+            assertEquals(com.dudecide.shared.decision.DecisionStatus.PROPOSED, created.status)
+
+            context.decisionService.confirmDecision(
+                created.id,
+                ConfirmDecisionRequest(
+                    confirmedResult = mapOf("selectedArea" to "Gapyeong"),
+                    reason = "No travel blockers remained",
+                ),
+            )
+
+            val reconsidered = context.decisionService.reconsiderDecision(
+                created.id,
+                ReconsiderDecisionRequest(
+                    reason = "Selected package sold out on 2026-08-10",
+                ),
+            )
+
+            assertEquals(com.dudecide.shared.decision.DecisionStatus.NEEDS_RECONSIDERATION, reconsidered.status)
+
+            val historyActions = context.dsl.select(DECISION_HISTORY.ACTION)
+                .from(DECISION_HISTORY)
+                .where(DECISION_HISTORY.DECISION_ID.eq(created.id))
+                .orderBy(DECISION_HISTORY.CREATED_AT.asc())
+                .fetch(DECISION_HISTORY.ACTION)
+                .map { requireNotNull(it).literal }
+
+            assertEquals(listOf("drafted", "confirmed", "reopened"), historyActions)
+            assertEquals(3, context.dsl.fetchCount(OUTBOX_EVENT, OUTBOX_EVENT.AGGREGATE_ID.eq(created.id)))
         }
     }
 
