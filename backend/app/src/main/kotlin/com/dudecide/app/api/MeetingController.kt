@@ -7,6 +7,8 @@ import com.dudecide.app.api.dto.MeetingResponse
 import com.dudecide.app.api.dto.InviteLinkResponse
 import com.dudecide.app.api.dto.MembershipResponse
 import com.dudecide.app.api.dto.UpdateMembershipRequest
+import com.dudecide.app.domain.IdempotencyService
+import com.dudecide.app.domain.IdempotentResponse
 import com.dudecide.app.domain.MeetingService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
@@ -26,6 +29,7 @@ import java.util.UUID
 @Tag(name = "Meetings")
 class MeetingController(
     private val meetingService: MeetingService,
+    private val idempotencyService: IdempotencyService,
 ) {
 
     @GetMapping("/{meetingId}")
@@ -43,8 +47,18 @@ class MeetingController(
 
     @PostMapping
     @Operation(summary = "Create a meeting")
-    fun createMeeting(@RequestBody request: CreateMeetingRequest): ResponseEntity<MeetingResponse> {
-        return ResponseEntity.status(HttpStatus.CREATED).body(meetingService.createMeeting(request))
+    fun createMeeting(
+        @RequestBody request: CreateMeetingRequest,
+        @RequestHeader(name = "Idempotency-Key", required = false) idempotencyKey: String?,
+    ): ResponseEntity<MeetingResponse> {
+        val response = idempotencyService.execute(
+            operationScope = "meetings.create",
+            idempotencyKey = idempotencyKey,
+            responseType = MeetingResponse::class.java,
+        ) {
+            IdempotentResponse(HttpStatus.CREATED.value(), meetingService.createMeeting(request))
+        }
+        return ResponseEntity.status(response.status).body(response.body)
     }
 
     @PatchMapping("/{meetingId}/members/{memberId}")

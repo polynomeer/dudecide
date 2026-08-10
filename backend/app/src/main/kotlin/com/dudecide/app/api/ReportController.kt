@@ -1,6 +1,8 @@
 package com.dudecide.app.api
 
 import com.dudecide.app.api.dto.MeetingReportResponse
+import com.dudecide.app.domain.IdempotencyService
+import com.dudecide.app.domain.IdempotentResponse
 import com.dudecide.app.domain.ReportService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -9,6 +11,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
@@ -18,6 +21,7 @@ import java.util.UUID
 @Tag(name = "Reports")
 class ReportController(
     private val reportService: ReportService,
+    private val idempotencyService: IdempotencyService,
 ) {
 
     @GetMapping("/latest")
@@ -27,6 +31,17 @@ class ReportController(
 
     @PostMapping("/refresh")
     @Operation(summary = "Materialize a fresh meeting report snapshot")
-    fun refresh(@PathVariable meetingId: UUID): ResponseEntity<MeetingReportResponse> =
-        ResponseEntity.status(HttpStatus.CREATED).body(reportService.refreshReport(meetingId))
+    fun refresh(
+        @PathVariable meetingId: UUID,
+        @RequestHeader(name = "Idempotency-Key", required = false) idempotencyKey: String?,
+    ): ResponseEntity<MeetingReportResponse> {
+        val response = idempotencyService.execute(
+            operationScope = "meetings.$meetingId.reports.refresh",
+            idempotencyKey = idempotencyKey,
+            responseType = MeetingReportResponse::class.java,
+        ) {
+            IdempotentResponse(HttpStatus.CREATED.value(), reportService.refreshReport(meetingId))
+        }
+        return ResponseEntity.status(response.status).body(response.body)
+    }
 }

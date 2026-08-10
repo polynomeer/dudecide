@@ -7,6 +7,8 @@ import com.dudecide.app.api.dto.DecisionEvidenceView
 import com.dudecide.app.api.dto.DecisionDetailResponse
 import com.dudecide.app.api.dto.DecisionResponse
 import com.dudecide.app.api.dto.ReconsiderDecisionRequest
+import com.dudecide.app.domain.IdempotencyService
+import com.dudecide.app.domain.IdempotentResponse
 import com.dudecide.app.domain.DecisionService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.tags.Tag
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.util.UUID
@@ -25,6 +28,7 @@ import java.util.UUID
 @Tag(name = "Decisions")
 class DecisionController(
     private val decisionService: DecisionService,
+    private val idempotencyService: IdempotencyService,
 ) {
 
     @GetMapping("/decisions/{decisionId}")
@@ -50,8 +54,17 @@ class DecisionController(
     fun confirmDecision(
         @PathVariable decisionId: UUID,
         @RequestBody request: ConfirmDecisionRequest,
-    ): ResponseEntity<DecisionResponse> =
-        ResponseEntity.ok(decisionService.confirmDecision(decisionId, request))
+        @RequestHeader(name = "Idempotency-Key", required = false) idempotencyKey: String?,
+    ): ResponseEntity<DecisionResponse> {
+        val response = idempotencyService.execute(
+            operationScope = "decisions.$decisionId.confirm",
+            idempotencyKey = idempotencyKey,
+            responseType = DecisionResponse::class.java,
+        ) {
+            IdempotentResponse(200, decisionService.confirmDecision(decisionId, request))
+        }
+        return ResponseEntity.status(response.status).body(response.body)
+    }
 
     @PostMapping("/decisions/{decisionId}/evidence")
     @Operation(summary = "Link a message as decision evidence")
