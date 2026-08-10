@@ -94,3 +94,10 @@ GRADLE_USER_HOME=/private/tmp/dudecide-gradle-home \
 GRADLE_OPTS='-Djava.io.tmpdir=/private/tmp/dudecide-gradle-tmp' \
 /opt/homebrew/bin/gradle --no-daemon :backend:shared:test :backend:app:compileKotlin
 ```
+
+## Seed Data
+
+For a reusable sample meeting and open vote scenario, use:
+
+- [`dev-seed-data.md`](./dev-seed-data.md)
+- [`backend/app/src/main/resources/dev-seed/sample_meeting_vote.sql`](../../backend/app/src/main/resources/dev-seed/sample_meeting_vote.sql)
