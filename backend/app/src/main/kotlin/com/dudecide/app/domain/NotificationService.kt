@@ -8,6 +8,7 @@ import org.jooq.DSLContext
 import org.jooq.JSON
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.OffsetDateTime
 import java.util.UUID
 
 @Service
@@ -64,6 +65,22 @@ class NotificationService(
                 "type" to type.literal,
             ),
         )
+    }
+
+    @Transactional(readOnly = true)
+    fun pendingDispatch(limit: Int = 50) =
+        dsl.selectFrom(NOTIFICATION)
+            .where(NOTIFICATION.SENT_AT.isNull)
+            .orderBy(NOTIFICATION.CREATED_AT.asc())
+            .limit(limit)
+            .fetch()
+
+    @Transactional
+    fun markSent(notificationId: UUID, sentAt: OffsetDateTime = OffsetDateTime.now()) {
+        dsl.update(NOTIFICATION)
+            .set(NOTIFICATION.SENT_AT, sentAt)
+            .where(NOTIFICATION.ID.eq(notificationId))
+            .execute()
     }
 
     private fun jsonToMap(value: JSON?): Map<String, Any?> {

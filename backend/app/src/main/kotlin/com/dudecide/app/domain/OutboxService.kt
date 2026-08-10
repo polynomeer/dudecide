@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.jooq.DSLContext
 import org.jooq.JSON
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.time.OffsetDateTime
 import java.util.UUID
 
 @Service
@@ -27,6 +29,23 @@ class OutboxService(
             .set(OUTBOX_EVENT.EVENT_TYPE, eventType)
             .set(OUTBOX_EVENT.PAYLOAD, JSON.valueOf(objectMapper.writeValueAsString(payload)))
             .set(OUTBOX_EVENT.STATUS, OutboxStatus.pending)
+            .execute()
+    }
+
+    @Transactional(readOnly = true)
+    fun pending(limit: Int = 50) =
+        dsl.selectFrom(OUTBOX_EVENT)
+            .where(OUTBOX_EVENT.STATUS.eq(OutboxStatus.pending))
+            .orderBy(OUTBOX_EVENT.OCCURRED_AT.asc())
+            .limit(limit)
+            .fetch()
+
+    @Transactional
+    fun markPublished(eventId: UUID, publishedAt: OffsetDateTime = OffsetDateTime.now()) {
+        dsl.update(OUTBOX_EVENT)
+            .set(OUTBOX_EVENT.STATUS, OutboxStatus.published)
+            .set(OUTBOX_EVENT.PUBLISHED_AT, publishedAt)
+            .where(OUTBOX_EVENT.ID.eq(eventId))
             .execute()
     }
 }
