@@ -1,7 +1,9 @@
 package com.dudecide.app.api
 
 import com.dudecide.app.api.dto.ConfirmDecisionRequest
+import com.dudecide.app.api.dto.AddDecisionEvidenceRequest
 import com.dudecide.app.api.dto.CreateDecisionRequest
+import com.dudecide.app.api.dto.DecisionEvidenceView
 import com.dudecide.app.api.dto.DecisionDetailResponse
 import com.dudecide.app.api.dto.DecisionResponse
 import com.dudecide.app.api.dto.ReconsiderDecisionRequest
@@ -50,6 +52,14 @@ class DecisionController(
         @RequestBody request: ConfirmDecisionRequest,
     ): ResponseEntity<DecisionResponse> =
         ResponseEntity.ok(decisionService.confirmDecision(decisionId, request))
+
+    @PostMapping("/decisions/{decisionId}/evidence")
+    @Operation(summary = "Link a message as decision evidence")
+    fun addEvidence(
+        @PathVariable decisionId: UUID,
+        @RequestBody request: AddDecisionEvidenceRequest,
+    ): ResponseEntity<DecisionEvidenceView> =
+        ResponseEntity.status(HttpStatus.CREATED).body(decisionService.addEvidence(decisionId, request))
 
     @PostMapping("/decisions/{decisionId}/reconsider")
     @Operation(summary = "Move a confirmed decision into reconsideration")

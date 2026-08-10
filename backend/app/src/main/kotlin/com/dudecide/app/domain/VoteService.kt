@@ -11,6 +11,7 @@ import com.dudecide.app.api.dto.VoteSubmissionItem
 import com.dudecide.app.api.dto.VoteSubmissionRequest
 import com.dudecide.app.jooq.enums.DecisionStatus
 import com.dudecide.app.jooq.enums.DecisionType
+import com.dudecide.app.jooq.enums.NotificationType
 import com.dudecide.app.jooq.enums.VoteResponseValue
 import com.dudecide.app.jooq.enums.VoteStatus
 import com.dudecide.app.jooq.enums.VoteType
@@ -46,6 +47,8 @@ class VoteService(
     private val objectMapper: ObjectMapper,
     private val localActorProvider: LocalActorProvider,
     private val outboxService: OutboxService,
+    private val eventStreamService: EventStreamService,
+    private val notificationService: NotificationService,
 ) {
     private val voteScoringService = VoteScoringService()
 
@@ -99,6 +102,15 @@ class VoteService(
                 "decisionId" to decisionId,
                 "threadId" to request.threadId,
                 "voteType" to voteType.literal,
+            ),
+        )
+        eventStreamService.publish(
+            meetingId = meetingId,
+            eventType = "vote.updated",
+            payload = mapOf(
+                "meetingId" to meetingId,
+                "voteId" to voteId,
+                "status" to status.literal,
             ),
         )
         return response
@@ -155,6 +167,15 @@ class VoteService(
                 "responseCount" to request.responses.size,
             ),
         )
+        eventStreamService.publish(
+            meetingId = requireNotNull(vote.meetingId),
+            eventType = "vote.updated",
+            payload = mapOf(
+                "meetingId" to requireNotNull(vote.meetingId),
+                "voteId" to voteId,
+                "kind" to "responses.updated",
+            ),
+        )
         return response
     }
 
@@ -188,6 +209,23 @@ class VoteService(
                 "decisionId" to closedVote.decisionId,
                 "threadId" to requireNotNull(closedVote.threadId),
                 "closedAt" to closedAt.toString(),
+                "leadingOptionIds" to response.aggregates?.leadingOptionIds.orEmpty(),
+            ),
+        )
+        eventStreamService.publish(
+            meetingId = requireNotNull(closedVote.meetingId),
+            eventType = "vote.updated",
+            payload = mapOf(
+                "meetingId" to requireNotNull(closedVote.meetingId),
+                "voteId" to voteId,
+                "status" to "closed",
+            ),
+        )
+        notificationService.createNotification(
+            meetingId = requireNotNull(closedVote.meetingId),
+            type = NotificationType.vote_closed,
+            payload = mapOf(
+                "voteId" to voteId,
                 "leadingOptionIds" to response.aggregates?.leadingOptionIds.orEmpty(),
             ),
         )

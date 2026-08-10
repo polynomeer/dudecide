@@ -1,6 +1,7 @@
 package com.dudecide.app.domain
 
 import com.dudecide.app.api.dto.MeetingReportResponse
+import com.dudecide.app.jooq.enums.NotificationType
 import com.dudecide.app.jooq.tables.Decision.Companion.DECISION
 import com.dudecide.app.jooq.tables.Meeting.Companion.MEETING
 import com.dudecide.app.jooq.tables.MeetingReport.Companion.MEETING_REPORT
@@ -21,6 +22,8 @@ class ReportService(
     private val dsl: DSLContext,
     private val objectMapper: ObjectMapper,
     private val outboxService: OutboxService,
+    private val eventStreamService: EventStreamService,
+    private val notificationService: NotificationService,
 ) {
 
     @Transactional(readOnly = true)
@@ -97,6 +100,23 @@ class ReportService(
                 "meetingId" to meetingId,
                 "version" to nextVersion,
                 "generatedAt" to generatedAt.toString(),
+            ),
+        )
+        eventStreamService.publish(
+            meetingId = meetingId,
+            eventType = "report.updated",
+            payload = mapOf(
+                "meetingId" to meetingId,
+                "reportId" to reportId,
+                "version" to nextVersion,
+            ),
+        )
+        notificationService.createNotification(
+            meetingId = meetingId,
+            type = NotificationType.report_ready,
+            payload = mapOf(
+                "reportId" to reportId,
+                "version" to nextVersion,
             ),
         )
 

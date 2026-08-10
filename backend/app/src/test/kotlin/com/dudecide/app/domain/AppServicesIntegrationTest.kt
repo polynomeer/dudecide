@@ -2,15 +2,20 @@ package com.dudecide.app.domain
 
 import com.dudecide.app.api.dto.BudgetRangeDto
 import com.dudecide.app.api.dto.ConfirmDecisionRequest
+import com.dudecide.app.api.dto.CreateThreadRequest
 import com.dudecide.app.api.dto.CreateDecisionRequest
 import com.dudecide.app.api.dto.CreateInviteLinkRequest
 import com.dudecide.app.api.dto.CreateMessageRequest
 import com.dudecide.app.api.dto.CreateMeetingRequest
+import com.dudecide.app.api.dto.CreateTaskRequest
 import com.dudecide.app.api.dto.CreateVoteOptionRequest
 import com.dudecide.app.api.dto.CreateVoteRequest
 import com.dudecide.app.api.dto.JoinInviteRequest
 import com.dudecide.app.api.dto.ReconsiderDecisionRequest
+import com.dudecide.app.api.dto.UpdateMessageRequest
+import com.dudecide.app.api.dto.UpdateTaskRequest
 import com.dudecide.app.api.dto.UpdateMembershipRequest
+import com.dudecide.app.api.dto.AddDecisionEvidenceRequest
 import com.dudecide.app.api.dto.VoteSubmissionItem
 import com.dudecide.app.api.dto.VoteSubmissionRequest
 import com.dudecide.app.jooq.enums.DecisionStatus
@@ -303,6 +308,49 @@ class AppServicesIntegrationTest {
     }
 
     @Test
+    fun `thread message and evidence flows are connected`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(title = "Collab Flow", meetingType = "trip"),
+            )
+
+            val thread = context.threadService.createThread(
+                meeting.id,
+                CreateThreadRequest(category = "tasking", title = "Packing checklist"),
+            )
+
+            val posted = context.messageService.postMessage(
+                thread.id,
+                CreateMessageRequest(body = "Bring life jackets and a first-aid kit"),
+            )
+            val updated = context.messageService.updateMessage(
+                posted.id,
+                UpdateMessageRequest(body = "Bring life jackets, a first-aid kit, and flashlights"),
+            )
+
+            val decision = context.decisionService.createDecision(
+                meeting.id,
+                CreateDecisionRequest(
+                    threadId = thread.id,
+                    decisionType = "task",
+                    title = "Packing responsibilities",
+                ),
+            )
+            val evidence = context.decisionService.addEvidence(
+                decision.id,
+                AddDecisionEvidenceRequest(
+                    messageId = updated.id,
+                    evidenceType = "support",
+                ),
+            )
+
+            assertEquals(thread.id, evidence.threadId)
+            assertEquals(updated.id, evidence.messageId)
+            assertEquals(1, context.dsl.fetchCount(com.dudecide.app.jooq.tables.DecisionEvidence.Companion.DECISION_EVIDENCE))
+        }
+    }
+
+    @Test
     fun `report service materializes latest meeting snapshot`() {
         testContext().use { context ->
             val meeting = context.meetingService.createMeeting(
@@ -330,6 +378,43 @@ class AppServicesIntegrationTest {
         }
     }
 
+    @Test
+    fun `search task and notification flows work together`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(title = "Ops Flow", meetingType = "trip"),
+            )
+            val threadId = context.findThreadId(meeting.id, ThreadCategory.free_chat)
+            context.messageService.postMessage(
+                threadId,
+                CreateMessageRequest(body = "Need to reserve a van before Friday"),
+            )
+
+            val task = context.taskService.createTask(
+                meeting.id,
+                CreateTaskRequest(title = "Reserve a van"),
+            )
+            val updatedTask = context.taskService.updateTask(
+                task.id,
+                UpdateTaskRequest(status = "in_progress"),
+            )
+
+            context.notificationService.createNotification(
+                meeting.id,
+                com.dudecide.app.jooq.enums.NotificationType.discussion_stalled,
+                payload = mapOf("threadId" to threadId),
+            )
+
+            val search = context.searchService.search(meeting.id, "van")
+            val notifications = context.notificationService.listNotifications(meeting.id)
+
+            assertEquals(1, search.messages.size)
+            assertEquals(1, search.tasks.size)
+            assertEquals("in_progress", updatedTask.status)
+            assertEquals(1, notifications.size)
+        }
+    }
+
     private fun testContext(): TestContext {
         val dataSource = JdbcDataSource().apply {
             setURL("jdbc:h2:mem:${UUID.randomUUID()};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1")
@@ -347,17 +432,23 @@ class AppServicesIntegrationTest {
             Settings()
                 .withRenderNameCase(RenderNameCase.LOWER),
         )
+        val eventStreamService = EventStreamService(objectMapper)
         val localActorProvider = LocalActorProvider(dsl)
         val outboxService = OutboxService(dsl, objectMapper)
+        val notificationService = NotificationService(dsl, objectMapper, localActorProvider, eventStreamService)
 
         return TestContext(
             dsl = dsl,
             objectMapper = objectMapper,
-            meetingService = MeetingService(dsl, localActorProvider, outboxService),
-            voteService = VoteService(dsl, objectMapper, localActorProvider, outboxService),
-            decisionService = DecisionService(dsl, objectMapper, localActorProvider, outboxService),
-            messageService = MessageService(dsl, objectMapper, localActorProvider, outboxService),
-            reportService = ReportService(dsl, objectMapper, outboxService),
+            meetingService = MeetingService(dsl, localActorProvider, outboxService, eventStreamService, notificationService),
+            voteService = VoteService(dsl, objectMapper, localActorProvider, outboxService, eventStreamService, notificationService),
+            decisionService = DecisionService(dsl, objectMapper, localActorProvider, outboxService, eventStreamService, notificationService),
+            messageService = MessageService(dsl, objectMapper, localActorProvider, outboxService, eventStreamService),
+            threadService = ThreadService(dsl, outboxService, eventStreamService),
+            reportService = ReportService(dsl, objectMapper, outboxService, eventStreamService, notificationService),
+            searchService = SearchService(dsl),
+            taskService = TaskService(dsl, outboxService, eventStreamService),
+            notificationService = notificationService,
         )
     }
 
@@ -465,6 +556,21 @@ class AppServicesIntegrationTest {
                 CONSTRAINT decision_history_actor_fk FOREIGN KEY (actor_user_id) REFERENCES app_user(id)
             );
 
+            CREATE TABLE decision_evidence (
+                id UUID DEFAULT random_uuid() PRIMARY KEY,
+                decision_id UUID NOT NULL,
+                message_id UUID NOT NULL,
+                thread_id UUID NOT NULL,
+                evidence_type VARCHAR(64) NOT NULL,
+                quote_snapshot TEXT NOT NULL,
+                confidence NUMERIC(5, 4),
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT decision_evidence_decision_fk FOREIGN KEY (decision_id) REFERENCES decision(id) ON DELETE CASCADE,
+                CONSTRAINT decision_evidence_message_fk FOREIGN KEY (message_id) REFERENCES message(id) ON DELETE CASCADE,
+                CONSTRAINT decision_evidence_thread_fk FOREIGN KEY (thread_id) REFERENCES topic_thread(id) ON DELETE CASCADE,
+                CONSTRAINT decision_evidence_dedup_uk UNIQUE (decision_id, message_id, evidence_type)
+            );
+
             CREATE TABLE vote (
                 id UUID DEFAULT random_uuid() PRIMARY KEY,
                 meeting_id UUID NOT NULL,
@@ -506,6 +612,20 @@ class AppServicesIntegrationTest {
                 CONSTRAINT vote_response_vote_option_user_uk UNIQUE (vote_id, option_id, user_id)
             );
 
+            CREATE TABLE task_item (
+                id UUID DEFAULT random_uuid() PRIMARY KEY,
+                meeting_id UUID NOT NULL,
+                owner_user_id UUID,
+                source_message_id UUID,
+                title VARCHAR(200) NOT NULL,
+                status VARCHAR(64) NOT NULL DEFAULT 'todo',
+                due_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT task_item_meeting_fk FOREIGN KEY (meeting_id) REFERENCES meeting(id) ON DELETE CASCADE,
+                CONSTRAINT task_item_owner_fk FOREIGN KEY (owner_user_id) REFERENCES app_user(id),
+                CONSTRAINT task_item_source_message_fk FOREIGN KEY (source_message_id) REFERENCES message(id) ON DELETE SET NULL
+            );
+
             CREATE TABLE meeting_report (
                 id UUID DEFAULT random_uuid() PRIMARY KEY,
                 meeting_id UUID NOT NULL,
@@ -514,6 +634,18 @@ class AppServicesIntegrationTest {
                 generated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT meeting_report_meeting_fk FOREIGN KEY (meeting_id) REFERENCES meeting(id) ON DELETE CASCADE,
                 CONSTRAINT meeting_report_meeting_version_uk UNIQUE (meeting_id, version)
+            );
+
+            CREATE TABLE notification (
+                id UUID DEFAULT random_uuid() PRIMARY KEY,
+                meeting_id UUID NOT NULL,
+                recipient_user_id UUID NOT NULL,
+                type VARCHAR(64) NOT NULL,
+                payload JSON NOT NULL DEFAULT JSON '{}',
+                sent_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT notification_meeting_fk FOREIGN KEY (meeting_id) REFERENCES meeting(id) ON DELETE CASCADE,
+                CONSTRAINT notification_recipient_fk FOREIGN KEY (recipient_user_id) REFERENCES app_user(id) ON DELETE CASCADE
             );
 
             CREATE TABLE outbox_event (
@@ -536,7 +668,11 @@ class AppServicesIntegrationTest {
         val voteService: VoteService,
         val decisionService: DecisionService,
         val messageService: MessageService,
+        val threadService: ThreadService,
         val reportService: ReportService,
+        val searchService: SearchService,
+        val taskService: TaskService,
+        val notificationService: NotificationService,
     ) : AutoCloseable {
         override fun close() = Unit
 

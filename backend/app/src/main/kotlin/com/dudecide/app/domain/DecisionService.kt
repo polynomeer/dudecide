@@ -1,5 +1,6 @@
 package com.dudecide.app.domain
 
+import com.dudecide.app.api.dto.AddDecisionEvidenceRequest
 import com.dudecide.app.api.dto.ConfirmDecisionRequest
 import com.dudecide.app.api.dto.CreateDecisionRequest
 import com.dudecide.app.api.dto.DecisionDetailResponse
@@ -9,11 +10,13 @@ import com.dudecide.app.api.dto.DecisionResponse
 import com.dudecide.app.api.dto.ReconsiderDecisionRequest
 import com.dudecide.app.jooq.enums.DecisionStatus
 import com.dudecide.app.jooq.enums.DecisionType
+import com.dudecide.app.jooq.enums.NotificationType
 import com.dudecide.app.jooq.tables.DecisionEvidence.Companion.DECISION_EVIDENCE
 import com.dudecide.app.jooq.enums.DecisionHistoryAction
 import com.dudecide.app.jooq.tables.Decision.Companion.DECISION
 import com.dudecide.app.jooq.tables.Meeting.Companion.MEETING
 import com.dudecide.app.jooq.tables.DecisionHistory.Companion.DECISION_HISTORY
+import com.dudecide.app.jooq.tables.Message.Companion.MESSAGE
 import com.dudecide.app.jooq.tables.TopicThread.Companion.TOPIC_THREAD
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.jooq.DSLContext
@@ -31,6 +34,8 @@ class DecisionService(
     private val objectMapper: ObjectMapper,
     private val localActorProvider: LocalActorProvider,
     private val outboxService: OutboxService,
+    private val eventStreamService: EventStreamService,
+    private val notificationService: NotificationService,
 ) {
 
     @Transactional(readOnly = true)
@@ -85,6 +90,15 @@ class DecisionService(
                 "decisionType" to request.decisionType,
             ),
         )
+        eventStreamService.publish(
+            meetingId = meetingId,
+            eventType = "decision.updated",
+            payload = mapOf(
+                "meetingId" to meetingId,
+                "decisionId" to decisionId,
+                "status" to "proposed",
+            ),
+        )
 
         return toResponse(record)
     }
@@ -127,6 +141,23 @@ class DecisionService(
                 "threadId" to requireNotNull(record.threadId),
                 "actorUserId" to actorId,
                 "reason" to request.reason,
+            ),
+        )
+        eventStreamService.publish(
+            meetingId = requireNotNull(record.meetingId),
+            eventType = "decision.updated",
+            payload = mapOf(
+                "meetingId" to requireNotNull(record.meetingId),
+                "decisionId" to decisionId,
+                "status" to "confirmed",
+            ),
+        )
+        notificationService.createNotification(
+            meetingId = requireNotNull(record.meetingId),
+            type = NotificationType.decision_confirmed,
+            payload = mapOf(
+                "decisionId" to decisionId,
+                "title" to requireNotNull(record.title),
             ),
         )
 
@@ -174,8 +205,78 @@ class DecisionService(
                 "reason" to request.reason,
             ),
         )
+        eventStreamService.publish(
+            meetingId = requireNotNull(record.meetingId),
+            eventType = "decision.updated",
+            payload = mapOf(
+                "meetingId" to requireNotNull(record.meetingId),
+                "decisionId" to decisionId,
+                "status" to "needs_reconsideration",
+            ),
+        )
 
         return toResponse(updatedRecord)
+    }
+
+    @Transactional
+    fun addEvidence(decisionId: UUID, request: AddDecisionEvidenceRequest): DecisionEvidenceView {
+        val record = requireDecision(decisionId)
+        val message = dsl.selectFrom(MESSAGE)
+            .where(MESSAGE.ID.eq(request.messageId))
+            .fetchOne()
+            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "message not found")
+
+        if (message.threadId != record.threadId) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "message must belong to the same thread as the decision")
+        }
+
+        val evidenceId = UUID.randomUUID()
+        val createdAt = OffsetDateTime.now()
+        val quoteSnapshot = request.quoteSnapshot ?: requireNotNull(message.body).take(280)
+        val evidenceType = request.evidenceType.toEvidenceType()
+
+        dsl.insertInto(DECISION_EVIDENCE)
+            .set(DECISION_EVIDENCE.ID, evidenceId)
+            .set(DECISION_EVIDENCE.DECISION_ID, decisionId)
+            .set(DECISION_EVIDENCE.MESSAGE_ID, request.messageId)
+            .set(DECISION_EVIDENCE.THREAD_ID, requireNotNull(record.threadId))
+            .set(DECISION_EVIDENCE.EVIDENCE_TYPE, evidenceType)
+            .set(DECISION_EVIDENCE.QUOTE_SNAPSHOT, quoteSnapshot)
+            .set(DECISION_EVIDENCE.CONFIDENCE, request.confidence?.toBigDecimal())
+            .set(DECISION_EVIDENCE.CREATED_AT, createdAt)
+            .execute()
+
+        outboxService.append(
+            aggregateType = "decision",
+            aggregateId = decisionId,
+            eventType = "DecisionEvidenceLinked",
+            payload = mapOf(
+                "decisionId" to decisionId,
+                "meetingId" to requireNotNull(record.meetingId),
+                "messageId" to request.messageId,
+                "evidenceType" to evidenceType.literal,
+            ),
+        )
+        eventStreamService.publish(
+            meetingId = requireNotNull(record.meetingId),
+            eventType = "decision.updated",
+            payload = mapOf(
+                "meetingId" to requireNotNull(record.meetingId),
+                "decisionId" to decisionId,
+                "messageId" to request.messageId,
+                "evidenceType" to evidenceType.literal,
+            ),
+        )
+
+        return DecisionEvidenceView(
+            id = evidenceId,
+            messageId = request.messageId,
+            threadId = requireNotNull(record.threadId),
+            evidenceType = evidenceType.literal,
+            quoteSnapshot = quoteSnapshot,
+            confidence = request.confidence,
+            createdAt = createdAt,
+        )
     }
 
     @Transactional(readOnly = true)
@@ -285,8 +386,14 @@ class DecisionService(
         runCatching { DecisionType.valueOf(lowercase()) }
             .getOrElse { throw ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported decision type: $this") }
 
+    private fun String.toEvidenceType(): com.dudecide.app.jooq.enums.EvidenceType =
+        runCatching { com.dudecide.app.jooq.enums.EvidenceType.valueOf(lowercase()) }
+            .getOrElse { throw ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported evidence type: $this") }
+
     private fun jsonOf(value: Map<String, Any?>): JSON =
         JSON.valueOf(objectMapper.writeValueAsString(value))
+
+    private fun Double.toBigDecimal(): java.math.BigDecimal = java.math.BigDecimal.valueOf(this)
 
     private fun jsonToMap(value: JSON?): Map<String, Any?> {
         if (value == null || value.data().isBlank()) {

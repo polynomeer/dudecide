@@ -13,6 +13,7 @@ import com.dudecide.app.api.dto.UpdateMembershipRequest
 import com.dudecide.app.jooq.enums.AttendanceStatus
 import com.dudecide.app.jooq.enums.MeetingRole
 import com.dudecide.app.jooq.enums.MeetingStatus
+import com.dudecide.app.jooq.enums.NotificationType
 import com.dudecide.app.jooq.enums.VoteStatus
 import com.dudecide.app.jooq.enums.ThreadCategory
 import com.dudecide.app.jooq.tables.AppUser.Companion.APP_USER
@@ -36,6 +37,8 @@ class MeetingService(
     private val dsl: DSLContext,
     private val localActorProvider: LocalActorProvider,
     private val outboxService: OutboxService,
+    private val eventStreamService: EventStreamService,
+    private val notificationService: NotificationService,
 ) {
 
     @Transactional
@@ -72,6 +75,14 @@ class MeetingService(
                 "ownerUserId" to ownerId,
                 "title" to request.title,
                 "meetingType" to request.meetingType,
+            ),
+        )
+        eventStreamService.publish(
+            meetingId = meetingId,
+            eventType = "meeting.updated",
+            payload = mapOf(
+                "meetingId" to meetingId,
+                "status" to "draft",
             ),
         )
 
@@ -158,6 +169,20 @@ class MeetingService(
                 "expiresAt" to request.expiresAt?.toString(),
             ),
         )
+        notificationService.createNotification(
+            meetingId = meetingId,
+            type = NotificationType.invite_created,
+            payload = mapOf("token" to token, "inviteLinkId" to inviteId),
+        )
+        eventStreamService.publish(
+            meetingId = meetingId,
+            eventType = "meeting.updated",
+            payload = mapOf(
+                "meetingId" to meetingId,
+                "inviteLinkId" to inviteId,
+                "kind" to "invite.created",
+            ),
+        )
 
         return InviteLinkResponse(
             id = inviteId,
@@ -212,6 +237,20 @@ class MeetingService(
                 "userId" to userId,
             ),
         )
+        notificationService.createNotification(
+            meetingId = meetingId,
+            type = NotificationType.invite_joined,
+            payload = mapOf("membershipId" to membershipId, "userId" to userId),
+        )
+        eventStreamService.publish(
+            meetingId = meetingId,
+            eventType = "meeting.updated",
+            payload = mapOf(
+                "meetingId" to meetingId,
+                "membershipId" to membershipId,
+                "kind" to "member.joined",
+            ),
+        )
 
         return MembershipResponse(
             id = membershipId,
@@ -255,6 +294,15 @@ class MeetingService(
                 "membershipId" to memberId,
                 "role" to nextRole.literal,
                 "attendanceStatus" to nextAttendanceStatus.literal,
+            ),
+        )
+        eventStreamService.publish(
+            meetingId = meetingId,
+            eventType = "meeting.updated",
+            payload = mapOf(
+                "meetingId" to meetingId,
+                "membershipId" to memberId,
+                "kind" to "membership.updated",
             ),
         )
 

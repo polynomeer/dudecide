@@ -219,6 +219,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DecisionResponse'
+  /decisions/{decisionId}/evidence:
+    post:
+      operationId: addDecisionEvidence
+      summary: Link a message as decision evidence
+      parameters:
+        - $ref: '#/components/parameters/DecisionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddDecisionEvidenceRequest'
+      responses:
+        '201':
+          description: Evidence linked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionEvidenceView'
   /decisions/{decisionId}:
     get:
       operationId: getDecision
@@ -247,6 +266,99 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ThreadSummaryView'
+    post:
+      operationId: createThread
+      summary: Create a thread
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateThreadRequest'
+      responses:
+        '201':
+          description: Thread created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadSummaryView'
+  /meetings/{meetingId}/search:
+    get:
+      operationId: searchMeeting
+      summary: Search meeting messages, decisions, and tasks
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Search result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+  /meetings/{meetingId}/tasks:
+    get:
+      operationId: listTasks
+      summary: List meeting tasks
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '200':
+          description: Task list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskView'
+    post:
+      operationId: createTask
+      summary: Create a meeting task
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskView'
+  /meetings/{meetingId}/notifications:
+    get:
+      operationId: listNotifications
+      summary: List notifications for the current meeting user
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '200':
+          description: Notification list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationView'
+  /meetings/{meetingId}/events:
+    get:
+      operationId: streamMeetingEvents
+      summary: Open a meeting SSE stream
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '200':
+          description: SSE stream opened
   /threads/{threadId}/messages:
     get:
       operationId: listMessages
@@ -280,6 +392,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageView'
+  /messages/{messageId}:
+    patch:
+      operationId: updateMessage
+      summary: Edit a message
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMessageRequest'
+      responses:
+        '200':
+          description: Message updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageView'
+  /tasks/{taskId}:
+    patch:
+      operationId: updateTask
+      summary: Update a task
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+      responses:
+        '200':
+          description: Task updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskView'
   /votes/{voteId}/responses/me:
     put:
       operationId: submitVoteResponses
@@ -594,6 +754,21 @@ components:
       properties:
         reason:
           type: string
+    AddDecisionEvidenceRequest:
+      type: object
+      required:
+        - messageId
+        - evidenceType
+      properties:
+        messageId:
+          type: string
+          format: uuid
+        evidenceType:
+          type: string
+        quoteSnapshot:
+          type: string
+        confidence:
+          type: number
     DecisionDetailResponse:
       allOf:
         - $ref: '#/components/schemas/DecisionResponse'
@@ -694,7 +869,29 @@ components:
           type: integer
         openVoteCount:
           type: integer
+    CreateThreadRequest:
+      type: object
+      required:
+        - category
+        - title
+      properties:
+        category:
+          type: string
+        title:
+          type: string
     CreateMessageRequest:
+      type: object
+      required:
+        - body
+      properties:
+        body:
+          type: string
+        attachments:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    UpdateMessageRequest:
       type: object
       required:
         - body
@@ -740,6 +937,159 @@ components:
           type: string
           format: date-time
         editedAt:
+          type: string
+          format: date-time
+    SearchResponse:
+      type: object
+      required:
+        - meetingId
+        - query
+        - messages
+        - decisions
+        - tasks
+      properties:
+        meetingId:
+          type: string
+          format: uuid
+        query:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchMessageView'
+        decisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchDecisionView'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskView'
+    SearchMessageView:
+      type: object
+      required:
+        - id
+        - threadId
+        - body
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+          format: uuid
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    SearchDecisionView:
+      type: object
+      required:
+        - id
+        - threadId
+        - title
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+    CreateTaskRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+        ownerUserId:
+          type: string
+          format: uuid
+        sourceMessageId:
+          type: string
+          format: uuid
+        dueAt:
+          type: string
+          format: date-time
+    UpdateTaskRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        status:
+          type: string
+        ownerUserId:
+          type: string
+          format: uuid
+        dueAt:
+          type: string
+          format: date-time
+    TaskView:
+      type: object
+      required:
+        - id
+        - meetingId
+        - title
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        meetingId:
+          type: string
+          format: uuid
+        ownerUserId:
+          type: string
+          format: uuid
+        sourceMessageId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+        dueAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    NotificationView:
+      type: object
+      required:
+        - id
+        - meetingId
+        - recipientUserId
+        - type
+        - payload
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        meetingId:
+          type: string
+          format: uuid
+        recipientUserId:
+          type: string
+          format: uuid
+        type:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+        sentAt:
+          type: string
+          format: date-time
+        createdAt:
           type: string
           format: date-time
     ConfirmDecisionRequest:
