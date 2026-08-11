@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { VoteStudio } from "@/components/vote-studio";
@@ -40,22 +41,34 @@ export function MeetingOverview({ meetingId }: { meetingId: string }) {
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
             <Link
-              href={`/meetings/${meeting.id}/decisions`}
+              href={`/meetings/${meeting.id}/decisions` as Route}
               className="rounded-full border border-[color:var(--color-line)] bg-white/72 px-4 py-2 text-sm font-semibold transition hover:bg-white/90"
             >
               Decision board
             </Link>
             <Link
-              href={`/meetings/${meeting.id}/search`}
+              href={`/meetings/${meeting.id}/search` as Route}
               className="rounded-full border border-[color:var(--color-line)] bg-white/72 px-4 py-2 text-sm font-semibold transition hover:bg-white/90"
             >
               Search
             </Link>
             <Link
-              href={`/meetings/${meeting.id}/reports/latest`}
+              href={`/meetings/${meeting.id}/reports/latest` as Route}
               className="rounded-full border border-[color:var(--color-line)] bg-white/72 px-4 py-2 text-sm font-semibold transition hover:bg-white/90"
             >
               Report
+            </Link>
+            <Link
+              href={`/meetings/${meeting.id}/tasks` as Route}
+              className="rounded-full border border-[color:var(--color-line)] bg-white/72 px-4 py-2 text-sm font-semibold transition hover:bg-white/90"
+            >
+              Tasks
+            </Link>
+            <Link
+              href={`/meetings/${meeting.id}/notifications` as Route}
+              className="rounded-full border border-[color:var(--color-line)] bg-white/72 px-4 py-2 text-sm font-semibold transition hover:bg-white/90"
+            >
+              Notifications
             </Link>
           </div>
         </section>

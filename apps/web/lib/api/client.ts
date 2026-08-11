@@ -246,6 +246,30 @@ export type MeetingReportResponse = {
   generatedAt: string;
 };
 
+export type CreateTaskRequest = {
+  title: string;
+  ownerUserId?: string;
+  sourceMessageId?: string;
+  dueAt?: string;
+};
+
+export type UpdateTaskRequest = {
+  title?: string;
+  status?: string;
+  ownerUserId?: string;
+  dueAt?: string;
+};
+
+export type NotificationView = {
+  id: string;
+  meetingId: string;
+  recipientUserId: string;
+  type: string;
+  payload: Record<string, unknown>;
+  sentAt?: string | null;
+  createdAt: string;
+};
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 
@@ -360,4 +384,18 @@ export const apiClient = {
     request<MeetingReportResponse>(`/api/v1/meetings/${meetingId}/reports/refresh`, {
       method: "POST",
     }),
+  listTasks: (meetingId: string) =>
+    request<TaskView[]>(`/api/v1/meetings/${meetingId}/tasks`),
+  createTask: (meetingId: string, body: CreateTaskRequest) =>
+    request<TaskView>(`/api/v1/meetings/${meetingId}/tasks`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateTask: (taskId: string, body: UpdateTaskRequest) =>
+    request<TaskView>(`/api/v1/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  listNotifications: (meetingId: string) =>
+    request<NotificationView[]>(`/api/v1/meetings/${meetingId}/notifications`),
 };
