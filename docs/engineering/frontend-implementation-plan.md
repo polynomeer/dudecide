@@ -7,8 +7,9 @@ This document defines the remaining frontend scope for Dudecide MVP and fixes th
 - backend API, domain rules, persistence, and local session scaffolding exist
 - initial `apps/web` `Next.js` scaffold now exists
 - landing, session start, invite join, create meeting, and meeting overview routes are scaffolded
+- thread detail now renders meeting-scoped thread context, paginated message history, and message posting
 - shared styling, query provider wiring, and a minimal backend API client exist
-- no full decision workspace, vote UI, search surface, report surface, or E2E test suite exists yet
+- no full decision workspace, vote UI, search surface, report surface, SSE refresh, or E2E test suite exists yet
 
 Conclusion:
 
@@ -70,6 +71,11 @@ Ship a usable web MVP where an organizer can create a meeting, invite people, ru
 - message edit flow
 - paginated message history using `before` and `limit`
 - realtime message updates through SSE
+
+Current status:
+
+- thread detail, message list, message composer, and basic pagination are implemented
+- message edit and SSE-driven refresh are not implemented yet
 
 ### 6. Decisions
 

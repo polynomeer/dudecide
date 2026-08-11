@@ -1,5 +1,5 @@
-import { PlaceholderRoute } from "@/components/placeholder-route";
 import { SectionShell } from "@/components/section-shell";
+import { ThreadWorkspace } from "@/components/thread-workspace";
 
 export default async function ThreadPage({
   params,
@@ -12,13 +12,9 @@ export default async function ThreadPage({
     <SectionShell
       eyebrow="Thread Workspace"
       title={`Thread ${threadId.slice(0, 8)}`}
-      description="This route will host paginated message history, composer actions, edit flows, and realtime updates for one planning thread."
+      description="이 화면은 실제 백엔드 메시지 조회와 등록에 연결되어 있습니다. 현재는 스레드 대화 흐름과 기본 pagination을 우선 구현한 상태입니다."
     >
-      <PlaceholderRoute
-        meetingId={meetingId}
-        title="Thread detail is scaffolded"
-        nextStep="Bind thread message listing, posting, editing, and SSE refresh to the backend thread APIs."
-      />
+      <ThreadWorkspace meetingId={meetingId} threadId={threadId} />
     </SectionShell>
   );
 }

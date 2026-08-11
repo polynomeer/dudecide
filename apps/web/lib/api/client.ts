@@ -63,6 +63,22 @@ export type MeetingDetailResponse = {
   threads: ThreadSummaryView[];
 };
 
+export type MessageView = {
+  id: string;
+  threadId: string;
+  senderUserId: string;
+  body: string;
+  attachments: Array<Record<string, unknown>>;
+  aiLabels: Record<string, unknown>;
+  createdAt: string;
+  editedAt?: string | null;
+};
+
+export type CreateMessageRequest = {
+  body: string;
+  attachments?: Array<Record<string, unknown>>;
+};
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 
@@ -111,4 +127,20 @@ export const apiClient = {
       body: JSON.stringify(body),
     }),
   getMeeting: (meetingId: string) => request<MeetingDetailResponse>(`/api/v1/meetings/${meetingId}`),
+  listMessages: (threadId: string, before?: string, limit = 50) => {
+    const query = new URLSearchParams();
+    if (before) {
+      query.set("before", before);
+    }
+    query.set("limit", String(limit));
+    const suffix = query.toString();
+    return request<MessageView[]>(
+      `/api/v1/threads/${threadId}/messages${suffix ? `?${suffix}` : ""}`,
+    );
+  },
+  postMessage: (threadId: string, body: CreateMessageRequest) =>
+    request<MessageView>(`/api/v1/threads/${threadId}/messages`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 };
