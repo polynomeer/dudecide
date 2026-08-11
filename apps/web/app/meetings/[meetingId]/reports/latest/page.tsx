@@ -1,4 +1,4 @@
-import { PlaceholderRoute } from "@/components/placeholder-route";
+import { ReportWorkspace } from "@/components/report-workspace";
 import { SectionShell } from "@/components/section-shell";
 
 export default async function LatestReportPage({
@@ -11,14 +11,10 @@ export default async function LatestReportPage({
   return (
     <SectionShell
       eyebrow="Meeting Report"
-      title="Latest report scaffold"
-      description="This route will render the latest materialized meeting report and expose refresh actions for hosts."
+      title="Latest report"
+      description="최신 materialized 회의 리포트를 확인하고 필요 시 수동 새로고침을 실행할 수 있습니다."
     >
-      <PlaceholderRoute
-        meetingId={meetingId}
-        title="Report route is ready"
-        nextStep="Bind latest report retrieval and host-side refresh actions to the report endpoints."
-      />
+      <ReportWorkspace meetingId={meetingId} />
     </SectionShell>
   );
 }

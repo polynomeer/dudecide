@@ -205,6 +205,47 @@ export type VoteResponseView = {
   aggregates?: VoteAggregateView | null;
 };
 
+export type SearchMessageView = {
+  id: string;
+  threadId: string;
+  body: string;
+  createdAt: string;
+};
+
+export type SearchDecisionView = {
+  id: string;
+  threadId: string;
+  title: string;
+  status: string;
+};
+
+export type TaskView = {
+  id: string;
+  meetingId: string;
+  ownerUserId?: string | null;
+  sourceMessageId?: string | null;
+  title: string;
+  status: string;
+  dueAt?: string | null;
+  createdAt: string;
+};
+
+export type SearchResponse = {
+  meetingId: string;
+  query: string;
+  messages: SearchMessageView[];
+  decisions: SearchDecisionView[];
+  tasks: TaskView[];
+};
+
+export type MeetingReportResponse = {
+  id: string;
+  meetingId: string;
+  version: number;
+  snapshot: Record<string, unknown>;
+  generatedAt: string;
+};
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 
@@ -307,6 +348,16 @@ export const apiClient = {
     }),
   closeVote: (voteId: string) =>
     request<VoteResponseView>(`/api/v1/votes/${voteId}/close`, {
+      method: "POST",
+    }),
+  searchMeeting: (meetingId: string, query: string) => {
+    const params = new URLSearchParams({ q: query });
+    return request<SearchResponse>(`/api/v1/meetings/${meetingId}/search?${params.toString()}`);
+  },
+  getLatestReport: (meetingId: string) =>
+    request<MeetingReportResponse>(`/api/v1/meetings/${meetingId}/reports/latest`),
+  refreshReport: (meetingId: string) =>
+    request<MeetingReportResponse>(`/api/v1/meetings/${meetingId}/reports/refresh`, {
       method: "POST",
     }),
 };

@@ -10,8 +10,9 @@ This document defines the remaining frontend scope for Dudecide MVP and fixes th
 - thread detail now renders meeting-scoped thread context, paginated message history, and message posting
 - decision board now supports decision creation, selected decision detail, and confirm/reconsider actions
 - vote studio and vote detail workspace now support vote creation, response submission, close action, and aggregate rendering
+- search and latest report routes now call backend endpoints and render meeting-scoped results
 - shared styling, query provider wiring, and a minimal backend API client exist
-- no search surface, report surface, SSE refresh, or E2E test suite exists yet
+- no tasks UI, notifications UI, SSE refresh, or E2E test suite exists yet
 
 Conclusion:
 
@@ -112,6 +113,11 @@ Current status:
 - keyword search UI
 - report detail page
 - report refresh action
+
+Current status:
+
+- keyword search UI, report detail page, and report refresh action are implemented
+- task management UI and notification panel are not implemented yet
 
 ### 9. Realtime And Refresh Strategy
 

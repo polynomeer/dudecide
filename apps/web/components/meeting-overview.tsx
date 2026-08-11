@@ -45,6 +45,18 @@ export function MeetingOverview({ meetingId }: { meetingId: string }) {
             >
               Decision board
             </Link>
+            <Link
+              href={`/meetings/${meeting.id}/search`}
+              className="rounded-full border border-[color:var(--color-line)] bg-white/72 px-4 py-2 text-sm font-semibold transition hover:bg-white/90"
+            >
+              Search
+            </Link>
+            <Link
+              href={`/meetings/${meeting.id}/reports/latest`}
+              className="rounded-full border border-[color:var(--color-line)] bg-white/72 px-4 py-2 text-sm font-semibold transition hover:bg-white/90"
+            >
+              Report
+            </Link>
           </div>
         </section>
         <section className="panel px-6 py-6">
