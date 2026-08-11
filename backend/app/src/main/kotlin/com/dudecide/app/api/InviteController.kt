@@ -2,8 +2,10 @@ package com.dudecide.app.api
 
 import com.dudecide.app.api.dto.JoinInviteRequest
 import com.dudecide.app.api.dto.MembershipResponse
+import com.dudecide.app.domain.AuthSessionService
 import com.dudecide.app.domain.MeetingService
 import io.swagger.v3.oas.annotations.Operation
+import jakarta.servlet.http.HttpServletRequest
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController
 @Tag(name = "Invites")
 class InviteController(
     private val meetingService: MeetingService,
+    private val authSessionService: AuthSessionService,
 ) {
 
     @PostMapping("/{token}/join")
@@ -25,6 +28,10 @@ class InviteController(
     fun joinWithInvite(
         @PathVariable token: String,
         @RequestBody request: JoinInviteRequest,
-    ): ResponseEntity<MembershipResponse> =
-        ResponseEntity.status(HttpStatus.CREATED).body(meetingService.joinWithInvite(token, request))
+        servletRequest: HttpServletRequest,
+    ): ResponseEntity<MembershipResponse> {
+        val membership = meetingService.joinWithInvite(token, request)
+        authSessionService.rememberActor(servletRequest, membership.userId, membership.displayName)
+        return ResponseEntity.status(HttpStatus.CREATED).body(membership)
+    }
 }

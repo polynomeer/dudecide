@@ -94,9 +94,10 @@ flowchart LR
 Current implementation note:
 
 - invite token validation and membership writes exist
-- development-only header-based actor resolution exists through `LocalActorProvider`
+- lightweight HTTP session support exists for local guest sessions and invite joins
+- development-only header-based actor resolution still exists through `LocalActorProvider`
 - membership role enforcement exists for meeting-scoped reads and protected mutations
-- production-grade authenticated sessions remain follow-up work
+- signed production-grade authenticated sessions remain follow-up work
 
 ### Meeting Lifecycle
 

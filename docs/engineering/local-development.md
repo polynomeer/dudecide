@@ -112,7 +112,9 @@ Known local caveat as of August 10, 2026:
 
 - API realtime uses in-memory Spring `SseEmitter` subscriptions
 - notifications are stored in PostgreSQL and exposed through the API, but external delivery is not wired yet
-- the current actor model is development-oriented and falls back to a local host identity when `X-Actor-Id` is omitted
+- the current actor model first checks an HTTP session, then development headers, then falls back to a local host identity
+- `POST /api/v1/auth/guest-sessions` creates a guest-backed local session for browser-style flows
+- invite-link joins also bind the joined user into the current HTTP session
 - use `X-Actor-Id: <user-uuid>` and optional `X-Actor-Name: <display-name>` to simulate different callers locally
 - meeting membership is required for read access and `host` or `co_host` is required for protected mutations
 

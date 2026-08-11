@@ -16,12 +16,15 @@ This document defines the MVP external API surface and internal async events.
 
 ## Auth Model
 
-- current implementation uses header-resolved development actors backed by `LocalActorProvider`
+- current implementation resolves callers in this order: HTTP session, development headers, then local host fallback
+- `POST /api/v1/auth/guest-sessions` creates a local guest-backed session
+- `GET /api/v1/auth/me` returns the currently resolved actor
+- `DELETE /api/v1/auth/session` clears the current local session
 - `X-Actor-Id` selects the caller user identity and auto-provisions the user row if needed
 - `X-Actor-Name` updates or seeds the caller display name for local development
-- invite token join is implemented and creates guest membership records
+- invite token join creates guest membership records and also binds the joined user into the current HTTP session
 - meeting-scope authorization is enforced through membership role checks
-- production-grade authenticated sessions remain follow-up work
+- signed production-grade sessions and external identity proof remain follow-up work
 
 ## Core Resources
 
@@ -37,6 +40,20 @@ This document defines the MVP external API surface and internal async events.
 - notifications
 
 ## Implemented Surface
+
+### Auth
+
+`POST /api/v1/auth/guest-sessions`
+
+- create a local guest-backed session
+
+`GET /api/v1/auth/me`
+
+- resolve the current actor from session, header, or local fallback
+
+`DELETE /api/v1/auth/session`
+
+- clear the current HTTP session
 
 ### Meetings
 
