@@ -108,6 +108,22 @@ Known local caveat as of August 10, 2026:
 - if Docker Desktop is not running, `docker compose up -d` will fail before PostgreSQL, Redis, and MinIO start
 - backend tests do not require Docker because integration coverage currently uses H2
 
+## Frontend Commands
+
+Bootstrap the web app:
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+Optional API base URL:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
+```
+
 ## Current Runtime Notes
 
 - API realtime uses in-memory Spring `SseEmitter` subscriptions

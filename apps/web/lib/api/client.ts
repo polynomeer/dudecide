@@ -1,0 +1,114 @@
+export type CurrentActorResponse = {
+  userId: string;
+  displayName: string;
+  authSource: string;
+  createdAt?: string | null;
+};
+
+export type CreateGuestSessionRequest = {
+  displayName: string;
+};
+
+export type CreateMeetingRequest = {
+  title: string;
+  meetingType: string;
+  expectedHeadcount?: number;
+  originRegion?: string;
+};
+
+export type CreateMeetingResponse = {
+  id: string;
+  title: string;
+  meetingType: string;
+  status: string;
+};
+
+export type JoinInviteRequest = {
+  displayName: string;
+};
+
+export type MembershipResponse = {
+  id: string;
+  meetingId: string;
+  userId: string;
+  displayName: string;
+  role: string;
+  attendanceStatus: string;
+  joinedAt: string;
+};
+
+export type ThreadSummaryView = {
+  id: string;
+  category: string;
+  title: string;
+  status: string;
+  sortOrder: number;
+  messageCount: number;
+  decisionCount: number;
+  openVoteCount: number;
+  lastActivityAt?: string | null;
+};
+
+export type MeetingDetailResponse = {
+  id: string;
+  title: string;
+  meetingType: string;
+  status: string;
+  originRegion?: string | null;
+  expectedHeadcount?: number | null;
+  ownerUserId: string;
+  memberCount: number;
+  decisionCount: number;
+  openVoteCount: number;
+  threads: ThreadSummaryView[];
+};
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Request failed with ${response.status}`);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return (await response.json()) as T;
+}
+
+export const apiClient = {
+  getCurrentActor: () => request<CurrentActorResponse>("/api/v1/auth/me"),
+  createGuestSession: (body: CreateGuestSessionRequest) =>
+    request<CurrentActorResponse>("/api/v1/auth/guest-sessions", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  clearSession: () =>
+    request<void>("/api/v1/auth/session", {
+      method: "DELETE",
+    }),
+  createMeeting: (body: CreateMeetingRequest) =>
+    request<CreateMeetingResponse>("/api/v1/meetings", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  joinInvite: (token: string, body: JoinInviteRequest) =>
+    request<MembershipResponse>(`/api/v1/invite-links/${token}/join`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  getMeeting: (meetingId: string) => request<MeetingDetailResponse>(`/api/v1/meetings/${meetingId}`),
+};

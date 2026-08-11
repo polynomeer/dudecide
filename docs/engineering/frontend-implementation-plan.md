@@ -5,13 +5,15 @@ This document defines the remaining frontend scope for Dudecide MVP and fixes th
 ## Current State
 
 - backend API, domain rules, persistence, and local session scaffolding exist
-- no `Next.js` web application is present in the repository yet
-- no frontend routing, component system, API client, or E2E test suite has been implemented yet
+- initial `apps/web` `Next.js` scaffold now exists
+- landing, session start, invite join, create meeting, and meeting overview routes are scaffolded
+- shared styling, query provider wiring, and a minimal backend API client exist
+- no full decision workspace, vote UI, search surface, report surface, or E2E test suite exists yet
 
 Conclusion:
 
 - Dudecide is not frontend-complete
-- the next major workstream is creating the web app and connecting it to the existing backend
+- the next major workstream is implementing the actual product flows on top of the scaffold
 
 ## Target Frontend Stack
 
@@ -210,6 +212,10 @@ Recommended route shape:
 - scaffold `apps/web`
 - wire session bootstrap and API client
 - add global layout and design system primitives
+
+Current status:
+
+- done
 
 ### Phase 2: Entry And Meeting Creation
 
