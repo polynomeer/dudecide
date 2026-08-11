@@ -8,9 +8,9 @@ This document defines the remaining frontend scope for Dudecide MVP and fixes th
 - initial `apps/web` `Next.js` scaffold now exists
 - landing, session start, invite join, create meeting, and meeting overview routes are scaffolded
 - thread detail now renders meeting-scoped thread context, paginated message history, and message posting
-- decision board now renders meeting decision lists and selected decision detail, evidence, and history
+- decision board now supports decision creation, selected decision detail, and confirm/reconsider actions
 - shared styling, query provider wiring, and a minimal backend API client exist
-- no decision creation form, confirm/reconsider action UI, vote UI, search surface, report surface, SSE refresh, or E2E test suite exists yet
+- no evidence attachment UI, vote UI, search surface, report surface, SSE refresh, or E2E test suite exists yet
 
 Conclusion:
 
@@ -81,7 +81,6 @@ Current status:
 ### 6. Decisions
 
 - decision board list
-- decision detail page
 - manual decision creation form
 - confirm decision flow
 - reconsideration flow
@@ -90,8 +89,8 @@ Current status:
 
 Current status:
 
-- decision list, decision detail, evidence list, and history rendering are implemented
-- decision creation, confirmation, reconsideration, and evidence attachment actions are not implemented yet
+- decision list, decision detail, evidence list, history rendering, decision creation, and confirm/reconsider actions are implemented
+- evidence attachment action UI is not implemented yet
 
 ### 7. Votes
 

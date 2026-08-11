@@ -12,7 +12,7 @@ export default async function DecisionsPage({
     <SectionShell
       eyebrow="Decision Board"
       title="Decision board"
-      description="회의별 결정 목록과 선택된 결정의 상세, evidence, 상태 이력을 확인할 수 있습니다. 생성과 확정 액션은 다음 단위에서 이어서 구현하겠습니다."
+      description="회의별 결정 목록과 선택된 결정의 상세, evidence, 상태 이력을 확인하고, 새 결정을 생성하거나 확정·재검토 상태 전이를 실행할 수 있습니다."
     >
       <DecisionBoard meetingId={meetingId} />
     </SectionShell>

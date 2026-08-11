@@ -116,6 +116,22 @@ export type DecisionDetailResponse = DecisionResponse & {
   history: DecisionHistoryView[];
 };
 
+export type CreateDecisionRequest = {
+  threadId: string;
+  decisionType: string;
+  title: string;
+  proposedResult?: Record<string, unknown>;
+};
+
+export type ConfirmDecisionRequest = {
+  confirmedResult: Record<string, unknown>;
+  reason?: string;
+};
+
+export type ReconsiderDecisionRequest = {
+  reason: string;
+};
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 
@@ -184,4 +200,19 @@ export const apiClient = {
     request<DecisionResponse[]>(`/api/v1/meetings/${meetingId}/decisions`),
   getDecision: (decisionId: string) =>
     request<DecisionDetailResponse>(`/api/v1/decisions/${decisionId}`),
+  createDecision: (meetingId: string, body: CreateDecisionRequest) =>
+    request<DecisionResponse>(`/api/v1/meetings/${meetingId}/decisions`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  confirmDecision: (decisionId: string, body: ConfirmDecisionRequest) =>
+    request<DecisionResponse>(`/api/v1/decisions/${decisionId}/confirm`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  reconsiderDecision: (decisionId: string, body: ReconsiderDecisionRequest) =>
+    request<DecisionResponse>(`/api/v1/decisions/${decisionId}/reconsider`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 };
