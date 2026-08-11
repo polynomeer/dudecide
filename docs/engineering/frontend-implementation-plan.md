@@ -10,7 +10,7 @@ This document defines the remaining frontend scope for Dudecide MVP and fixes th
 - thread detail now renders meeting-scoped thread context, paginated message history, and message posting
 - decision board now supports decision creation, selected decision detail, and confirm/reconsider actions
 - shared styling, query provider wiring, and a minimal backend API client exist
-- no evidence attachment UI, vote UI, search surface, report surface, SSE refresh, or E2E test suite exists yet
+- no vote UI, search surface, report surface, SSE refresh, or E2E test suite exists yet
 
 Conclusion:
 
@@ -84,13 +84,12 @@ Current status:
 - manual decision creation form
 - confirm decision flow
 - reconsideration flow
-- evidence attachment UI
 - decision history rendering
+- evidence attachment UI
 
 Current status:
 
-- decision list, decision detail, evidence list, history rendering, decision creation, and confirm/reconsider actions are implemented
-- evidence attachment action UI is not implemented yet
+- decision list, decision detail, evidence list, history rendering, decision creation, confirm/reconsider actions, and evidence attachment UI are implemented
 
 ### 7. Votes
 

@@ -132,6 +132,13 @@ export type ReconsiderDecisionRequest = {
   reason: string;
 };
 
+export type AddDecisionEvidenceRequest = {
+  messageId: string;
+  evidenceType: string;
+  quoteSnapshot?: string;
+  confidence?: number;
+};
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 
@@ -212,6 +219,11 @@ export const apiClient = {
     }),
   reconsiderDecision: (decisionId: string, body: ReconsiderDecisionRequest) =>
     request<DecisionResponse>(`/api/v1/decisions/${decisionId}/reconsider`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  addDecisionEvidence: (decisionId: string, body: AddDecisionEvidenceRequest) =>
+    request<DecisionEvidenceView>(`/api/v1/decisions/${decisionId}/evidence`, {
       method: "POST",
       body: JSON.stringify(body),
     }),

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  type AddDecisionEvidenceRequest,
   apiClient,
   type ConfirmDecisionRequest,
   type CreateDecisionRequest,
@@ -291,12 +292,22 @@ function DecisionDetailPanel({
   decision: DecisionDetailResponse;
   onMutated: (decisionId: string) => Promise<void>;
 }) {
+  const threadMessagesQuery = useQuery({
+    queryKey: ["decision-thread-messages", decision.threadId],
+    queryFn: () => apiClient.listMessages(decision.threadId, undefined, 50),
+  });
   const [confirmReason, setConfirmReason] = useState("");
   const [confirmResultText, setConfirmResultText] = useState(
     formatStateText(decision.confirmedResult, DEFAULT_CONFIRMED_RESULT),
   );
   const [reconsiderReason, setReconsiderReason] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [evidenceForm, setEvidenceForm] = useState({
+    messageId: "",
+    evidenceType: "MESSAGE_QUOTE",
+    quoteSnapshot: "",
+    confidence: "0.8",
+  });
 
   useEffect(() => {
     setConfirmResultText(formatStateText(decision.confirmedResult, DEFAULT_CONFIRMED_RESULT));
@@ -305,8 +316,31 @@ function DecisionDetailPanel({
     setActionError(null);
   }, [decision.id, decision.confirmedResult]);
 
+  useEffect(() => {
+    const firstMessage = threadMessagesQuery.data?.[0];
+    if (firstMessage) {
+      setEvidenceForm({
+        messageId: firstMessage.id,
+        evidenceType: "MESSAGE_QUOTE",
+        quoteSnapshot: firstMessage.body,
+        confidence: "0.8",
+      });
+    }
+  }, [decision.id, threadMessagesQuery.data]);
+
   const confirmMutation = useMutation({
     mutationFn: (body: ConfirmDecisionRequest) => apiClient.confirmDecision(decision.id, body),
+    onSuccess: async () => {
+      setActionError(null);
+      await onMutated(decision.id);
+    },
+    onError: (error: Error) => {
+      setActionError(error.message);
+    },
+  });
+
+  const addEvidenceMutation = useMutation({
+    mutationFn: (body: AddDecisionEvidenceRequest) => apiClient.addDecisionEvidence(decision.id, body),
     onSuccess: async () => {
       setActionError(null);
       await onMutated(decision.id);
@@ -350,6 +384,27 @@ function DecisionDetailPanel({
     setActionError(null);
     reconsiderMutation.mutate({
       reason: reconsiderReason.trim(),
+    });
+  }
+
+  function handleAddEvidenceSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setActionError(null);
+
+    const confidence = evidenceForm.confidence.trim()
+      ? Number.parseFloat(evidenceForm.confidence)
+      : undefined;
+
+    if (confidence !== undefined && Number.isNaN(confidence)) {
+      setActionError("신뢰도는 숫자로 입력해 주세요.");
+      return;
+    }
+
+    addEvidenceMutation.mutate({
+      messageId: evidenceForm.messageId,
+      evidenceType: evidenceForm.evidenceType.trim(),
+      quoteSnapshot: evidenceForm.quoteSnapshot.trim() || undefined,
+      confidence,
     });
   }
 
@@ -458,6 +513,115 @@ function DecisionDetailPanel({
           </h4>
           <span className="text-sm text-ink/55">{decision.evidence.length}건</span>
         </div>
+        <form
+          className="mt-4 rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
+          onSubmit={handleAddEvidenceSubmit}
+        >
+          <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+            <div className="space-y-4">
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
+                  Source message
+                </span>
+                <select
+                  value={evidenceForm.messageId}
+                  onChange={(event) => {
+                    const nextMessage = threadMessagesQuery.data?.find(
+                      (message) => message.id === event.target.value,
+                    );
+                    setEvidenceForm((current) => ({
+                      ...current,
+                      messageId: event.target.value,
+                      quoteSnapshot: nextMessage?.body ?? current.quoteSnapshot,
+                    }));
+                  }}
+                  className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                  disabled={threadMessagesQuery.isLoading || addEvidenceMutation.isPending}
+                >
+                  {(threadMessagesQuery.data ?? []).map((message) => (
+                    <option key={message.id} value={message.id}>
+                      {formatDateTime(message.createdAt)} · {truncateText(message.body, 72)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="grid gap-4 md:grid-cols-[1fr_0.8fr]">
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
+                    Evidence type
+                  </span>
+                  <input
+                    value={evidenceForm.evidenceType}
+                    onChange={(event) =>
+                      setEvidenceForm((current) => ({
+                        ...current,
+                        evidenceType: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/88 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                    placeholder="MESSAGE_QUOTE"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
+                    Confidence
+                  </span>
+                  <input
+                    value={evidenceForm.confidence}
+                    onChange={(event) =>
+                      setEvidenceForm((current) => ({
+                        ...current,
+                        confidence: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/88 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                    placeholder="0.8"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <label className="block">
+              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
+                Quote snapshot
+              </span>
+              <textarea
+                value={evidenceForm.quoteSnapshot}
+                onChange={(event) =>
+                  setEvidenceForm((current) => ({
+                    ...current,
+                    quoteSnapshot: event.target.value,
+                  }))
+                }
+                className="mt-2 min-h-[170px] w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/88 px-4 py-4 text-sm leading-6 outline-none transition focus:border-pine"
+                placeholder="결정의 근거가 되는 메시지 요약 또는 인용문"
+              />
+            </label>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-ink/60">
+              {threadMessagesQuery.isLoading
+                ? "메시지 후보를 불러오는 중입니다."
+                : threadMessagesQuery.data?.length
+                  ? "선택한 메시지 본문을 기본 인용문으로 불러옵니다."
+                  : "현재 스레드에 연결할 메시지가 없습니다."}
+            </div>
+            <button
+              type="submit"
+              disabled={
+                addEvidenceMutation.isPending ||
+                threadMessagesQuery.isLoading ||
+                !threadMessagesQuery.data?.length
+              }
+              className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:bg-ink/40"
+            >
+              {addEvidenceMutation.isPending ? "추가 중..." : "Evidence 추가"}
+            </button>
+          </div>
+        </form>
         <div className="mt-4 space-y-3">
           {decision.evidence.length ? (
             decision.evidence.map((item) => (
@@ -579,6 +743,13 @@ function formatDateTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function truncateText(value: string, limit: number) {
+  if (value.length <= limit) {
+    return value;
+  }
+  return `${value.slice(0, limit - 1)}…`;
 }
 
 function parseJsonObject(value: string): Record<string, unknown> {
