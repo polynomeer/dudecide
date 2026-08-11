@@ -27,14 +27,25 @@ class MessageService(
 ) {
 
     @Transactional(readOnly = true)
-    fun listMessages(threadId: UUID): List<MessageView> {
+    fun listMessages(threadId: UUID, before: OffsetDateTime? = null, limit: Int = 50): List<MessageView> {
         meetingAccessService.requireThreadMember(threadId)
         requireThread(threadId)
+        if (limit !in 1..100) {
+            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "limit must be between 1 and 100")
+        }
 
-        return dsl.selectFrom(MESSAGE)
+        val query = dsl.selectFrom(MESSAGE)
             .where(MESSAGE.THREAD_ID.eq(threadId))
-            .orderBy(MESSAGE.CREATED_AT.asc())
+
+        if (before != null) {
+            query.and(MESSAGE.CREATED_AT.lt(before))
+        }
+
+        return query
+            .orderBy(MESSAGE.CREATED_AT.desc())
+            .limit(limit)
             .fetch()
+            .reversed()
             .map { record ->
                 MessageView(
                     id = requireNotNull(record.id),

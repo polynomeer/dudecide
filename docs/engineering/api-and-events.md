@@ -86,7 +86,9 @@ This document defines the MVP external API surface and internal async events.
 `GET /api/v1/threads/{threadId}/messages`
 
 - list paginated messages
-- current implementation returns chronological thread messages without pagination
+- supports `before=<ISO-8601 timestamp>` cursor pagination
+- supports `limit=<1-100>` with default `50`
+- returns each page in chronological order
 - requires meeting membership
 
 `POST /api/v1/threads/{threadId}/messages`
@@ -280,7 +282,8 @@ Current implementation detail:
 
 - mutations write to `outbox_event`
 - selected mutations also publish immediate in-memory SSE updates
-- durable outbox relay workers are not implemented yet
+- scheduled outbox relay workers now advance pending rows to `published`
+- scheduled notification dispatch workers now mark stored notifications as sent
 
 ### Core Events
 
@@ -365,8 +368,8 @@ Planned idempotency coverage:
 
 Current implementation:
 
-- no request idempotency key enforcement yet
-- duplicate protection relies only on resource-level constraints and service state checks
+- `Idempotency-Key` is supported for meeting creation, vote creation, decision confirmation, and report refresh
+- responses are cached by operation scope plus key in `idempotency_record`
 
 This reduces duplicate writes during mobile retry conditions.
 

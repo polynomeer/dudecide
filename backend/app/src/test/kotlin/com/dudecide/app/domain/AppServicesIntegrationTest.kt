@@ -342,6 +342,33 @@ class AppServicesIntegrationTest {
     }
 
     @Test
+    fun `message service paginates older thread messages`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(title = "Pagination Flow", meetingType = "trip"),
+            )
+            val threadId = context.findThreadId(meeting.id, ThreadCategory.free_chat)
+
+            repeat(3) { index ->
+                context.messageService.postMessage(
+                    threadId,
+                    CreateMessageRequest(body = "Message ${index + 1}"),
+                )
+            }
+
+            val latestTwo = context.messageService.listMessages(threadId, limit = 2)
+            assertEquals(listOf("Message 2", "Message 3"), latestTwo.map { it.body })
+
+            val older = context.messageService.listMessages(
+                threadId = threadId,
+                before = latestTwo.first().createdAt,
+                limit = 2,
+            )
+            assertEquals(listOf("Message 1"), older.map { it.body })
+        }
+    }
+
+    @Test
     fun `thread message and evidence flows are connected`() {
         testContext().use { context ->
             val meeting = context.meetingService.createMeeting(
