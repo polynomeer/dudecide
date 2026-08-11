@@ -1,4 +1,4 @@
-import { PlaceholderRoute } from "@/components/placeholder-route";
+import { DecisionBoard } from "@/components/decision-board";
 import { SectionShell } from "@/components/section-shell";
 
 export default async function DecisionsPage({
@@ -11,14 +11,10 @@ export default async function DecisionsPage({
   return (
     <SectionShell
       eyebrow="Decision Board"
-      title="Decision board scaffold"
-      description="This route will become the primary surface for draft decisions, evidence inspection, confirmation, and reconsideration."
+      title="Decision board"
+      description="회의별 결정 목록과 선택된 결정의 상세, evidence, 상태 이력을 확인할 수 있습니다. 생성과 확정 액션은 다음 단위에서 이어서 구현하겠습니다."
     >
-      <PlaceholderRoute
-        meetingId={meetingId}
-        title="Decision board route is ready"
-        nextStep="Implement decision list, detail drawer, evidence linking, and host-only decision actions."
-      />
+      <DecisionBoard meetingId={meetingId} />
     </SectionShell>
   );
 }

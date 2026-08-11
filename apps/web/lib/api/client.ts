@@ -79,6 +79,43 @@ export type CreateMessageRequest = {
   attachments?: Array<Record<string, unknown>>;
 };
 
+export type DecisionResponse = {
+  id: string;
+  meetingId: string;
+  threadId: string;
+  decisionType: string;
+  title: string;
+  status: string;
+  proposedResult: Record<string, unknown>;
+  confirmedResult: Record<string, unknown>;
+  decidedAt?: string | null;
+};
+
+export type DecisionEvidenceView = {
+  id: string;
+  messageId: string;
+  threadId: string;
+  evidenceType: string;
+  quoteSnapshot: string;
+  confidence?: number | null;
+  createdAt?: string | null;
+};
+
+export type DecisionHistoryView = {
+  id: string;
+  actorUserId?: string | null;
+  action: string;
+  reason?: string | null;
+  beforeState: Record<string, unknown>;
+  afterState: Record<string, unknown>;
+  createdAt?: string | null;
+};
+
+export type DecisionDetailResponse = DecisionResponse & {
+  evidence: DecisionEvidenceView[];
+  history: DecisionHistoryView[];
+};
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 
@@ -143,4 +180,8 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  listDecisions: (meetingId: string) =>
+    request<DecisionResponse[]>(`/api/v1/meetings/${meetingId}/decisions`),
+  getDecision: (decisionId: string) =>
+    request<DecisionDetailResponse>(`/api/v1/decisions/${decisionId}`),
 };
