@@ -9,8 +9,9 @@ This document defines the remaining frontend scope for Dudecide MVP and fixes th
 - landing, session start, invite join, create meeting, and meeting overview routes are scaffolded
 - thread detail now renders meeting-scoped thread context, paginated message history, and message posting
 - decision board now supports decision creation, selected decision detail, and confirm/reconsider actions
+- vote studio and vote detail workspace now support vote creation, response submission, close action, and aggregate rendering
 - shared styling, query provider wiring, and a minimal backend API client exist
-- no vote UI, search surface, report surface, SSE refresh, or E2E test suite exists yet
+- no search surface, report surface, SSE refresh, or E2E test suite exists yet
 
 Conclusion:
 
@@ -99,6 +100,10 @@ Current status:
 - response submission flow
 - close-vote action
 - aggregate result visualization
+
+Current status:
+
+- vote creation UI, vote detail page, per-vote-type option rendering, response submission, close action, and aggregate result visualization are implemented
 
 ### 8. Tasks, Notifications, Search, And Reports
 

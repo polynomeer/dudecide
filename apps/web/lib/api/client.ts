@@ -139,6 +139,72 @@ export type AddDecisionEvidenceRequest = {
   confidence?: number;
 };
 
+export type CreateVoteOptionRequest = {
+  optionType: string;
+  label: string;
+  payload?: Record<string, unknown>;
+  sortOrder?: number;
+};
+
+export type CreateVoteRequest = {
+  threadId: string;
+  decisionId?: string;
+  decisionType?: string;
+  title: string;
+  voteType: string;
+  opensAt?: string;
+  deadlineAt?: string;
+  options: CreateVoteOptionRequest[];
+};
+
+export type VoteSubmissionItem = {
+  optionId: string;
+  responseValue: string;
+};
+
+export type VoteSubmissionRequest = {
+  responses: VoteSubmissionItem[];
+};
+
+export type VoteOptionView = {
+  id: string;
+  optionType: string;
+  label: string;
+  payload: Record<string, unknown>;
+};
+
+export type VoteAggregateOptionView = {
+  optionId: string;
+  label: string;
+  counts: Record<string, number>;
+  rawScore?: number | null;
+  rank?: number | null;
+};
+
+export type VoteAggregateView = {
+  totalParticipants: number;
+  respondedParticipants: number;
+  unresolvedParticipants: number;
+  canEarlyClose?: boolean | null;
+  leadingOptionIds: string[];
+  options: VoteAggregateOptionView[];
+};
+
+export type VoteResponseView = {
+  voteId: string;
+  meetingId: string;
+  decisionId?: string | null;
+  threadId: string;
+  voteType: string;
+  status: string;
+  opensAt?: string | null;
+  deadlineAt?: string | null;
+  closedAt?: string | null;
+  options: VoteOptionView[];
+  responses: VoteSubmissionItem[];
+  aggregates?: VoteAggregateView | null;
+};
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 
@@ -226,5 +292,21 @@ export const apiClient = {
     request<DecisionEvidenceView>(`/api/v1/decisions/${decisionId}/evidence`, {
       method: "POST",
       body: JSON.stringify(body),
+    }),
+  createVote: (meetingId: string, body: CreateVoteRequest) =>
+    request<VoteResponseView>(`/api/v1/meetings/${meetingId}/votes`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  getVote: (voteId: string) =>
+    request<VoteResponseView>(`/api/v1/votes/${voteId}`),
+  submitVoteResponses: (voteId: string, body: VoteSubmissionRequest) =>
+    request<VoteResponseView>(`/api/v1/votes/${voteId}/responses/me`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  closeVote: (voteId: string) =>
+    request<VoteResponseView>(`/api/v1/votes/${voteId}/close`, {
+      method: "POST",
     }),
 };
