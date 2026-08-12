@@ -155,7 +155,8 @@ Current status:
 
 - `Vitest + Testing Library` 기반과 기본 test scripts가 추가되었습니다
 - `ApiErrorPanel`, `HostOnlyNotice`, `getApiErrorMessage`에 대한 첫 컴포넌트/유틸 테스트가 구현되었습니다
-- route-level integration tests와 Playwright E2E는 아직 구현되지 않았습니다
+- `SearchWorkspace`, `ReportWorkspace`에 대한 route-level mocked integration tests가 구현되었습니다
+- Playwright E2E는 아직 구현되지 않았습니다
 
 ## Required Screens
 
