@@ -135,6 +135,28 @@ Optional API base URL:
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
 ```
 
+## Unified Local Stack
+
+Start frontend and backend together from the repository root:
+
+```bash
+./scripts/play_stack_local.sh
+```
+
+Useful options:
+
+```bash
+./scripts/play_stack_local.sh --skip-infra
+./scripts/play_stack_local.sh --with-worker
+```
+
+Behavior:
+
+- runs `docker compose up -d` unless `--skip-infra` is used
+- starts `:backend:app:bootRun`
+- starts `apps/web` dev server with `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080`
+- stops all started child processes when you press `Ctrl+C`
+
 ## Current Runtime Notes
 
 - API realtime uses in-memory Spring `SseEmitter` subscriptions
