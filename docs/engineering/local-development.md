@@ -118,6 +118,14 @@ npm install
 npm run dev
 ```
 
+Run frontend checks:
+
+```bash
+cd apps/web
+npm run typecheck
+npm run test
+```
+
 Optional API base URL:
 
 ```bash

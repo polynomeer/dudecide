@@ -151,6 +151,12 @@ Current status:
 - route-level integration tests with mocked API responses
 - Playwright end-to-end tests for core product flows
 
+Current status:
+
+- `Vitest + Testing Library` 기반과 기본 test scripts가 추가되었습니다
+- `ApiErrorPanel`, `HostOnlyNotice`, `getApiErrorMessage`에 대한 첫 컴포넌트/유틸 테스트가 구현되었습니다
+- route-level integration tests와 Playwright E2E는 아직 구현되지 않았습니다
+
 ## Required Screens
 
 ### P0 Screens
