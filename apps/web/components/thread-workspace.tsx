@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiErrorPanel } from "@/components/api-error-panel";
 import { useForm } from "react-hook-form";
+import { getApiErrorMessage } from "@/lib/api/error-display";
 import { apiClient } from "@/lib/api/client";
 import { useCurrentActor } from "@/lib/session";
 
@@ -49,8 +51,13 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
       await queryClient.invalidateQueries({ queryKey: ["meeting", meetingId] });
       await queryClient.invalidateQueries({ queryKey: ["thread-messages", threadId] });
     },
-    onError: (error: Error) => {
-      setErrorMessage(error.message);
+    onError: (error: unknown) => {
+      setErrorMessage(
+        getApiErrorMessage(error, {
+          resourceName: "메시지 등록",
+          conflictMessage: "현재 스레드 상태에서는 메시지를 등록할 수 없습니다.",
+        }),
+      );
     },
   });
 
@@ -75,7 +82,12 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
         setOlderMessages((current) => [...current, ...nextPage]);
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to load older messages.");
+      setErrorMessage(
+        getApiErrorMessage(error, {
+          resourceName: "이전 메시지",
+          fallbackMessage: "이전 메시지를 불러오지 못했습니다.",
+        }),
+      );
     } finally {
       setLoadingOlder(false);
     }
@@ -86,11 +98,7 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
   }
 
   if (meetingQuery.error || messagesQuery.error || !thread) {
-    return (
-      <div className="panel px-6 py-6 text-sm text-ember">
-        스레드 정보를 불러오지 못했습니다. 세션 상태와 회의 접근 권한, 백엔드 실행 상태를 확인해 주세요.
-      </div>
-    );
+    return <ApiErrorPanel error={meetingQuery.error ?? messagesQuery.error} resourceName="스레드 작업공간" />;
   }
 
   return (

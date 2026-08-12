@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { useQuery } from "@tanstack/react-query";
+import { ApiErrorPanel } from "@/components/api-error-panel";
 import { apiClient } from "@/lib/api/client";
 import { VoteStudio } from "@/components/vote-studio";
 
@@ -17,12 +18,7 @@ export function MeetingOverview({ meetingId }: { meetingId: string }) {
   }
 
   if (error || !meeting) {
-    return (
-      <div className="panel px-6 py-6 text-sm text-ember">
-        Failed to load meeting details. Make sure the backend is running and the current session has
-        meeting access.
-      </div>
-    );
+    return <ApiErrorPanel error={error} resourceName="회의 작업공간" />;
   }
 
   return (

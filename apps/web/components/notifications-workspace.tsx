@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { ApiErrorPanel } from "@/components/api-error-panel";
 import { apiClient } from "@/lib/api/client";
 
 export function NotificationsWorkspace({ meetingId }: { meetingId: string }) {
@@ -14,11 +15,7 @@ export function NotificationsWorkspace({ meetingId }: { meetingId: string }) {
   }
 
   if (notificationsQuery.error || !notificationsQuery.data) {
-    return (
-      <div className="panel px-6 py-6 text-sm text-ember">
-        알림 목록을 불러오지 못했습니다. 세션 상태와 백엔드 실행 상태를 확인해 주세요.
-      </div>
-    );
+    return <ApiErrorPanel error={notificationsQuery.error} resourceName="알림 목록" />;
   }
 
   return (

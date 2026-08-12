@@ -13,6 +13,7 @@ This document defines the remaining frontend scope for Dudecide MVP and fixes th
 - search and latest report routes now call backend endpoints and render meeting-scoped results
 - task management and notification feed routes now call backend endpoints and render meeting-scoped data
 - meeting-scoped pages now open an SSE stream and invalidate React Query caches on realtime events
+- core workspace screens now distinguish `401`, `403`, `404`, and `409` responses through shared API error handling
 - shared styling, query provider wiring, and a minimal backend API client exist
 - no E2E test suite exists yet
 
@@ -137,6 +138,11 @@ Current status:
 - hide or disable host-only actions for non-hosts
 - show membership-required and permission-denied states
 - distinguish `401`, `403`, `404`, and `409` responses in UI
+
+Current status:
+
+- shared API error parsing and state-specific error messaging are implemented across core workspace screens
+- host-only action hiding and broader role-aware control disabling are not implemented yet
 
 ### 11. Testing And Quality
 

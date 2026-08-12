@@ -1,6 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiErrorPanel } from "@/components/api-error-panel";
+import { getApiErrorMessage } from "@/lib/api/error-display";
 import { apiClient } from "@/lib/api/client";
 
 export function ReportWorkspace({ meetingId }: { meetingId: string }) {
@@ -22,11 +24,7 @@ export function ReportWorkspace({ meetingId }: { meetingId: string }) {
   }
 
   if (reportQuery.error || !reportQuery.data) {
-    return (
-      <div className="panel px-6 py-6 text-sm text-ember">
-        최신 리포트를 불러오지 못했습니다. 세션 상태와 백엔드 실행 상태를 확인해 주세요.
-      </div>
-    );
+    return <ApiErrorPanel error={reportQuery.error} resourceName="최신 회의 리포트" />;
   }
 
   const report = reportQuery.data;
@@ -49,7 +47,12 @@ export function ReportWorkspace({ meetingId }: { meetingId: string }) {
         </div>
 
         {refreshMutation.isError ? (
-          <div className="mt-4 text-sm text-ember">리포트 새로고침을 실행하지 못했습니다.</div>
+          <div className="mt-4 text-sm text-ember">
+            {getApiErrorMessage(refreshMutation.error, {
+              resourceName: "리포트 새로고침",
+              conflictMessage: "현재 리포트 상태에서는 새로고침을 바로 실행할 수 없습니다.",
+            })}
+          </div>
         ) : null}
 
         <div className="mt-5 flex justify-end">

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiErrorPanel } from "@/components/api-error-panel";
 import {
   type AddDecisionEvidenceRequest,
   apiClient,
@@ -13,6 +14,7 @@ import {
   type DecisionResponse,
   type ReconsiderDecisionRequest,
 } from "@/lib/api/client";
+import { getApiErrorMessage } from "@/lib/api/error-display";
 
 const DEFAULT_PROPOSED_RESULT = '{\n  "summary": ""\n}';
 const DEFAULT_CONFIRMED_RESULT = '{\n  "summary": ""\n}';
@@ -72,7 +74,12 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
       await invalidateDecisionQueries(queryClient, meetingId, created.id);
     },
     onError: (error: Error) => {
-      setCreateError(error.message);
+      setCreateError(
+        getApiErrorMessage(error, {
+          resourceName: "결정 생성",
+          conflictMessage: "현재 회의 또는 스레드 상태에서는 결정을 생성할 수 없습니다.",
+        }),
+      );
     },
   });
 
@@ -81,11 +88,7 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
   }
 
   if (meetingQuery.error || decisionsQuery.error || !meetingQuery.data) {
-    return (
-      <div className="panel px-6 py-6 text-sm text-ember">
-        결정 보드를 불러오지 못했습니다. 세션 상태와 회의 접근 권한, 백엔드 실행 상태를 확인해 주세요.
-      </div>
-    );
+    return <ApiErrorPanel error={meetingQuery.error ?? decisionsQuery.error} resourceName="결정 보드" />;
   }
 
   function handleCreateDecisionSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -266,7 +269,7 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
             detailQuery.isLoading ? (
               <div className="mt-4 text-sm text-ink/60">선택한 결정을 불러오는 중입니다.</div>
             ) : detailQuery.error || !detailQuery.data ? (
-              <div className="mt-4 text-sm text-ember">결정 상세를 불러오지 못했습니다.</div>
+              <ApiErrorPanel error={detailQuery.error} resourceName="결정 상세" />
             ) : (
               <DecisionDetailPanel
                 meetingId={meetingId}
@@ -334,8 +337,13 @@ function DecisionDetailPanel({
       setActionError(null);
       await onMutated(decision.id);
     },
-    onError: (error: Error) => {
-      setActionError(error.message);
+    onError: (error: unknown) => {
+      setActionError(
+        getApiErrorMessage(error, {
+          resourceName: "결정 확정",
+          conflictMessage: "현재 결정 상태에서는 확정을 진행할 수 없습니다.",
+        }),
+      );
     },
   });
 
@@ -345,8 +353,13 @@ function DecisionDetailPanel({
       setActionError(null);
       await onMutated(decision.id);
     },
-    onError: (error: Error) => {
-      setActionError(error.message);
+    onError: (error: unknown) => {
+      setActionError(
+        getApiErrorMessage(error, {
+          resourceName: "Evidence 추가",
+          conflictMessage: "현재 결정 상태에서는 evidence를 추가할 수 없습니다.",
+        }),
+      );
     },
   });
 
@@ -356,8 +369,13 @@ function DecisionDetailPanel({
       setActionError(null);
       await onMutated(decision.id);
     },
-    onError: (error: Error) => {
-      setActionError(error.message);
+    onError: (error: unknown) => {
+      setActionError(
+        getApiErrorMessage(error, {
+          resourceName: "재검토 요청",
+          conflictMessage: "현재 결정 상태에서는 재검토 요청을 보낼 수 없습니다.",
+        }),
+      );
     },
   });
 

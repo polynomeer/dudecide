@@ -2,6 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { ApiErrorPanel } from "@/components/api-error-panel";
+import { getApiErrorMessage } from "@/lib/api/error-display";
 import { apiClient } from "@/lib/api/client";
 
 const TASK_STATUSES = ["todo", "doing", "done"];
@@ -30,8 +32,13 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
       await queryClient.invalidateQueries({ queryKey: ["meeting-tasks", meetingId] });
       await queryClient.invalidateQueries({ queryKey: ["meeting-search", meetingId] });
     },
-    onError: (error: Error) => {
-      setErrorMessage(error.message);
+    onError: (error: unknown) => {
+      setErrorMessage(
+        getApiErrorMessage(error, {
+          resourceName: "태스크 생성",
+          conflictMessage: "현재 회의 상태에서는 태스크를 생성할 수 없습니다.",
+        }),
+      );
     },
   });
 
@@ -43,8 +50,13 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
       await queryClient.invalidateQueries({ queryKey: ["meeting-tasks", meetingId] });
       await queryClient.invalidateQueries({ queryKey: ["meeting-search", meetingId] });
     },
-    onError: (error: Error) => {
-      setErrorMessage(error.message);
+    onError: (error: unknown) => {
+      setErrorMessage(
+        getApiErrorMessage(error, {
+          resourceName: "태스크 업데이트",
+          conflictMessage: "현재 태스크 상태에서는 이 변경을 적용할 수 없습니다.",
+        }),
+      );
     },
   });
 
@@ -53,11 +65,7 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
   }
 
   if (tasksQuery.error || !tasksQuery.data) {
-    return (
-      <div className="panel px-6 py-6 text-sm text-ember">
-        태스크 정보를 불러오지 못했습니다. 세션 상태와 백엔드 실행 상태를 확인해 주세요.
-      </div>
-    );
+    return <ApiErrorPanel error={tasksQuery.error} resourceName="태스크 목록" />;
   }
 
   return (

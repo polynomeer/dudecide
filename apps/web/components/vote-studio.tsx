@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { ApiErrorPanel } from "@/components/api-error-panel";
+import { getApiErrorMessage } from "@/lib/api/error-display";
 import { apiClient, type CreateVoteRequest, type CreateVoteOptionRequest } from "@/lib/api/client";
 
 const DEFAULT_OPTION_TEXT: Record<string, string> = {
@@ -53,8 +55,13 @@ export function VoteStudio({ meetingId }: { meetingId: string }) {
       setErrorMessage(null);
       router.push(`/votes/${vote.voteId}`);
     },
-    onError: (error: Error) => {
-      setErrorMessage(error.message);
+    onError: (error: unknown) => {
+      setErrorMessage(
+        getApiErrorMessage(error, {
+          resourceName: "투표 생성",
+          conflictMessage: "현재 연결된 의사결정 또는 회의 상태에서는 새 투표를 만들 수 없습니다.",
+        }),
+      );
     },
   });
 
@@ -94,11 +101,7 @@ export function VoteStudio({ meetingId }: { meetingId: string }) {
   }
 
   if (meetingQuery.error || decisionsQuery.error || !meetingQuery.data) {
-    return (
-      <div className="panel px-6 py-6 text-sm text-ember">
-        투표 생성 화면을 불러오지 못했습니다. 세션 상태와 백엔드 실행 상태를 확인해 주세요.
-      </div>
-    );
+    return <ApiErrorPanel error={meetingQuery.error ?? decisionsQuery.error} resourceName="투표 생성 화면" />;
   }
 
   return (

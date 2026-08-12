@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiErrorPanel } from "@/components/api-error-panel";
+import { getApiErrorMessage } from "@/lib/api/error-display";
 import {
   apiClient,
   type VoteAggregateOptionView,
@@ -62,8 +64,13 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
       setErrorMessage(null);
       await queryClient.invalidateQueries({ queryKey: ["vote", voteId] });
     },
-    onError: (error: Error) => {
-      setErrorMessage(error.message);
+    onError: (error: unknown) => {
+      setErrorMessage(
+        getApiErrorMessage(error, {
+          resourceName: "투표 응답 저장",
+          conflictMessage: "투표가 이미 마감되었거나 현재 상태에서는 응답을 저장할 수 없습니다.",
+        }),
+      );
     },
   });
 
@@ -73,8 +80,13 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
       setErrorMessage(null);
       await queryClient.invalidateQueries({ queryKey: ["vote", voteId] });
     },
-    onError: (error: Error) => {
-      setErrorMessage(error.message);
+    onError: (error: unknown) => {
+      setErrorMessage(
+        getApiErrorMessage(error, {
+          resourceName: "투표 마감",
+          conflictMessage: "이미 마감된 투표이거나 현재 상태에서는 마감할 수 없습니다.",
+        }),
+      );
     },
   });
 
@@ -93,11 +105,7 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
   }
 
   if (voteQuery.error || !voteQuery.data) {
-    return (
-      <div className="panel px-6 py-6 text-sm text-ember">
-        투표 정보를 불러오지 못했습니다. 세션 상태와 투표 접근 권한, 백엔드 실행 상태를 확인해 주세요.
-      </div>
-    );
+    return <ApiErrorPanel error={voteQuery.error} resourceName="투표 상세" />;
   }
 
   const vote = voteQuery.data;

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ApiErrorPanel } from "@/components/api-error-panel";
 import { apiClient } from "@/lib/api/client";
 
 export function SearchWorkspace({ meetingId }: { meetingId: string }) {
@@ -72,7 +73,7 @@ export function SearchWorkspace({ meetingId }: { meetingId: string }) {
         ) : searchQuery.isLoading ? (
           <div className="mt-4 text-sm text-ink/60">검색 결과를 불러오는 중입니다.</div>
         ) : searchQuery.error || !searchQuery.data ? (
-          <div className="mt-4 text-sm text-ember">검색 결과를 불러오지 못했습니다.</div>
+          <ApiErrorPanel error={searchQuery.error} resourceName="검색 결과" />
         ) : (
           <div className="mt-4 space-y-5">
             <div className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/70 px-4 py-4 text-sm text-ink/66">
