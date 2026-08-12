@@ -12,8 +12,9 @@ This document defines the remaining frontend scope for Dudecide MVP and fixes th
 - vote studio and vote detail workspace now support vote creation, response submission, close action, and aggregate rendering
 - search and latest report routes now call backend endpoints and render meeting-scoped results
 - task management and notification feed routes now call backend endpoints and render meeting-scoped data
+- meeting-scoped pages now open an SSE stream and invalidate React Query caches on realtime events
 - shared styling, query provider wiring, and a minimal backend API client exist
-- no SSE refresh or E2E test suite exists yet
+- no E2E test suite exists yet
 
 Conclusion:
 
@@ -125,6 +126,11 @@ Current status:
 - targeted cache invalidation by event type
 - reconnect behavior
 - loading and stale-state UX
+
+Current status:
+
+- meeting-scoped SSE stream, reconnect handling, and event-driven cache invalidation are implemented
+- vote detail outside the meeting route tree does not yet share the same realtime bridge
 
 ### 10. Role-Aware UX
 

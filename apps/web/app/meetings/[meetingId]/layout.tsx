@@ -1,0 +1,18 @@
+import { MeetingRealtimeBridge } from "@/components/meeting-realtime-bridge";
+
+export default async function MeetingScopedLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ meetingId: string }>;
+}) {
+  const { meetingId } = await params;
+
+  return (
+    <>
+      <MeetingRealtimeBridge meetingId={meetingId} />
+      {children}
+    </>
+  );
+}
