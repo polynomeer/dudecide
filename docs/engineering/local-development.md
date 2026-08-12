@@ -124,7 +124,10 @@ Run frontend checks:
 cd apps/web
 npm run typecheck
 npm run test
+npm run test:e2e
 ```
+
+Playwright browser binaries are required for `npm run test:e2e`.
 
 Optional API base URL:
 

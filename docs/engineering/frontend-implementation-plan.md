@@ -15,7 +15,7 @@ This document defines the remaining frontend scope for Dudecide MVP and fixes th
 - meeting-scoped pages now open an SSE stream and invalidate React Query caches on realtime events
 - core workspace screens now distinguish `401`, `403`, `404`, and `409` responses through shared API error handling
 - shared styling, query provider wiring, and a minimal backend API client exist
-- no E2E test suite exists yet
+- Playwright E2E smoke coverage now exists for guest-session to meeting-creation and invite-join flows
 
 Conclusion:
 
@@ -156,7 +156,7 @@ Current status:
 - `Vitest + Testing Library` 기반과 기본 test scripts가 추가되었습니다
 - `ApiErrorPanel`, `HostOnlyNotice`, `getApiErrorMessage`에 대한 첫 컴포넌트/유틸 테스트가 구현되었습니다
 - `SearchWorkspace`, `ReportWorkspace`에 대한 route-level mocked integration tests가 구현되었습니다
-- Playwright E2E는 아직 구현되지 않았습니다
+- Playwright E2E smoke tests가 `/start -> /meetings/new -> /meetings/[id]` 및 `/invite/[token] -> /meetings/[id]` 흐름에 대해 구현되었습니다
 
 ## Required Screens
 
