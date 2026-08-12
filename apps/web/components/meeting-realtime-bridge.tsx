@@ -8,7 +8,13 @@ const API_BASE_URL =
 
 type RealtimeStatus = "connecting" | "connected" | "reconnecting";
 
-export function MeetingRealtimeBridge({ meetingId }: { meetingId: string }) {
+export function MeetingRealtimeBridge({
+  meetingId,
+  voteId,
+}: {
+  meetingId: string;
+  voteId?: string;
+}) {
   const queryClient = useQueryClient();
   const retryTimerRef = useRef<number | null>(null);
   const [status, setStatus] = useState<RealtimeStatus>("connecting");
@@ -36,14 +42,20 @@ export function MeetingRealtimeBridge({ meetingId }: { meetingId: string }) {
     };
 
     const invalidateMeetingQueries = async (eventType: string) => {
-      await Promise.all([
+      const invalidations = [
         queryClient.invalidateQueries({ queryKey: ["meeting", meetingId] }),
         queryClient.invalidateQueries({ queryKey: ["meeting-decisions", meetingId] }),
         queryClient.invalidateQueries({ queryKey: ["meeting-search", meetingId] }),
         queryClient.invalidateQueries({ queryKey: ["meeting-report", meetingId] }),
         queryClient.invalidateQueries({ queryKey: ["meeting-tasks", meetingId] }),
         queryClient.invalidateQueries({ queryKey: ["meeting-notifications", meetingId] }),
-      ]);
+      ];
+
+      if (voteId) {
+        invalidations.push(queryClient.invalidateQueries({ queryKey: ["vote", voteId] }));
+      }
+
+      await Promise.all(invalidations);
 
       if (
         eventType === "message.created" ||
@@ -97,7 +109,7 @@ export function MeetingRealtimeBridge({ meetingId }: { meetingId: string }) {
       clearRetryTimer();
       eventSource?.close();
     };
-  }, [meetingId, queryClient]);
+  }, [meetingId, queryClient, voteId]);
 
   return (
     <div className="fixed bottom-4 right-4 z-50 rounded-full border border-[color:var(--color-line)] bg-white/88 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink/58 shadow-[0_16px_30px_rgba(15,23,42,0.08)] backdrop-blur">

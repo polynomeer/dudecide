@@ -8,6 +8,7 @@ import {
   type VoteAggregateOptionView,
   type VoteResponseView,
 } from "@/lib/api/client";
+import { MeetingRealtimeBridge } from "@/components/meeting-realtime-bridge";
 
 const RESPONSE_CHOICES: Record<string, Array<{ value: string; label: string }>> = {
   date_matrix: [
@@ -102,8 +103,10 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
   const vote = voteQuery.data;
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
-      <section className="panel px-6 py-6">
+    <>
+      <MeetingRealtimeBridge meetingId={vote.meetingId} voteId={vote.voteId} />
+      <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
+        <section className="panel px-6 py-6">
         <div className="eyebrow">Vote summary</div>
         <h2 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
           {labelForVoteType(vote.voteType)}
@@ -225,56 +228,63 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
             </button>
           </div>
         </form>
-      </section>
+        </section>
 
-      <section className="panel px-6 py-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="eyebrow">Aggregates</div>
-            <h3 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
-              집계 결과
-            </h3>
+        <section className="panel px-6 py-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="eyebrow">Aggregates</div>
+              <h3 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+                집계 결과
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => closeMutation.mutate()}
+              disabled={closeMutation.isPending || vote.status === "CLOSED" || vote.status === "SUPERSEDED"}
+              className="rounded-full bg-ember px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink disabled:cursor-not-allowed disabled:bg-ember/40"
+            >
+              {closeMutation.isPending ? "마감 중..." : "투표 마감"}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => closeMutation.mutate()}
-            disabled={closeMutation.isPending || vote.status === "CLOSED" || vote.status === "SUPERSEDED"}
-            className="rounded-full bg-ember px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink disabled:cursor-not-allowed disabled:bg-ember/40"
-          >
-            {closeMutation.isPending ? "마감 중..." : "투표 마감"}
-          </button>
-        </div>
 
-        {vote.aggregates ? (
-          <>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <Metric label="Participants" value={String(vote.aggregates.totalParticipants)} />
-              <Metric label="Responded" value={String(vote.aggregates.respondedParticipants)} />
-              <Metric label="Unresolved" value={String(vote.aggregates.unresolvedParticipants)} />
-            </div>
+          {vote.aggregates ? (
+            <>
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                <Metric label="Participants" value={String(vote.aggregates.totalParticipants)} />
+                <Metric label="Responded" value={String(vote.aggregates.respondedParticipants)} />
+                <Metric label="Unresolved" value={String(vote.aggregates.unresolvedParticipants)} />
+              </div>
 
-            <div className="mt-5 space-y-3">
-              {vote.aggregates.options.map((option) => (
-                <AggregateCard
-                  key={option.optionId}
-                  option={option}
-                  isLeading={leadingIds.has(option.optionId)}
-                />
-              ))}
-            </div>
+              <div className="mt-5 space-y-3">
+                {vote.aggregates.options.map((option) => (
+                  <AggregateCard
+                    key={option.optionId}
+                    option={option}
+                    isLeading={leadingIds.has(option.optionId)}
+                  />
+                ))}
+              </div>
 
-            <div className="mt-5 rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/72 p-4 text-sm text-ink/68">
-              조기 마감 가능 여부:{" "}
-              <strong>{vote.aggregates.canEarlyClose == null ? "판정 없음" : vote.aggregates.canEarlyClose ? "가능" : "아직 불가"}</strong>
+              <div className="mt-5 rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/72 p-4 text-sm text-ink/68">
+                조기 마감 가능 여부:{" "}
+                <strong>
+                  {vote.aggregates.canEarlyClose == null
+                    ? "판정 없음"
+                    : vote.aggregates.canEarlyClose
+                      ? "가능"
+                      : "아직 불가"}
+                </strong>
+              </div>
+            </>
+          ) : (
+            <div className="mt-5 rounded-[1.5rem] border border-dashed border-[color:var(--color-line)] bg-white/60 px-5 py-6 text-sm text-ink/58">
+              집계 정보가 아직 없습니다.
             </div>
-          </>
-        ) : (
-          <div className="mt-5 rounded-[1.5rem] border border-dashed border-[color:var(--color-line)] bg-white/60 px-5 py-6 text-sm text-ink/58">
-            집계 정보가 아직 없습니다.
-          </div>
-        )}
-      </section>
-    </div>
+          )}
+        </section>
+      </div>
+    </>
   );
 }
 

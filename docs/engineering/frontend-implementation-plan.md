@@ -130,7 +130,7 @@ Current status:
 Current status:
 
 - meeting-scoped SSE stream, reconnect handling, and event-driven cache invalidation are implemented
-- vote detail outside the meeting route tree does not yet share the same realtime bridge
+- vote detail page also opens the same meeting SSE stream after vote lookup and refreshes its query on realtime events
 
 ### 10. Role-Aware UX
 
