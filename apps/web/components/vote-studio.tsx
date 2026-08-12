@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ApiErrorPanel } from "@/components/api-error-panel";
+import { HostOnlyNotice } from "@/components/host-only-notice";
 import { getApiErrorMessage } from "@/lib/api/error-display";
 import { apiClient, type CreateVoteRequest, type CreateVoteOptionRequest } from "@/lib/api/client";
+import { useMeetingHostAccess } from "@/lib/session";
 
 const DEFAULT_OPTION_TEXT: Record<string, string> = {
   date_matrix: ["2026-09-12", "2026-09-19"].join("\n"),
@@ -15,6 +17,7 @@ const DEFAULT_OPTION_TEXT: Record<string, string> = {
 
 export function VoteStudio({ meetingId }: { meetingId: string }) {
   const router = useRouter();
+  const access = useMeetingHostAccess(meetingId);
   const meetingQuery = useQuery({
     queryKey: ["meeting", meetingId],
     queryFn: () => apiClient.getMeeting(meetingId),
@@ -102,6 +105,20 @@ export function VoteStudio({ meetingId }: { meetingId: string }) {
 
   if (meetingQuery.error || decisionsQuery.error || !meetingQuery.data) {
     return <ApiErrorPanel error={meetingQuery.error ?? decisionsQuery.error} resourceName="투표 생성 화면" />;
+  }
+
+  if (!access.isHost) {
+    return (
+      <section className="panel px-6 py-6">
+        <div className="eyebrow">Vote studio</div>
+        <h3 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+          새 투표 생성
+        </h3>
+        <div className="mt-5">
+          <HostOnlyNotice message="현재 프론트엔드에서는 회의 소유자에게만 투표 생성 액션을 노출합니다." />
+        </div>
+      </section>
+    );
   }
 
   return (

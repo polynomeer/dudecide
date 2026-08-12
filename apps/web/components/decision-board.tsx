@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiErrorPanel } from "@/components/api-error-panel";
+import { HostOnlyNotice } from "@/components/host-only-notice";
 import {
   type AddDecisionEvidenceRequest,
   apiClient,
@@ -15,12 +16,14 @@ import {
   type ReconsiderDecisionRequest,
 } from "@/lib/api/client";
 import { getApiErrorMessage } from "@/lib/api/error-display";
+import { useCurrentActor } from "@/lib/session";
 
 const DEFAULT_PROPOSED_RESULT = '{\n  "summary": ""\n}';
 const DEFAULT_CONFIRMED_RESULT = '{\n  "summary": ""\n}';
 
 export function DecisionBoard({ meetingId }: { meetingId: string }) {
   const queryClient = useQueryClient();
+  const actorQuery = useCurrentActor();
   const meetingQuery = useQuery({
     queryKey: ["meeting", meetingId],
     queryFn: () => apiClient.getMeeting(meetingId),
@@ -111,6 +114,8 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
     });
   }
 
+  const isHost = actorQuery.data?.userId === meetingQuery.data.ownerUserId;
+
   return (
     <div className="space-y-5">
       <section className="panel px-6 py-6">
@@ -130,86 +135,92 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
           </div>
         </div>
 
-        <form className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]" onSubmit={handleCreateDecisionSubmit}>
-          <div className="space-y-4">
+        {isHost ? (
+          <form className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]" onSubmit={handleCreateDecisionSubmit}>
+            <div className="space-y-4">
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
+                  Thread
+                </span>
+                <select
+                  value={createForm.threadId}
+                  onChange={(event) =>
+                    setCreateForm((current) => ({ ...current, threadId: event.target.value }))
+                  }
+                  className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                >
+                  {meetingQuery.data.threads.map((thread) => (
+                    <option key={thread.id} value={thread.id}>
+                      {thread.title} ({thread.category})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="grid gap-4 md:grid-cols-[0.7fr_1.3fr]">
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
+                    Type
+                  </span>
+                  <input
+                    value={createForm.decisionType}
+                    onChange={(event) =>
+                      setCreateForm((current) => ({ ...current, decisionType: event.target.value }))
+                    }
+                    className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                    placeholder="CONSENSUS"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
+                    Title
+                  </span>
+                  <input
+                    value={createForm.title}
+                    onChange={(event) =>
+                      setCreateForm((current) => ({ ...current, title: event.target.value }))
+                    }
+                    className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                    placeholder="예: 1차 출시 범위 확정"
+                    required
+                  />
+                </label>
+              </div>
+            </div>
+
             <label className="block">
               <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                Thread
+                Proposed result JSON
               </span>
-              <select
-                value={createForm.threadId}
+              <textarea
+                value={createForm.proposedResultText}
                 onChange={(event) =>
-                  setCreateForm((current) => ({ ...current, threadId: event.target.value }))
+                  setCreateForm((current) => ({ ...current, proposedResultText: event.target.value }))
                 }
-                className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
-              >
-                {meetingQuery.data.threads.map((thread) => (
-                  <option key={thread.id} value={thread.id}>
-                    {thread.title} ({thread.category})
-                  </option>
-                ))}
-              </select>
+                className="mt-2 min-h-[220px] w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-ink px-4 py-4 font-mono text-xs leading-6 text-mist outline-none transition focus:border-pine"
+                spellCheck={false}
+              />
             </label>
 
-            <div className="grid gap-4 md:grid-cols-[0.7fr_1.3fr]">
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                  Type
-                </span>
-                <input
-                  value={createForm.decisionType}
-                  onChange={(event) =>
-                    setCreateForm((current) => ({ ...current, decisionType: event.target.value }))
-                  }
-                  className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
-                  placeholder="CONSENSUS"
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                  Title
-                </span>
-                <input
-                  value={createForm.title}
-                  onChange={(event) =>
-                    setCreateForm((current) => ({ ...current, title: event.target.value }))
-                  }
-                  className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
-                  placeholder="예: 1차 출시 범위 확정"
-                  required
-                />
-              </label>
+            <div className="lg:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-[1.25rem] border border-[color:var(--color-line)] bg-white/58 px-4 py-3">
+              <div className="text-sm text-ink/62">
+                {createError ? <span className="text-ember">{createError}</span> : "결정 생성 시 목록과 상세 패널이 즉시 갱신됩니다."}
+              </div>
+              <button
+                type="submit"
+                disabled={createDecisionMutation.isPending || meetingQuery.data.threads.length === 0}
+                className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:bg-ink/40"
+              >
+                {createDecisionMutation.isPending ? "생성 중..." : "결정 생성"}
+              </button>
             </div>
+          </form>
+        ) : (
+          <div className="mt-5">
+            <HostOnlyNotice message="현재 프론트엔드에서는 회의 소유자에게만 결정 생성과 상태 전이 액션을 노출합니다." />
           </div>
-
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-              Proposed result JSON
-            </span>
-            <textarea
-              value={createForm.proposedResultText}
-              onChange={(event) =>
-                setCreateForm((current) => ({ ...current, proposedResultText: event.target.value }))
-              }
-              className="mt-2 min-h-[220px] w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-ink px-4 py-4 font-mono text-xs leading-6 text-mist outline-none transition focus:border-pine"
-              spellCheck={false}
-            />
-          </label>
-
-          <div className="lg:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-[1.25rem] border border-[color:var(--color-line)] bg-white/58 px-4 py-3">
-            <div className="text-sm text-ink/62">
-              {createError ? <span className="text-ember">{createError}</span> : "결정 생성 시 목록과 상세 패널이 즉시 갱신됩니다."}
-            </div>
-            <button
-              type="submit"
-              disabled={createDecisionMutation.isPending || meetingQuery.data.threads.length === 0}
-              className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:bg-ink/40"
-            >
-              {createDecisionMutation.isPending ? "생성 중..." : "결정 생성"}
-            </button>
-          </div>
-        </form>
+        )}
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
@@ -274,6 +285,7 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
               <DecisionDetailPanel
                 meetingId={meetingId}
                 decision={detailQuery.data}
+                canManage={isHost}
                 onMutated={(decisionId) => invalidateDecisionQueries(queryClient, meetingId, decisionId)}
               />
             )
@@ -289,10 +301,12 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
 function DecisionDetailPanel({
   meetingId,
   decision,
+  canManage,
   onMutated,
 }: {
   meetingId: string;
   decision: DecisionDetailResponse;
+  canManage: boolean;
   onMutated: (decisionId: string) => Promise<void>;
 }) {
   const threadMessagesQuery = useQuery({
@@ -468,58 +482,64 @@ function DecisionDetailPanel({
           </span>
         </div>
 
-        <div className="mt-5 grid gap-4 xl:grid-cols-2">
-          <form
-            className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
-            onSubmit={handleConfirmSubmit}
-          >
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-              Confirm decision
-            </div>
-            <textarea
-              value={confirmResultText}
-              onChange={(event) => setConfirmResultText(event.target.value)}
-              className="mt-3 min-h-[180px] w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-ink px-4 py-4 font-mono text-xs leading-6 text-mist outline-none transition focus:border-pine"
-              spellCheck={false}
-            />
-            <input
-              value={confirmReason}
-              onChange={(event) => setConfirmReason(event.target.value)}
-              className="mt-3 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/88 px-4 py-3 text-sm outline-none transition focus:border-pine"
-              placeholder="확정 사유 또는 비고"
-            />
-            <button
-              type="submit"
-              disabled={confirmMutation.isPending}
-              className="mt-3 rounded-full bg-pine px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink disabled:cursor-not-allowed disabled:bg-pine/40"
+        {canManage ? (
+          <div className="mt-5 grid gap-4 xl:grid-cols-2">
+            <form
+              className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
+              onSubmit={handleConfirmSubmit}
             >
-              {confirmMutation.isPending ? "확정 중..." : "결정 확정"}
-            </button>
-          </form>
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
+                Confirm decision
+              </div>
+              <textarea
+                value={confirmResultText}
+                onChange={(event) => setConfirmResultText(event.target.value)}
+                className="mt-3 min-h-[180px] w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-ink px-4 py-4 font-mono text-xs leading-6 text-mist outline-none transition focus:border-pine"
+                spellCheck={false}
+              />
+              <input
+                value={confirmReason}
+                onChange={(event) => setConfirmReason(event.target.value)}
+                className="mt-3 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/88 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                placeholder="확정 사유 또는 비고"
+              />
+              <button
+                type="submit"
+                disabled={confirmMutation.isPending}
+                className="mt-3 rounded-full bg-pine px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink disabled:cursor-not-allowed disabled:bg-pine/40"
+              >
+                {confirmMutation.isPending ? "확정 중..." : "결정 확정"}
+              </button>
+            </form>
 
-          <form
-            className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
-            onSubmit={handleReconsiderSubmit}
-          >
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-              Reconsider
-            </div>
-            <textarea
-              value={reconsiderReason}
-              onChange={(event) => setReconsiderReason(event.target.value)}
-              className="mt-3 min-h-[180px] w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/88 px-4 py-4 text-sm leading-6 outline-none transition focus:border-ember"
-              placeholder="재검토 사유를 남겨 주세요."
-              required
-            />
-            <button
-              type="submit"
-              disabled={reconsiderMutation.isPending}
-              className="mt-3 rounded-full bg-ember px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink disabled:cursor-not-allowed disabled:bg-ember/40"
+            <form
+              className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
+              onSubmit={handleReconsiderSubmit}
             >
-              {reconsiderMutation.isPending ? "전환 중..." : "재검토 요청"}
-            </button>
-          </form>
-        </div>
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
+                Reconsider
+              </div>
+              <textarea
+                value={reconsiderReason}
+                onChange={(event) => setReconsiderReason(event.target.value)}
+                className="mt-3 min-h-[180px] w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/88 px-4 py-4 text-sm leading-6 outline-none transition focus:border-ember"
+                placeholder="재검토 사유를 남겨 주세요."
+                required
+              />
+              <button
+                type="submit"
+                disabled={reconsiderMutation.isPending}
+                className="mt-3 rounded-full bg-ember px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink disabled:cursor-not-allowed disabled:bg-ember/40"
+              >
+                {reconsiderMutation.isPending ? "전환 중..." : "재검토 요청"}
+              </button>
+            </form>
+          </div>
+        ) : (
+          <div className="mt-5">
+            <HostOnlyNotice message="현재 프론트엔드에서는 회의 소유자에게만 결정 확정, 재검토, evidence 추가 액션을 노출합니다." />
+          </div>
+        )}
 
         {actionError ? <div className="mt-4 text-sm text-ember">{actionError}</div> : null}
       </section>
@@ -531,10 +551,11 @@ function DecisionDetailPanel({
           </h4>
           <span className="text-sm text-ink/55">{decision.evidence.length}건</span>
         </div>
-        <form
-          className="mt-4 rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
-          onSubmit={handleAddEvidenceSubmit}
-        >
+        {canManage ? (
+          <form
+            className="mt-4 rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
+            onSubmit={handleAddEvidenceSubmit}
+          >
           <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="space-y-4">
               <label className="block">
@@ -639,7 +660,8 @@ function DecisionDetailPanel({
               {addEvidenceMutation.isPending ? "추가 중..." : "Evidence 추가"}
             </button>
           </div>
-        </form>
+          </form>
+        ) : null}
         <div className="mt-4 space-y-3">
           {decision.evidence.length ? (
             decision.evidence.map((item) => (

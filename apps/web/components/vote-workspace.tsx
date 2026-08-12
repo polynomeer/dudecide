@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiErrorPanel } from "@/components/api-error-panel";
+import { HostOnlyNotice } from "@/components/host-only-notice";
 import { getApiErrorMessage } from "@/lib/api/error-display";
 import {
   apiClient,
@@ -11,6 +12,7 @@ import {
   type VoteResponseView,
 } from "@/lib/api/client";
 import { MeetingRealtimeBridge } from "@/components/meeting-realtime-bridge";
+import { useMeetingHostAccess } from "@/lib/session";
 
 const RESPONSE_CHOICES: Record<string, Array<{ value: string; label: string }>> = {
   date_matrix: [
@@ -109,6 +111,7 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
   }
 
   const vote = voteQuery.data;
+  const access = useMeetingHostAccess(vote.meetingId);
 
   return (
     <>
@@ -246,14 +249,16 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
                 집계 결과
               </h3>
             </div>
-            <button
-              type="button"
-              onClick={() => closeMutation.mutate()}
-              disabled={closeMutation.isPending || vote.status === "CLOSED" || vote.status === "SUPERSEDED"}
-              className="rounded-full bg-ember px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink disabled:cursor-not-allowed disabled:bg-ember/40"
-            >
-              {closeMutation.isPending ? "마감 중..." : "투표 마감"}
-            </button>
+            {access.isHost ? (
+              <button
+                type="button"
+                onClick={() => closeMutation.mutate()}
+                disabled={closeMutation.isPending || vote.status === "CLOSED" || vote.status === "SUPERSEDED"}
+                className="rounded-full bg-ember px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink disabled:cursor-not-allowed disabled:bg-ember/40"
+              >
+                {closeMutation.isPending ? "마감 중..." : "투표 마감"}
+              </button>
+            ) : null}
           </div>
 
           {vote.aggregates ? (
@@ -284,6 +289,9 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
                       : "아직 불가"}
                 </strong>
               </div>
+              {!access.isHost ? (
+                <HostOnlyNotice message="현재 프론트엔드에서는 회의 소유자에게만 투표 마감 액션을 노출합니다." />
+              ) : null}
             </>
           ) : (
             <div className="mt-5 rounded-[1.5rem] border border-dashed border-[color:var(--color-line)] bg-white/60 px-5 py-6 text-sm text-ink/58">

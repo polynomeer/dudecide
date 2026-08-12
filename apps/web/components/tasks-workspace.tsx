@@ -3,13 +3,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiErrorPanel } from "@/components/api-error-panel";
+import { HostOnlyNotice } from "@/components/host-only-notice";
 import { getApiErrorMessage } from "@/lib/api/error-display";
 import { apiClient } from "@/lib/api/client";
+import { useMeetingHostAccess } from "@/lib/session";
 
 const TASK_STATUSES = ["todo", "doing", "done"];
 
 export function TasksWorkspace({ meetingId }: { meetingId: string }) {
   const queryClient = useQueryClient();
+  const access = useMeetingHostAccess(meetingId);
   const tasksQuery = useQuery({
     queryKey: ["meeting-tasks", meetingId],
     queryFn: () => apiClient.listTasks(meetingId),
@@ -79,51 +82,57 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
           호스트 또는 코호스트가 후속 액션을 등록하고, 현재 상태를 `todo`, `doing`, `done`으로 관리할 수 있습니다.
         </p>
 
-        <form
-          className="mt-5 space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setErrorMessage(null);
-            createTaskMutation.mutate();
-          }}
-        >
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-              Title
-            </span>
-            <input
-              value={form.title}
-              onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
-              className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
-              placeholder="예: 숙소 후보 2곳 예산표 정리"
-              required
-            />
-          </label>
+        {access.isHost ? (
+          <form
+            className="mt-5 space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setErrorMessage(null);
+              createTaskMutation.mutate();
+            }}
+          >
+            <label className="block">
+              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
+                Title
+              </span>
+              <input
+                value={form.title}
+                onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                placeholder="예: 숙소 후보 2곳 예산표 정리"
+                required
+              />
+            </label>
 
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-              Due at
-            </span>
-            <input
-              type="datetime-local"
-              value={form.dueAt}
-              onChange={(event) => setForm((current) => ({ ...current, dueAt: event.target.value }))}
-              className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
-            />
-          </label>
+            <label className="block">
+              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
+                Due at
+              </span>
+              <input
+                type="datetime-local"
+                value={form.dueAt}
+                onChange={(event) => setForm((current) => ({ ...current, dueAt: event.target.value }))}
+                className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+              />
+            </label>
 
-          {errorMessage ? <div className="text-sm text-ember">{errorMessage}</div> : null}
+            {errorMessage ? <div className="text-sm text-ember">{errorMessage}</div> : null}
 
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={createTaskMutation.isPending}
-              className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:bg-ink/40"
-            >
-              {createTaskMutation.isPending ? "생성 중..." : "태스크 생성"}
-            </button>
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={createTaskMutation.isPending}
+                className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:bg-ink/40"
+              >
+                {createTaskMutation.isPending ? "생성 중..." : "태스크 생성"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="mt-5">
+            <HostOnlyNotice message="현재 프론트엔드에서는 회의 소유자에게만 태스크 생성과 상태 변경 액션을 노출합니다." />
           </div>
-        </form>
+        )}
       </section>
 
       <section className="panel px-6 py-6">
@@ -159,7 +168,7 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
                     onChange={(event) =>
                       updateTaskMutation.mutate({ taskId: task.id, status: event.target.value })
                     }
-                    disabled={updateTaskMutation.isPending}
+                    disabled={updateTaskMutation.isPending || !access.isHost}
                     className="rounded-full border border-[color:var(--color-line)] bg-white px-4 py-2 text-sm font-semibold outline-none transition focus:border-pine"
                   >
                     {TASK_STATUSES.map((status) => (

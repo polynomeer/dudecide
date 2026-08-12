@@ -142,7 +142,8 @@ Current status:
 Current status:
 
 - shared API error parsing and state-specific error messaging are implemented across core workspace screens
-- host-only action hiding and broader role-aware control disabling are not implemented yet
+- host-only action hiding is implemented with the current meeting owner check
+- dedicated `co_host` role exposure and broader role-aware control disabling are not implemented yet
 
 ### 11. Testing And Quality
 

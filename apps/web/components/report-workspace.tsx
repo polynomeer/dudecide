@@ -2,11 +2,14 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiErrorPanel } from "@/components/api-error-panel";
+import { HostOnlyNotice } from "@/components/host-only-notice";
 import { getApiErrorMessage } from "@/lib/api/error-display";
 import { apiClient } from "@/lib/api/client";
+import { useMeetingHostAccess } from "@/lib/session";
 
 export function ReportWorkspace({ meetingId }: { meetingId: string }) {
   const queryClient = useQueryClient();
+  const access = useMeetingHostAccess(meetingId);
   const reportQuery = useQuery({
     queryKey: ["meeting-report", meetingId],
     queryFn: () => apiClient.getLatestReport(meetingId),
@@ -55,15 +58,21 @@ export function ReportWorkspace({ meetingId }: { meetingId: string }) {
           </div>
         ) : null}
 
-        <div className="mt-5 flex justify-end">
-          <button
-            type="button"
-            onClick={() => refreshMutation.mutate()}
-            disabled={refreshMutation.isPending}
-            className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:bg-ink/40"
-          >
-            {refreshMutation.isPending ? "갱신 중..." : "리포트 새로고침"}
-          </button>
+        <div className="mt-5">
+          {access.isHost ? (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => refreshMutation.mutate()}
+                disabled={refreshMutation.isPending}
+                className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:bg-ink/40"
+              >
+                {refreshMutation.isPending ? "갱신 중..." : "리포트 새로고침"}
+              </button>
+            </div>
+          ) : (
+            <HostOnlyNotice message="현재 프론트엔드에서는 회의 소유자에게만 리포트 새로고침 액션을 노출합니다." />
+          )}
         </div>
       </section>
 
