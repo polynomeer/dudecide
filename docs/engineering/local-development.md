@@ -135,6 +135,17 @@ Optional API base URL:
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
 ```
 
+Default local CORS allowlist:
+
+- `http://localhost:3000`
+- `http://127.0.0.1:3000`
+
+Override if needed:
+
+```bash
+APP_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+```
+
 ## Unified Local Stack
 
 Start frontend and backend together from the repository root:
