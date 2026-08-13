@@ -7,8 +7,6 @@ spring:
     password: ${DB_PASSWORD:dudecide}
   flyway:
     enabled: true
-  jackson:
-    property-naming-strategy: SNAKE_CASE
 
 management:
   endpoints:
