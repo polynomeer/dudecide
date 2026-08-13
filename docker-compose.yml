@@ -17,7 +17,7 @@ services:
       retries: 20
 
   redis:
-    image: redis:8.0-alpine
+    image: redis:7.4.10-alpine
     container_name: dudecide-redis
     ports:
       - "6379:6379"
@@ -30,7 +30,7 @@ services:
       retries: 20
 
   minio:
-    image: minio/minio:RELEASE.2026-07-25T15-33-41Z
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: dudecide-minio
     command: server /data --console-address ":9001"
     environment:
