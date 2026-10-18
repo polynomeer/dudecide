@@ -137,7 +137,7 @@ Limits enforced on both sides: 3,000 messages, 90-day range, 2 MB request body, 
 
 ## Data Model
 
-New migration `V3__chat_import.sql`. Also update the hand-written H2 schema in `AppServicesIntegrationTest` and [`database-schema.md`](./database-schema.md).
+Implemented in [`V3__chat_import.sql`](../../backend/app/src/main/resources/db/migration/V3__chat_import.sql), the H2 schema in `AppServicesIntegrationTest`, and [`database-schema.md`](./database-schema.md). The shipped migration adds the foreign keys as named constraints and extra indexes on `message.import_id`, `chat_import.thread_id`, and `import_speaker.membership_id`.
 
 ```sql
 CREATE TYPE message_origin AS ENUM ('native', 'imported');
@@ -208,8 +208,6 @@ CREATE UNIQUE INDEX message_thread_content_hash_uk ON message (thread_id, conten
     WHERE content_hash IS NOT NULL;
 CREATE INDEX chat_import_meeting_idx ON chat_import (meeting_id, created_at DESC);
 CREATE INDEX chat_import_purge_idx ON chat_import (purge_at) WHERE purge_at IS NOT NULL;
-
-ALTER TYPE notification_type ADD VALUE 'import_ready';
 ```
 
 Notes:
@@ -217,7 +215,7 @@ Notes:
 - `message.created_at` holds the original `sentAt` for imported rows so ordering, search recency, and evidence timestamps stay correct.
 - `import_id ON DELETE CASCADE` on `message` plus the existing `decision_evidence.message_id ON DELETE CASCADE` and `task_item.source_message_id ON DELETE SET NULL` give the deletion behavior ADR 0005 requires.
 - One import thread per `(meeting, source_room_name)`; re-imports reuse it and its speakers.
-- `ALTER TYPE ... ADD VALUE` cannot run inside a transaction block on older PostgreSQL; keep it as the last statement and verify on the local stack.
+- The `import_ready` notification type is deferred: jOOQ `DDLDatabase` replays migrations on H2, which cannot run `ALTER TYPE ... ADD VALUE`. See Tooling Notes in [`database-schema.md`](./database-schema.md).
 
 ### Content Hash
 

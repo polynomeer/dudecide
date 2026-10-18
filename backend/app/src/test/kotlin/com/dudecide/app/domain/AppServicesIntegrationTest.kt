@@ -20,13 +20,19 @@ import com.dudecide.app.api.dto.UpdateMembershipRequest
 import com.dudecide.app.api.dto.AddDecisionEvidenceRequest
 import com.dudecide.app.api.dto.VoteSubmissionItem
 import com.dudecide.app.api.dto.VoteSubmissionRequest
+import com.dudecide.app.jooq.enums.ChatImportSource
 import com.dudecide.app.jooq.enums.DecisionStatus
 import com.dudecide.app.jooq.enums.MeetingRole
+import com.dudecide.app.jooq.enums.MessageOrigin
 import com.dudecide.app.jooq.enums.ThreadCategory
+import com.dudecide.app.jooq.tables.ChatImport.Companion.CHAT_IMPORT
 import com.dudecide.app.jooq.tables.Decision.Companion.DECISION
 import com.dudecide.app.jooq.tables.DecisionHistory.Companion.DECISION_HISTORY
+import com.dudecide.app.jooq.tables.ImportSpeaker.Companion.IMPORT_SPEAKER
 import com.dudecide.app.jooq.tables.InviteLink.Companion.INVITE_LINK
+import com.dudecide.app.jooq.tables.Meeting.Companion.MEETING
 import com.dudecide.app.jooq.tables.Membership.Companion.MEMBERSHIP
+import com.dudecide.app.jooq.tables.Message.Companion.MESSAGE
 import com.dudecide.app.jooq.tables.OutboxEvent.Companion.OUTBOX_EVENT
 import com.dudecide.app.jooq.tables.TopicThread.Companion.TOPIC_THREAD
 import com.dudecide.app.jooq.tables.Vote.Companion.VOTE
@@ -39,6 +45,7 @@ import org.jooq.JSON
 import org.jooq.SQLDialect
 import org.jooq.conf.RenderNameCase
 import org.jooq.conf.Settings
+import org.jooq.exception.DataAccessException
 import org.jooq.impl.DSL
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -51,6 +58,7 @@ import org.springframework.web.context.request.RequestContextHolder
 import org.springframework.web.context.request.ServletRequestAttributes
 import org.springframework.web.server.ResponseStatusException
 import java.io.StringReader
+import java.time.OffsetDateTime
 import java.util.UUID
 
 class AppServicesIntegrationTest {
@@ -502,6 +510,68 @@ class AppServicesIntegrationTest {
         }
     }
 
+    @Test
+    fun `imported messages enforce origin rules dedupe and cascade with their import`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(title = "Imported Trip", meetingType = "trip"),
+            )
+            val ownerId = requireNotNull(
+                context.dsl.select(MEETING.OWNER_USER_ID).from(MEETING).where(MEETING.ID.eq(meeting.id)).fetchOne(MEETING.OWNER_USER_ID),
+            )
+            val threadId = requireNotNull(
+                context.dsl.select(TOPIC_THREAD.ID).from(TOPIC_THREAD).where(TOPIC_THREAD.MEETING_ID.eq(meeting.id)).limit(1).fetchOne(TOPIC_THREAD.ID),
+            )
+            val importId = UUID.randomUUID()
+            val speakerId = UUID.randomUUID()
+            val now = OffsetDateTime.now()
+
+            context.dsl.insertInto(CHAT_IMPORT)
+                .set(CHAT_IMPORT.ID, importId)
+                .set(CHAT_IMPORT.MEETING_ID, meeting.id)
+                .set(CHAT_IMPORT.THREAD_ID, threadId)
+                .set(CHAT_IMPORT.UPLOADED_BY_USER_ID, ownerId)
+                .set(CHAT_IMPORT.SOURCE_TYPE, ChatImportSource.kakao_export)
+                .set(CHAT_IMPORT.SOURCE_FORMAT, "kakao_android")
+                .set(CHAT_IMPORT.RANGE_START, now.minusDays(1))
+                .set(CHAT_IMPORT.RANGE_END, now)
+                .set(CHAT_IMPORT.MESSAGE_COUNT, 1)
+                .set(CHAT_IMPORT.CONSENT_VERSION, "chat-import-consent-v1")
+                .execute()
+            context.dsl.insertInto(IMPORT_SPEAKER)
+                .set(IMPORT_SPEAKER.ID, speakerId)
+                .set(IMPORT_SPEAKER.MEETING_ID, meeting.id)
+                .set(IMPORT_SPEAKER.THREAD_ID, threadId)
+                .set(IMPORT_SPEAKER.DISPLAY_NAME, "Minji")
+                .set(IMPORT_SPEAKER.PSEUDONYM, "Participant A")
+                .execute()
+
+            val insertImported = {
+                context.dsl.insertInto(MESSAGE)
+                    .set(MESSAGE.THREAD_ID, threadId)
+                    .set(MESSAGE.BODY, "Let's go with the 18th")
+                    .set(MESSAGE.ORIGIN, MessageOrigin.imported)
+                    .set(MESSAGE.IMPORT_ID, importId)
+                    .set(MESSAGE.IMPORT_SPEAKER_ID, speakerId)
+                    .set(MESSAGE.CONTENT_HASH, "a".repeat(64))
+                    .execute()
+            }
+            insertImported()
+
+            assertThrows(DataAccessException::class.java) { insertImported() }
+            assertThrows(DataAccessException::class.java) {
+                context.dsl.insertInto(MESSAGE)
+                    .set(MESSAGE.THREAD_ID, threadId)
+                    .set(MESSAGE.BODY, "native message without sender")
+                    .execute()
+            }
+
+            context.dsl.deleteFrom(CHAT_IMPORT).where(CHAT_IMPORT.ID.eq(importId)).execute()
+
+            assertEquals(0, context.dsl.fetchCount(MESSAGE, MESSAGE.ORIGIN.eq(MessageOrigin.imported)))
+        }
+    }
+
     private fun testContext(): TestContext {
         val dataSource = JdbcDataSource().apply {
             setURL("jdbc:h2:mem:${UUID.randomUUID()};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1")
@@ -616,20 +686,82 @@ class AppServicesIntegrationTest {
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 last_activity_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                read_only BOOLEAN NOT NULL DEFAULT FALSE,
                 CONSTRAINT topic_thread_meeting_fk FOREIGN KEY (meeting_id) REFERENCES meeting(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE chat_import (
+                id UUID DEFAULT random_uuid() PRIMARY KEY,
+                meeting_id UUID NOT NULL,
+                thread_id UUID NOT NULL,
+                uploaded_by_user_id UUID NOT NULL,
+                source_type VARCHAR(64) NOT NULL,
+                source_format VARCHAR(64) NOT NULL,
+                source_room_name VARCHAR(200),
+                range_start TIMESTAMP WITH TIME ZONE NOT NULL,
+                range_end TIMESTAMP WITH TIME ZONE NOT NULL,
+                message_count INTEGER NOT NULL,
+                duplicate_count INTEGER NOT NULL DEFAULT 0,
+                status VARCHAR(64) NOT NULL DEFAULT 'submitted',
+                progress JSON NOT NULL DEFAULT JSON '{}',
+                result JSON,
+                stats JSON NOT NULL DEFAULT JSON '{}',
+                consent_version VARCHAR(64) NOT NULL,
+                prompt_version VARCHAR(64),
+                model_versions JSON NOT NULL DEFAULT JSON '{}',
+                failure_reason VARCHAR(200),
+                purge_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP WITH TIME ZONE,
+                CONSTRAINT chat_import_meeting_fk FOREIGN KEY (meeting_id) REFERENCES meeting(id) ON DELETE CASCADE,
+                CONSTRAINT chat_import_thread_fk FOREIGN KEY (thread_id) REFERENCES topic_thread(id) ON DELETE CASCADE,
+                CONSTRAINT chat_import_uploader_fk FOREIGN KEY (uploaded_by_user_id) REFERENCES app_user(id),
+                CONSTRAINT chat_import_range_ck CHECK (range_start <= range_end)
+            );
+
+            CREATE TABLE import_speaker (
+                id UUID DEFAULT random_uuid() PRIMARY KEY,
+                meeting_id UUID NOT NULL,
+                thread_id UUID NOT NULL,
+                display_name VARCHAR(120) NOT NULL,
+                pseudonym VARCHAR(32) NOT NULL,
+                membership_id UUID,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT import_speaker_meeting_fk FOREIGN KEY (meeting_id) REFERENCES meeting(id) ON DELETE CASCADE,
+                CONSTRAINT import_speaker_thread_fk FOREIGN KEY (thread_id) REFERENCES topic_thread(id) ON DELETE CASCADE,
+                CONSTRAINT import_speaker_membership_fk FOREIGN KEY (membership_id) REFERENCES membership(id) ON DELETE SET NULL,
+                CONSTRAINT import_speaker_thread_name_uk UNIQUE (thread_id, display_name),
+                CONSTRAINT import_speaker_thread_pseudonym_uk UNIQUE (thread_id, pseudonym)
             );
 
             CREATE TABLE message (
                 id UUID DEFAULT random_uuid() PRIMARY KEY,
                 thread_id UUID NOT NULL,
-                sender_user_id UUID NOT NULL,
+                sender_user_id UUID,
                 body TEXT NOT NULL,
                 attachments JSON NOT NULL DEFAULT JSON '[]',
                 ai_labels JSON NOT NULL DEFAULT JSON '{}',
                 created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 edited_at TIMESTAMP WITH TIME ZONE,
+                origin VARCHAR(64) NOT NULL DEFAULT 'native',
+                import_id UUID,
+                import_speaker_id UUID,
+                content_hash CHAR(64),
                 CONSTRAINT message_thread_fk FOREIGN KEY (thread_id) REFERENCES topic_thread(id) ON DELETE CASCADE,
-                CONSTRAINT message_sender_fk FOREIGN KEY (sender_user_id) REFERENCES app_user(id)
+                CONSTRAINT message_sender_fk FOREIGN KEY (sender_user_id) REFERENCES app_user(id),
+                CONSTRAINT message_import_fk FOREIGN KEY (import_id) REFERENCES chat_import(id) ON DELETE CASCADE,
+                CONSTRAINT message_import_speaker_fk FOREIGN KEY (import_speaker_id) REFERENCES import_speaker(id) ON DELETE CASCADE,
+                CONSTRAINT message_sender_origin_ck CHECK (
+                    (origin = 'native' AND sender_user_id IS NOT NULL AND import_speaker_id IS NULL)
+                    OR (
+                        origin = 'imported'
+                        AND sender_user_id IS NULL
+                        AND import_speaker_id IS NOT NULL
+                        AND import_id IS NOT NULL
+                        AND content_hash IS NOT NULL
+                    )
+                ),
+                CONSTRAINT message_thread_content_hash_uk UNIQUE (thread_id, content_hash)
             );
 
             CREATE TABLE decision (
