@@ -92,3 +92,4 @@ Likely next migrations:
 2. attachment normalization if file handling becomes richer
 3. settlement domain tables after MVP validation
 4. audit refinements for AI-generated artifacts
+5. chat import tables and imported message origin (`V3__chat_import.sql`, see [`chat-import-design.md`](./chat-import-design.md))

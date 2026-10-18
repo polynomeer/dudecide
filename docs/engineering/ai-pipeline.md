@@ -262,3 +262,7 @@ Store for each AI artifact:
 - generation timestamp
 
 This is required to debug trust failures later.
+
+## Batch Import Analysis
+
+Imported chat history is analyzed as a batch (prefilter, episode segmentation, map, reduce, deterministic status rules) rather than per message. See [`chat-import-design.md`](./chat-import-design.md).

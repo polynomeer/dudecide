@@ -1,6 +1,8 @@
 # Chat Import Planning
 
-Status: Proposed (2026-10-18). Extends [`dudecide-codex-prd.md`](./dudecide-codex-prd.md); does not change the existing exclusion of KakaoTalk crawling or unofficial API sync.
+Status: Accepted (2026-10-18). Extends [`dudecide-codex-prd.md`](./dudecide-codex-prd.md); does not change the existing exclusion of KakaoTalk crawling or unofficial API sync.
+
+Policy: [ADR 0005](../adr/0005-user-initiated-chat-import.md). Technical design: [`chat-import-design.md`](../engineering/chat-import-design.md).
 
 ## Why This Matters
 
@@ -99,10 +101,10 @@ Rules:
 - **Pseudonymize for the model.** Speakers are sent to the LLM as `Speaker A`, `Speaker B`; names are re-attached on our side.
 - **Retention.** Imported messages live only as long as the meeting. Guest imports without a meeting are purged after 7 days. The uploader can delete an import at any time, which removes its messages and any evidence that depends on them.
 - **No training use** of imported content; disclose the LLM provider and cross-border processing in the privacy policy.
-- **Visibility.** The shared report hides quotes from unmapped speakers by default until members join, or shows them pseudonymized. Decide in usability testing.
+- **Visibility.** The shared link is an invite link. Before joining, it shows item titles and status only, no quotes. After joining, quotes show real names only for speakers who are mapped to a member; others stay pseudonymized (see Product Decisions).
 - **Legal review** under the Personal Information Protection Act before public launch, especially for the guest flow and the share link.
 
-An ADR should record "user-initiated import only, client-side parsing, masking, retention" once the plan is accepted.
+These rules are recorded in [ADR 0005](../adr/0005-user-initiated-chat-import.md).
 
 ## Technical Design Sketch
 
@@ -165,8 +167,9 @@ Build a labeled set of 30+ synthetic and consented Korean group chats with gold 
 ### Phase 0: Demand Validation (1-2 weeks)
 
 - Landing CTA "Paste your KakaoTalk chat to get a decision summary" plus a minimal paste-only flow, single LLM call, capped at a few hundred messages, no persistence.
+- Share in Phase 0 means copying a plain-text summary back to the chat (no meeting, no link).
 - Measure: CTA click rate, paste completion rate, "this is accurate" rating, share rate.
-- Go/no-go: if paste completion and share rate are weak, stop before building the full pipeline.
+- Go/no-go thresholds are in Product Decisions below; below them, stop before building the full pipeline.
 
 ### Phase 1: Import MVP
 
@@ -213,9 +216,44 @@ Build a labeled set of 30+ synthetic and consented Korean group chats with gold 
 - **LLM cost** on very long chats. Mitigate with prefiltering, range defaults, and caps.
 - **One-shot usage.** Users may import once and never return. Re-import and open-item voting are the retention hooks; watch the 14-day re-import metric.
 
+## Product Decisions
+
+Recommended answers to the earlier open questions, accepted for Phase 0 and Phase 1. Revisit with Phase 0 data.
+
+### Guest access to the report
+
+- The full report is visible to a guest session without sign-up. Value first; the existing guest session is enough.
+- Converting to a meeting and sharing back require only the same guest session. The uploader becomes the meeting `host`.
+- Account linking (real sign-in) is prompted after conversion, when the user has something to lose.
+
+### Quotes in the shared link
+
+- The share link is the meeting invite link with a report preview, not a public report URL.
+- Before joining: item titles, statuses, and counts ("2 items need your vote"). No quotes, no names.
+- After joining: evidence quotes are visible to members. A speaker's real display name is shown only when that speaker is mapped to a member; otherwise the pseudonym (`Participant B`) is shown.
+- Joining members are asked "Which of these is you?" and can claim one unmapped speaker. The host can correct mappings.
+
+### Imported messages in the UI
+
+- Imported messages live in one read-only thread per source room ("Imported: <room name>"), collapsed by default.
+- Their main surface is evidence behind decisions, open items, and tasks. Imported messages cannot be edited or replied to.
+
+### Usage caps (free tier)
+
+- Range: up to 90 days per import, default 30 days or since the last import.
+- Size: up to 3,000 messages after prefiltering per import.
+- Rate: 3 imports per actor per day, 10 per meeting per day.
+- Over the cap, the wizard asks the user to narrow the range instead of failing.
+
+### Phase 0 go/no-go
+
+Proceed to Phase 1 when, over at least 100 paste starts:
+
+- paste-to-report completion rate is at least 60%
+- "this is accurate" rating is at least 70%
+- report share rate is at least 25%
+
 ## Open Questions
 
-- Should the guest flow show a full report before sign-up, or gate conversion behind sign-up?
-- How much quoting from non-members is acceptable in a shared report link?
-- Should imported messages be visible in the thread UI, or only as evidence behind decisions?
-- Which free usage cap keeps cost sustainable without hurting first impressions?
+- Should a re-import by a non-host member be allowed, or host and co-host only? Default: host and co-host only.
+- Is 7-day guest retention short enough for the legal review?
