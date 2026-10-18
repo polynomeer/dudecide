@@ -6,7 +6,7 @@ Use this folder for implementation-facing documentation.
 
 - local setup
 - API contracts
-- Codex workflows and task orchestration
+- Codex and Claude Code workflows and task orchestration
 - data model notes
 - deployment or operations runbooks
 - testing strategy
@@ -16,6 +16,7 @@ When code is added to the repository, create focused docs here instead of overlo
 ## Current Files
 
 - [`codex-workflows.md`](./codex-workflows.md): repository conventions for subagents, prompt reuse, and work-unit commits
+- [`claude-code-workflows.md`](./claude-code-workflows.md): Claude Code entry point, settings, subagents, and slash commands
 - [`tech-stack.md`](./tech-stack.md): concrete implementation stack choices for the MVP
 - [`architecture-overview.md`](./architecture-overview.md): target MVP architecture and subsystem boundaries
 - [`frontend-implementation-plan.md`](./frontend-implementation-plan.md): frontend scope, route design, and phased delivery order
