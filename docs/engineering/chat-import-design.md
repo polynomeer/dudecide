@@ -294,8 +294,8 @@ flowchart LR
     val --> notify["SSE + notification"]
 ```
 
-1. **Prefilter (`shared`).** Exclude pure laughter and emoji, single-token reactions, and messages under 2 visible characters from LLM input; keep them as counts on the episode.
-2. **Segment (`shared`).** New episode on a gap of 3 hours or more, or a date change with a gap of 1 hour or more. Split episodes over 150 messages at the largest internal gap. Merge episodes under 5 messages into the neighbor.
+1. **Prefilter (`shared`, `ChatPrefilter`).** Exclude pure laughter, emoji or punctuation only messages, and messages under 2 visible characters from LLM input; keep them as counts on the episode. Stance reactions (`ㅇㅇ`, `응`, `콜`, `ㄱㄱ`, `ㄴㄴ`, `반대`) are always kept because they are support or opposition evidence.
+2. **Segment (`shared`, `EpisodeSegmenter`).** New episode on a gap of 3 hours or more, or a date change with a gap of 1 hour or more. Split episodes over 150 messages at the largest internal gap. Merge episodes under 5 messages into the neighbor with the smaller time gap. Order: boundary split, small merge, then oversized split, where the split point keeps both sides at 5+ messages.
 3. **Map (LLM, fast tier).** Per episode, return per-message labels and local subjects. Episodes run in parallel with a concurrency cap of 4.
 4. **Reduce (LLM, strong tier).** Input: all local subjects with their message ids and timestamps, never full message text beyond quotes already selected. Output: global subjects with an ordered event list.
 5. **Rules (`shared`).** Turn global subjects into result items (below).
@@ -334,14 +334,16 @@ Reduce output: `subjects` with a stable `subjectKey`, merged `events` ordered by
 
 ### Status Inference Rules
 
-Implemented as pure functions in `backend/shared/.../chatimport/SubjectStatusRules.kt`. Per subject, per option:
+Implemented in `backend/shared/src/main/kotlin/com/dudecide/shared/chatimport/SubjectStatusRules.kt`. Per subject, per option:
 
+- **Option attribution:** an event without an option applies to the current option, set by the latest `proposal`, `support`, or `confirmation` that names one. `opposition` naming an option does not move focus.
+- **Stance:** per `(speaker, option)`, the latest of `proposal` / `support` / `confirmation` (supporter), `opposition` (objector), or `withdrawal` (neutral). `condition` is evidence only and does not change stance. A speaker may support several options; moving on is expressed through `superseded`.
 - **Active speakers** of a subject: distinct speakers with at least one event in it.
 - **Leading option:** most distinct supporters (proposer counts as a supporter); ties broken by latest support.
 - **`likely_decided`** when the leading option has a `confirmation` event, or support from at least 2 distinct speakers and at least half of active speakers; **and** no `opposition` or competing `proposal` on that subject after the last confirmation or support.
 - **`superseded`** for an option when a later option becomes leading; kept as evidence on the item.
 - **`contested`** when two or more options each have 2+ supporters, or an `opposition` follows the leading option's last support.
-- **`abandoned`** when a subject has only a proposal and no events within 72 hours and none after. Shown in the report, not offered for apply.
+- **`abandoned`** when a subject has only proposals from a single speaker and the last one is at least 72 hours before the import range end. Shown in the report, not offered for apply.
 - Otherwise **`open`** (discussed, not decided).
 - Confidence is the minimum of LLM label confidence on the deciding events, capped at 0.6 for `likely_decided` items with no explicit `confirmation`.
 - Ambiguity bias: when rules disagree, prefer `contested` over `likely_decided`.
