@@ -516,49 +516,14 @@ class AppServicesIntegrationTest {
             val meeting = context.meetingService.createMeeting(
                 CreateMeetingRequest(title = "Imported Trip", meetingType = "trip"),
             )
-            val ownerId = requireNotNull(
-                context.dsl.select(MEETING.OWNER_USER_ID).from(MEETING).where(MEETING.ID.eq(meeting.id)).fetchOne(MEETING.OWNER_USER_ID),
-            )
-            val threadId = requireNotNull(
-                context.dsl.select(TOPIC_THREAD.ID).from(TOPIC_THREAD).where(TOPIC_THREAD.MEETING_ID.eq(meeting.id)).limit(1).fetchOne(TOPIC_THREAD.ID),
-            )
-            val importId = UUID.randomUUID()
-            val speakerId = UUID.randomUUID()
-            val now = OffsetDateTime.now()
+            val threadId = context.findThreadId(meeting.id, ThreadCategory.free_chat)
+            val seeded = context.seedImport(meeting.id, threadId, context.ownerId(meeting.id))
 
-            context.dsl.insertInto(CHAT_IMPORT)
-                .set(CHAT_IMPORT.ID, importId)
-                .set(CHAT_IMPORT.MEETING_ID, meeting.id)
-                .set(CHAT_IMPORT.THREAD_ID, threadId)
-                .set(CHAT_IMPORT.UPLOADED_BY_USER_ID, ownerId)
-                .set(CHAT_IMPORT.SOURCE_TYPE, ChatImportSource.kakao_export)
-                .set(CHAT_IMPORT.SOURCE_FORMAT, "kakao_android")
-                .set(CHAT_IMPORT.RANGE_START, now.minusDays(1))
-                .set(CHAT_IMPORT.RANGE_END, now)
-                .set(CHAT_IMPORT.MESSAGE_COUNT, 1)
-                .set(CHAT_IMPORT.CONSENT_VERSION, "chat-import-consent-v1")
-                .execute()
-            context.dsl.insertInto(IMPORT_SPEAKER)
-                .set(IMPORT_SPEAKER.ID, speakerId)
-                .set(IMPORT_SPEAKER.MEETING_ID, meeting.id)
-                .set(IMPORT_SPEAKER.THREAD_ID, threadId)
-                .set(IMPORT_SPEAKER.DISPLAY_NAME, "Minji")
-                .set(IMPORT_SPEAKER.PSEUDONYM, "Participant A")
-                .execute()
+            context.insertImportedMessage(seeded, "Let's go with the 18th", "a".repeat(64))
 
-            val insertImported = {
-                context.dsl.insertInto(MESSAGE)
-                    .set(MESSAGE.THREAD_ID, threadId)
-                    .set(MESSAGE.BODY, "Let's go with the 18th")
-                    .set(MESSAGE.ORIGIN, MessageOrigin.imported)
-                    .set(MESSAGE.IMPORT_ID, importId)
-                    .set(MESSAGE.IMPORT_SPEAKER_ID, speakerId)
-                    .set(MESSAGE.CONTENT_HASH, "a".repeat(64))
-                    .execute()
+            assertThrows(DataAccessException::class.java) {
+                context.insertImportedMessage(seeded, "Let's go with the 18th", "a".repeat(64))
             }
-            insertImported()
-
-            assertThrows(DataAccessException::class.java) { insertImported() }
             assertThrows(DataAccessException::class.java) {
                 context.dsl.insertInto(MESSAGE)
                     .set(MESSAGE.THREAD_ID, threadId)
@@ -566,9 +531,85 @@ class AppServicesIntegrationTest {
                     .execute()
             }
 
-            context.dsl.deleteFrom(CHAT_IMPORT).where(CHAT_IMPORT.ID.eq(importId)).execute()
+            context.dsl.deleteFrom(CHAT_IMPORT).where(CHAT_IMPORT.ID.eq(seeded.importId)).execute()
 
             assertEquals(0, context.dsl.fetchCount(MESSAGE, MESSAGE.ORIGIN.eq(MessageOrigin.imported)))
+        }
+    }
+
+    @Test
+    fun `imported speaker label follows mapping and uploader visibility`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(title = "Speaker Labels", meetingType = "trip"),
+            )
+            val ownerId = context.ownerId(meeting.id)
+            val threadId = context.findThreadId(meeting.id, ThreadCategory.free_chat)
+            val seeded = context.seedImport(meeting.id, threadId, ownerId)
+            context.insertImportedMessage(seeded, "Aewol works for me", "b".repeat(64))
+            val participantId = context.addParticipant(meeting.id, "Participant User")
+
+            val uploaderView = context.messageService.listMessages(threadId).single()
+            assertEquals("imported", uploaderView.origin)
+            assertEquals(null, uploaderView.senderUserId)
+            assertEquals("Minji", uploaderView.speaker.displayName)
+            assertEquals(seeded.speakerId, uploaderView.speaker.importSpeakerId)
+            assertEquals(false, uploaderView.speaker.pseudonymized)
+
+            val participantView = withActor(participantId, "Participant User") {
+                context.messageService.listMessages(threadId).single()
+            }
+            assertEquals("Participant A", participantView.speaker.displayName)
+            assertEquals(true, participantView.speaker.pseudonymized)
+
+            val membershipId = context.dsl.select(MEMBERSHIP.ID)
+                .from(MEMBERSHIP)
+                .where(MEMBERSHIP.USER_ID.eq(participantId))
+                .fetchOne(MEMBERSHIP.ID)
+            context.dsl.update(IMPORT_SPEAKER)
+                .set(IMPORT_SPEAKER.MEMBERSHIP_ID, membershipId)
+                .where(IMPORT_SPEAKER.ID.eq(seeded.speakerId))
+                .execute()
+
+            val mappedView = withActor(participantId, "Participant User") {
+                context.messageService.listMessages(threadId).single()
+            }
+            assertEquals("Participant User", mappedView.speaker.displayName)
+            assertEquals(participantId, mappedView.speaker.userId)
+            assertEquals(false, mappedView.speaker.pseudonymized)
+        }
+    }
+
+    @Test
+    fun `imported messages cannot be edited and read only threads reject posts`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(title = "Read Only Import", meetingType = "trip"),
+            )
+            val ownerId = context.ownerId(meeting.id)
+            val threadId = context.findThreadId(meeting.id, ThreadCategory.free_chat)
+            val seeded = context.seedImport(meeting.id, threadId, ownerId)
+            val importedMessageId = context.insertImportedMessage(seeded, "Book the ferry", "c".repeat(64))
+
+            val editError = assertThrows(ResponseStatusException::class.java) {
+                context.messageService.updateMessage(importedMessageId, UpdateMessageRequest(body = "edited"))
+            }
+            assertEquals(422, editError.statusCode.value())
+
+            val nativeMessage = context.messageService.postMessage(threadId, CreateMessageRequest(body = "Native note"))
+            assertEquals("native", nativeMessage.origin)
+            assertEquals(ownerId, nativeMessage.speaker.userId)
+
+            context.dsl.update(TOPIC_THREAD)
+                .set(TOPIC_THREAD.READ_ONLY, true)
+                .where(TOPIC_THREAD.ID.eq(threadId))
+                .execute()
+
+            val postError = assertThrows(ResponseStatusException::class.java) {
+                context.messageService.postMessage(threadId, CreateMessageRequest(body = "Should fail"))
+            }
+            assertEquals(422, postError.statusCode.value())
+            assertTrue(context.meetingService.getMeeting(meeting.id).threads.single { it.id == threadId }.readOnly)
         }
     }
 
@@ -899,6 +940,8 @@ class AppServicesIntegrationTest {
         """.trimIndent()
     }
 
+    private data class SeededImport(val threadId: UUID, val importId: UUID, val speakerId: UUID)
+
     private data class TestContext(
         val dsl: DSLContext,
         val objectMapper: ObjectMapper,
@@ -921,6 +964,52 @@ class AppServicesIntegrationTest {
                 .and(TOPIC_THREAD.CATEGORY.eq(category))
                 .fetchOne(TOPIC_THREAD.ID)
                 ?: error("thread not found for $category")
+
+        fun ownerId(meetingId: UUID): UUID =
+            dsl.select(MEETING.OWNER_USER_ID)
+                .from(MEETING)
+                .where(MEETING.ID.eq(meetingId))
+                .fetchOne(MEETING.OWNER_USER_ID)
+                ?: error("meeting not found")
+
+        fun seedImport(meetingId: UUID, threadId: UUID, uploaderId: UUID): SeededImport {
+            val seeded = SeededImport(threadId = threadId, importId = UUID.randomUUID(), speakerId = UUID.randomUUID())
+            val now = OffsetDateTime.now()
+            dsl.insertInto(CHAT_IMPORT)
+                .set(CHAT_IMPORT.ID, seeded.importId)
+                .set(CHAT_IMPORT.MEETING_ID, meetingId)
+                .set(CHAT_IMPORT.THREAD_ID, threadId)
+                .set(CHAT_IMPORT.UPLOADED_BY_USER_ID, uploaderId)
+                .set(CHAT_IMPORT.SOURCE_TYPE, ChatImportSource.kakao_export)
+                .set(CHAT_IMPORT.SOURCE_FORMAT, "kakao_android")
+                .set(CHAT_IMPORT.RANGE_START, now.minusDays(1))
+                .set(CHAT_IMPORT.RANGE_END, now)
+                .set(CHAT_IMPORT.MESSAGE_COUNT, 1)
+                .set(CHAT_IMPORT.CONSENT_VERSION, "chat-import-consent-v1")
+                .execute()
+            dsl.insertInto(IMPORT_SPEAKER)
+                .set(IMPORT_SPEAKER.ID, seeded.speakerId)
+                .set(IMPORT_SPEAKER.MEETING_ID, meetingId)
+                .set(IMPORT_SPEAKER.THREAD_ID, threadId)
+                .set(IMPORT_SPEAKER.DISPLAY_NAME, "Minji")
+                .set(IMPORT_SPEAKER.PSEUDONYM, "Participant A")
+                .execute()
+            return seeded
+        }
+
+        fun insertImportedMessage(seeded: SeededImport, body: String, contentHash: String): UUID {
+            val messageId = UUID.randomUUID()
+            dsl.insertInto(MESSAGE)
+                .set(MESSAGE.ID, messageId)
+                .set(MESSAGE.THREAD_ID, seeded.threadId)
+                .set(MESSAGE.BODY, body)
+                .set(MESSAGE.ORIGIN, MessageOrigin.imported)
+                .set(MESSAGE.IMPORT_ID, seeded.importId)
+                .set(MESSAGE.IMPORT_SPEAKER_ID, seeded.speakerId)
+                .set(MESSAGE.CONTENT_HASH, contentHash)
+                .execute()
+            return messageId
+        }
 
         fun addParticipant(meetingId: UUID, displayName: String): UUID {
             val userId = UUID.randomUUID()

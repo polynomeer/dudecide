@@ -120,6 +120,7 @@ class MeetingService(
                     messageCount = dsl.fetchCount(com.dudecide.app.jooq.tables.Message.Companion.MESSAGE, com.dudecide.app.jooq.tables.Message.Companion.MESSAGE.THREAD_ID.eq(threadId)),
                     decisionCount = dsl.fetchCount(DECISION, DECISION.THREAD_ID.eq(threadId)),
                     openVoteCount = dsl.fetchCount(VOTE, VOTE.THREAD_ID.eq(threadId).and(VOTE.STATUS.eq(VoteStatus.open))),
+                    readOnly = thread.readOnly == true,
                 )
             }
 

@@ -47,6 +47,7 @@ export type ThreadSummaryView = {
   decisionCount: number;
   openVoteCount: number;
   lastActivityAt?: string | null;
+  readOnly?: boolean;
 };
 
 export type MeetingDetailResponse = {
@@ -63,10 +64,19 @@ export type MeetingDetailResponse = {
   threads: ThreadSummaryView[];
 };
 
+export type MessageSpeakerView = {
+  displayName: string;
+  userId?: string | null;
+  importSpeakerId?: string | null;
+  pseudonymized: boolean;
+};
+
 export type MessageView = {
   id: string;
   threadId: string;
-  senderUserId: string;
+  senderUserId: string | null;
+  origin: "native" | "imported";
+  speaker: MessageSpeakerView;
   body: string;
   attachments: Array<Record<string, unknown>>;
   aiLabels: Record<string, unknown>;

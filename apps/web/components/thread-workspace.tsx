@@ -152,7 +152,7 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
               </div>
             ) : (
               messages.map((message) => {
-                const isOwnMessage = actorQuery.data?.userId === message.senderUserId;
+                const isOwnMessage = message.senderUserId !== null && actorQuery.data?.userId === message.senderUserId;
                 return (
                   <article
                     key={message.id}
@@ -164,7 +164,7 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
                     ].join(" ")}
                   >
                     <div className="flex items-center justify-between gap-4 text-xs uppercase tracking-[0.16em] text-ink/45">
-                      <span>{isOwnMessage ? "You" : message.senderUserId.slice(0, 8)}</span>
+                      <span>{isOwnMessage ? "You" : message.speaker.displayName}</span>
                       <span>{formatDateTime(message.createdAt)}</span>
                     </div>
                     <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink/86">{message.body}</p>

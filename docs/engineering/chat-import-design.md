@@ -223,6 +223,8 @@ Notes:
 
 ### Existing Code Impact
 
+Implemented in step 3, except import thread `sort_order`, which step 4 sets when it creates the thread:
+
 - `MeetingAccessService` (message edit permission) reads `SENDER_USER_ID` with `requireNotNull`: imported messages must be rejected as not editable before that check.
 - `MessageService` create path stays `native`; posting into a `read_only` thread returns `422`.
 - Message views gain `origin`, `speaker` (display name or pseudonym per visibility rules), and nullable `senderUserId`.

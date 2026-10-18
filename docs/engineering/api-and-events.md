@@ -93,6 +93,7 @@ This document defines the MVP external API surface and internal async events.
 `GET /api/v1/meetings/{meetingId}/threads`
 
 - list threads with badges and activity state
+- each thread reports `readOnly`; import threads are read-only
 - requires meeting membership
 
 `POST /api/v1/meetings/{meetingId}/threads`
@@ -106,18 +107,22 @@ This document defines the MVP external API surface and internal async events.
 - supports `before=<ISO-8601 timestamp>` cursor pagination
 - supports `limit=<1-100>` with default `50`
 - returns each page in chronological order
+- each message carries `origin` (`native` or `imported`) and a resolved `speaker`; `senderUserId` is null for imported messages
+- imported speaker label: member display name when the speaker is mapped, the exported name for the import uploader, otherwise the pseudonym with `pseudonymized = true`
 - requires meeting membership
 
 `POST /api/v1/threads/{threadId}/messages`
 
 - post message
 - writes `MessageCreated` into the outbox for downstream AI and notification workers
+- returns `422` when the thread is read-only
 - requires meeting membership
 
 `PATCH /api/v1/messages/{messageId}`
 
 - edit message
 - allowed for the original sender, `host`, or `co_host`
+- returns `422` for imported messages
 
 ### Decisions
 

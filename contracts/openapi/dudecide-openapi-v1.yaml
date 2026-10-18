@@ -392,6 +392,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageView'
+        '422':
+          description: Thread is read-only
   /messages/{messageId}:
     patch:
       operationId: updateMessage
@@ -416,6 +418,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageView'
+        '422':
+          description: Imported messages cannot be edited
   /tasks/{taskId}:
     patch:
       operationId: updateTask
@@ -869,6 +873,9 @@ components:
           type: integer
         openVoteCount:
           type: integer
+        readOnly:
+          type: boolean
+          description: Import threads are read-only and reject new messages.
     CreateThreadRequest:
       type: object
       required:
@@ -903,12 +910,35 @@ components:
           items:
             type: object
             additionalProperties: true
+    MessageSpeakerView:
+      type: object
+      required:
+        - displayName
+        - pseudonymized
+      properties:
+        displayName:
+          type: string
+          description: Member display name, exported name (uploader only), or pseudonym.
+        userId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        importSpeakerId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        pseudonymized:
+          type: boolean
     MessageView:
       type: object
       required:
         - id
         - threadId
         - senderUserId
+        - origin
+        - speaker
         - body
         - attachments
         - aiLabels
@@ -921,8 +951,18 @@ components:
           type: string
           format: uuid
         senderUserId:
-          type: string
+          type:
+            - string
+            - 'null'
           format: uuid
+          description: Null for imported messages.
+        origin:
+          type: string
+          enum:
+            - native
+            - imported
+        speaker:
+          $ref: '#/components/schemas/MessageSpeakerView'
         body:
           type: string
         attachments:
