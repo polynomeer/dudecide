@@ -1,9 +1,11 @@
 package com.dudecide.app.domain.chatimport
 
 import com.dudecide.app.api.dto.ChatImportCreatedResponse
+import com.dudecide.app.api.dto.ChatImportDeletionImpact
 import com.dudecide.app.api.dto.ChatImportView
 import com.dudecide.app.api.dto.CreateChatImportRequest
 import com.dudecide.app.api.dto.CreateMeetingRequest
+import com.dudecide.app.api.dto.DeleteChatImportResponse
 import com.dudecide.app.domain.EventStreamService
 import com.dudecide.app.domain.LocalActorProvider
 import com.dudecide.app.domain.MeetingAccessService
@@ -11,9 +13,12 @@ import com.dudecide.app.domain.MeetingService
 import com.dudecide.app.domain.OutboxService
 import com.dudecide.app.jooq.enums.ChatImportSource
 import com.dudecide.app.jooq.enums.ChatImportStatus
+import com.dudecide.app.jooq.enums.DecisionStatus
 import com.dudecide.app.jooq.enums.MessageOrigin
 import com.dudecide.app.jooq.enums.ThreadCategory
 import com.dudecide.app.jooq.tables.ChatImport.Companion.CHAT_IMPORT
+import com.dudecide.app.jooq.tables.Decision.Companion.DECISION
+import com.dudecide.app.jooq.tables.DecisionEvidence.Companion.DECISION_EVIDENCE
 import com.dudecide.app.jooq.tables.ImportSpeaker.Companion.IMPORT_SPEAKER
 import com.dudecide.app.jooq.tables.Membership.Companion.MEMBERSHIP
 import com.dudecide.app.jooq.tables.Message.Companion.MESSAGE
@@ -70,13 +75,67 @@ class ChatImportService(
     }
 
     @Transactional(readOnly = true)
-    fun getImport(importId: UUID): ChatImportView {
+    fun getImport(importId: UUID, includeDeletionImpact: Boolean = false): ChatImportView {
         val record = dsl.selectFrom(CHAT_IMPORT)
             .where(CHAT_IMPORT.ID.eq(importId))
             .fetchOne()
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "import not found")
         meetingAccessService.requireMeetingMember(requireNotNull(record.meetingId))
-        return toView(record)
+        val view = toView(record)
+        return if (includeDeletionImpact) view.copy(deletionImpact = deletionImpact(importId)) else view
+    }
+
+    /**
+     * Removes the import's messages; evidence built on them cascades away and task sources are cleared.
+     * The import row stays as a tombstone (`deleted`, no result) for metrics.
+     */
+    @Transactional
+    fun deleteImport(importId: UUID): DeleteChatImportResponse {
+        val record = dsl.selectFrom(CHAT_IMPORT).where(CHAT_IMPORT.ID.eq(importId)).forUpdate().fetchOne()
+            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "import not found")
+        val meetingId = requireNotNull(record.meetingId)
+        val actorId = meetingAccessService.requireMeetingMember(meetingId)
+        if (actorId != record.uploadedByUserId) {
+            meetingAccessService.requireMeetingHostOrCoHost(meetingId)
+        }
+        if (record.status == ChatImportStatus.deleted) {
+            return DeleteChatImportResponse(importId, 0, 0, 0)
+        }
+
+        val impact = deletionImpact(importId)
+        dsl.deleteFrom(MESSAGE).where(MESSAGE.IMPORT_ID.eq(importId)).execute()
+        dsl.update(CHAT_IMPORT)
+            .set(CHAT_IMPORT.STATUS, ChatImportStatus.deleted)
+            .setNull(CHAT_IMPORT.RESULT)
+            .set(CHAT_IMPORT.PROGRESS, JSON.valueOf("{}"))
+            .setNull(CHAT_IMPORT.PURGE_AT)
+            .where(CHAT_IMPORT.ID.eq(importId))
+            .execute()
+
+        outboxService.append(
+            aggregateType = "chat_import",
+            aggregateId = importId,
+            eventType = "ChatImportDeleted",
+            payload = mapOf(
+                "importId" to importId,
+                "meetingId" to meetingId,
+                "actorUserId" to actorId,
+                "removedMessages" to impact.removedMessages,
+                "removedEvidence" to impact.removedEvidence,
+            ),
+        )
+        eventStreamService.publish(
+            meetingId = meetingId,
+            eventType = "import.deleted",
+            payload = mapOf("meetingId" to meetingId, "importId" to importId),
+        )
+
+        return DeleteChatImportResponse(
+            importId = importId,
+            removedMessages = impact.removedMessages,
+            removedEvidence = impact.removedEvidence,
+            affectedConfirmedDecisions = impact.affectedConfirmedDecisions,
+        )
     }
 
     @Transactional(readOnly = true)
@@ -279,6 +338,27 @@ class ChatImportService(
                 .fetch(MESSAGE.CONTENT_HASH)
                 .filterNotNull()
         }.toSet()
+
+    private fun deletionImpact(importId: UUID): ChatImportDeletionImpact {
+        val importMessages = MESSAGE.IMPORT_ID.eq(importId)
+        return ChatImportDeletionImpact(
+            removedMessages = dsl.fetchCount(MESSAGE, importMessages),
+            removedEvidence = dsl.fetchCount(
+                dsl.select(DECISION_EVIDENCE.ID)
+                    .from(DECISION_EVIDENCE)
+                    .join(MESSAGE).on(MESSAGE.ID.eq(DECISION_EVIDENCE.MESSAGE_ID))
+                    .where(importMessages),
+            ),
+            affectedConfirmedDecisions = dsl.fetchCount(
+                dsl.selectDistinct(DECISION.ID)
+                    .from(DECISION)
+                    .join(DECISION_EVIDENCE).on(DECISION_EVIDENCE.DECISION_ID.eq(DECISION.ID))
+                    .join(MESSAGE).on(MESSAGE.ID.eq(DECISION_EVIDENCE.MESSAGE_ID))
+                    .where(importMessages)
+                    .and(DECISION.STATUS.eq(DecisionStatus.confirmed)),
+            ),
+        )
+    }
 
     private fun toView(record: ChatImportRecord): ChatImportView =
         ChatImportView(

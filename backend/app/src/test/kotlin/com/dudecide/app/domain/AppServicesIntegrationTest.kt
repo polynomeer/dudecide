@@ -1,11 +1,13 @@
 package com.dudecide.app.domain
 
+import com.dudecide.app.api.dto.ApplyChatImportRequest
 import com.dudecide.app.api.dto.BudgetRangeDto
 import com.dudecide.app.api.dto.ChatImportConsentInput
 import com.dudecide.app.api.dto.ChatImportMessageInput
 import com.dudecide.app.api.dto.ChatImportRangeInput
 import com.dudecide.app.api.dto.ChatImportSourceInput
 import com.dudecide.app.api.dto.ChatImportSpeakerInput
+import com.dudecide.app.api.dto.ClaimImportSpeakerRequest
 import com.dudecide.app.api.dto.CreateChatImportRequest
 import com.dudecide.app.api.dto.ConfirmDecisionRequest
 import com.dudecide.app.api.dto.CreateThreadRequest
@@ -19,6 +21,7 @@ import com.dudecide.app.api.dto.CreateVoteRequest
 import com.dudecide.app.api.dto.JoinInviteRequest
 import com.dudecide.app.api.dto.ReconsiderDecisionRequest
 import com.dudecide.app.api.dto.MeetingStatusDto
+import com.dudecide.app.api.dto.UpdateImportSpeakerRequest
 import com.dudecide.app.api.dto.UpdateMessageRequest
 import com.dudecide.app.api.dto.UpdateMeetingRequest
 import com.dudecide.app.api.dto.UpdateTaskRequest
@@ -29,10 +32,12 @@ import com.dudecide.app.api.dto.VoteSubmissionRequest
 import com.dudecide.app.config.ChatImportAiProperties
 import com.dudecide.app.domain.chatimport.ChatImportAnalysisWorker
 import com.dudecide.app.domain.chatimport.ChatImportAnalyzer
+import com.dudecide.app.domain.chatimport.ChatImportApplyService
 import com.dudecide.app.domain.chatimport.ChatImportService
 import com.dudecide.app.domain.chatimport.EpisodeMapRequest
 import com.dudecide.app.domain.chatimport.EpisodeMapResult
 import com.dudecide.app.domain.chatimport.FakeLlmClient
+import com.dudecide.app.domain.chatimport.ImportSpeakerService
 import com.dudecide.app.domain.chatimport.LlmClient
 import com.dudecide.app.domain.chatimport.SubjectReduceRequest
 import com.dudecide.app.domain.chatimport.SubjectReduceResult
@@ -45,6 +50,9 @@ import com.dudecide.app.jooq.enums.MessageOrigin
 import com.dudecide.app.jooq.enums.ThreadCategory
 import com.dudecide.app.jooq.tables.ChatImport.Companion.CHAT_IMPORT
 import com.dudecide.app.jooq.tables.Decision.Companion.DECISION
+import com.dudecide.app.jooq.tables.DecisionEvidence.Companion.DECISION_EVIDENCE
+import com.dudecide.app.jooq.tables.MeetingReport.Companion.MEETING_REPORT
+import com.dudecide.app.jooq.tables.TaskItem.Companion.TASK_ITEM
 import com.dudecide.app.jooq.tables.DecisionHistory.Companion.DECISION_HISTORY
 import com.dudecide.app.jooq.tables.ImportSpeaker.Companion.IMPORT_SPEAKER
 import com.dudecide.app.jooq.tables.InviteLink.Companion.INVITE_LINK
@@ -833,6 +841,165 @@ class AppServicesIntegrationTest {
         }
     }
 
+    @Test
+    fun `applying staged items drafts decisions and tasks without confirming them`() {
+        testContext().use { context ->
+            val created = context.analyzedKoreanImport()
+
+            val rejected = assertThrows(ResponseStatusException::class.java) {
+                context.chatImportApplyService.apply(created.importId, ApplyChatImportRequest(listOf("it_2")))
+            }
+            assertEquals(400, rejected.statusCode.value())
+
+            val applied = context.chatImportApplyService.apply(created.importId, ApplyChatImportRequest(listOf("it_1", "it_3")))
+            assertEquals(listOf("it_1", "it_3"), applied.appliedItemIds)
+            assertEquals("active", applied.meetingStatus)
+
+            val decision = context.dsl.selectFrom(DECISION).where(DECISION.ID.eq(applied.decisionIds.single())).fetchOne()!!
+            assertEquals(DecisionStatus.proposed, decision.status)
+            assertEquals(context.findThreadId(created.meetingId, ThreadCategory.date), decision.threadId)
+            assertTrue(decision.proposedResult!!.data().contains("18일"))
+            val quotes = context.dsl.select(DECISION_EVIDENCE.QUOTE_SNAPSHOT, DECISION_EVIDENCE.THREAD_ID)
+                .from(DECISION_EVIDENCE)
+                .where(DECISION_EVIDENCE.DECISION_ID.eq(decision.id))
+                .fetch()
+            assertEquals(4, quotes.size)
+            assertTrue(quotes.all { it.value2() == created.threadId })
+            assertTrue(quotes.any { it.value1()!!.startsWith("Participant B: ") }, quotes.map { it.value1() }.toString())
+            assertTrue(quotes.none { it.value1()!!.contains("Junho") })
+
+            val task = context.dsl.selectFrom(TASK_ITEM).where(TASK_ITEM.ID.eq(applied.taskIds.single())).fetchOne()!!
+            assertEquals(null, task.ownerUserId)
+            assertNotNull(task.sourceMessageId)
+
+            val replay = context.chatImportApplyService.apply(created.importId, ApplyChatImportRequest(listOf("it_1")))
+            assertEquals(listOf("it_1"), replay.skippedItemIds)
+            assertEquals(emptyList<UUID>(), replay.decisionIds)
+
+            val view = context.chatImportService.getImport(created.importId)
+            assertEquals("applied", view.status)
+            assertEquals(null, view.purgeAt)
+            assertTrue(context.dsl.fetchCount(MEETING_REPORT, MEETING_REPORT.MEETING_ID.eq(created.meetingId)) >= 1)
+        }
+    }
+
+    @Test
+    fun `deleting an import removes its messages and evidence after an impact preview`() {
+        testContext().use { context ->
+            val created = context.analyzedKoreanImport()
+            val applied = context.chatImportApplyService.apply(created.importId, ApplyChatImportRequest(listOf("it_1", "it_3")))
+            val participantId = context.addParticipant(created.meetingId, "Participant User")
+
+            val impact = requireNotNull(context.chatImportService.getImport(created.importId, includeDeletionImpact = true).deletionImpact)
+            assertEquals(6, impact.removedMessages)
+            assertEquals(4, impact.removedEvidence)
+            assertEquals(0, impact.affectedConfirmedDecisions)
+
+            val forbidden = withActor(participantId, "Participant User") {
+                assertThrows(ResponseStatusException::class.java) { context.chatImportService.deleteImport(created.importId) }
+            }
+            assertEquals(403, forbidden.statusCode.value())
+
+            val deleted = context.chatImportService.deleteImport(created.importId)
+            assertEquals(6, deleted.removedMessages)
+            assertEquals(4, deleted.removedEvidence)
+            assertEquals(0, context.dsl.fetchCount(MESSAGE, MESSAGE.IMPORT_ID.eq(created.importId)))
+            assertEquals(0, context.dsl.fetchCount(DECISION_EVIDENCE, DECISION_EVIDENCE.DECISION_ID.eq(applied.decisionIds.single())))
+            assertEquals(1, context.dsl.fetchCount(DECISION, DECISION.ID.eq(applied.decisionIds.single())))
+            assertEquals(null, context.dsl.select(TASK_ITEM.SOURCE_MESSAGE_ID).from(TASK_ITEM).where(TASK_ITEM.ID.eq(applied.taskIds.single())).fetchOne(TASK_ITEM.SOURCE_MESSAGE_ID))
+
+            val view = context.chatImportService.getImport(created.importId)
+            assertEquals("deleted", view.status)
+            assertEquals(null, view.result)
+            assertEquals(0, context.chatImportService.deleteImport(created.importId).removedMessages)
+        }
+    }
+
+    @Test
+    fun `deleting during analysis keeps the import deleted`() {
+        testContext().use { context ->
+            val created = context.chatImportService.createImport(chatImportRequest())
+            val analyzer = context.analyzer()
+
+            assertEquals(created.importId, analyzer.claimNext())
+            context.chatImportService.deleteImport(created.importId)
+            analyzer.analyze(created.importId)
+
+            val record = context.dsl.selectFrom(CHAT_IMPORT).where(CHAT_IMPORT.ID.eq(created.importId)).fetchOne()!!
+            assertEquals(ChatImportStatus.deleted, record.status)
+            assertEquals(null, record.result)
+        }
+    }
+
+    @Test
+    fun `speakers hide exported names from members and support mapping and claims`() {
+        testContext().use { context ->
+            val created = context.analyzedKoreanImport()
+            val firstId = context.addParticipant(created.meetingId, "Participant User")
+            val secondId = context.addParticipant(created.meetingId, "Second User")
+
+            val hostView = context.importSpeakerService.listSpeakers(created.meetingId)
+            assertEquals(setOf("Minji", "Junho", "Seoyeon"), hostView.map { it.displayName }.toSet())
+
+            val memberView = withActor(firstId, "Participant User") { context.importSpeakerService.listSpeakers(created.meetingId) }
+            assertTrue(memberView.all { it.displayName == null && it.pseudonym == null })
+            assertEquals(setOf("Local Host", "Participant B", "Participant C"), memberView.map { it.label }.toSet())
+
+            val claimed = withActor(firstId, "Participant User") {
+                context.importSpeakerService.claimSpeaker(created.meetingId, ClaimImportSpeakerRequest("  junho "))
+            }
+            val junho = hostView.single { it.displayName == "Junho" }
+            assertEquals(listOf(junho.id), claimed.claimedSpeakerIds)
+            val conflict = withActor(firstId, "Participant User") {
+                assertThrows(ResponseStatusException::class.java) {
+                    context.importSpeakerService.claimSpeaker(created.meetingId, ClaimImportSpeakerRequest("Seoyeon"))
+                }
+            }
+            assertEquals(409, conflict.statusCode.value())
+            val missing = withActor(secondId, "Second User") {
+                assertThrows(ResponseStatusException::class.java) {
+                    context.importSpeakerService.claimSpeaker(created.meetingId, ClaimImportSpeakerRequest("Nobody"))
+                }
+            }
+            assertEquals(404, missing.statusCode.value())
+
+            val labels = withActor(secondId, "Second User") { context.messageService.listMessages(created.threadId) }
+                .map { it.speaker.displayName }
+            assertTrue("Participant User" in labels)
+
+            val seoyeon = hostView.single { it.displayName == "Seoyeon" }
+            val secondMembership = context.dsl.select(MEMBERSHIP.ID).from(MEMBERSHIP).where(MEMBERSHIP.USER_ID.eq(secondId)).fetchOne(MEMBERSHIP.ID)
+            val mapped = context.importSpeakerService.updateSpeaker(seoyeon.id, UpdateImportSpeakerRequest(secondMembership))
+            assertEquals("Second User", mapped.label)
+            assertTrue(mapped.mapped)
+
+            val invalid = assertThrows(ResponseStatusException::class.java) {
+                context.importSpeakerService.updateSpeaker(seoyeon.id, UpdateImportSpeakerRequest(UUID.randomUUID()))
+            }
+            assertEquals(400, invalid.statusCode.value())
+            val forbidden = withActor(firstId, "Participant User") {
+                assertThrows(ResponseStatusException::class.java) {
+                    context.importSpeakerService.updateSpeaker(seoyeon.id, UpdateImportSpeakerRequest(null))
+                }
+            }
+            assertEquals(403, forbidden.statusCode.value())
+        }
+    }
+
+    private fun TestContext.analyzedKoreanImport() =
+        chatImportService.createImport(
+            chatImportRequest(
+                messages = listOf(
+                    "me" to "18일 어때?",
+                    "junho" to "ㅇㅇ 좋아",
+                    "seoyeon" to "콜",
+                    "me" to "그럼 18일로 확정!",
+                    "seoyeon" to "배편은 제가 예약할게요",
+                    "junho" to "숙소는 어디로 하지?",
+                ),
+            ),
+        ).also { analysisWorker().analyzePendingBatch() }
+
     private fun chatImportRequest(
         messages: List<Pair<String, String>> = listOf("me" to "Let's go with the 18th"),
     ): CreateChatImportRequest =
@@ -874,6 +1041,8 @@ class AppServicesIntegrationTest {
         val notificationService = NotificationService(dsl, objectMapper, localActorProvider, meetingAccessService, eventStreamService)
 
         val meetingService = MeetingService(dsl, localActorProvider, meetingAccessService, outboxService, eventStreamService, notificationService)
+        val taskService = TaskService(dsl, meetingAccessService, outboxService, eventStreamService)
+        val reportService = ReportService(dsl, objectMapper, meetingAccessService, outboxService, eventStreamService, notificationService)
 
         return TestContext(
             dsl = dsl,
@@ -883,9 +1052,9 @@ class AppServicesIntegrationTest {
             decisionService = DecisionService(dsl, objectMapper, localActorProvider, meetingAccessService, outboxService, eventStreamService, notificationService),
             messageService = MessageService(dsl, objectMapper, localActorProvider, meetingAccessService, outboxService, eventStreamService),
             threadService = ThreadService(dsl, meetingAccessService, outboxService, eventStreamService),
-            reportService = ReportService(dsl, objectMapper, meetingAccessService, outboxService, eventStreamService, notificationService),
+            reportService = reportService,
             searchService = SearchService(dsl, meetingAccessService),
-            taskService = TaskService(dsl, meetingAccessService, outboxService, eventStreamService),
+            taskService = taskService,
             notificationService = notificationService,
             chatImportService = ChatImportService(
                 dsl,
@@ -897,6 +1066,16 @@ class AppServicesIntegrationTest {
                 eventStreamService,
             ),
             eventStreamService = eventStreamService,
+            chatImportApplyService = ChatImportApplyService(
+                dsl,
+                objectMapper,
+                meetingAccessService,
+                outboxService,
+                eventStreamService,
+                taskService,
+                reportService,
+            ),
+            importSpeakerService = ImportSpeakerService(dsl, meetingAccessService, outboxService, eventStreamService),
         )
     }
 
@@ -1209,11 +1388,16 @@ class AppServicesIntegrationTest {
         val notificationService: NotificationService,
         val chatImportService: ChatImportService,
         val eventStreamService: EventStreamService,
+        val chatImportApplyService: ChatImportApplyService,
+        val importSpeakerService: ImportSpeakerService,
     ) : AutoCloseable {
         override fun close() = Unit
 
+        fun analyzer(llmClient: LlmClient = FakeLlmClient()): ChatImportAnalyzer =
+            ChatImportAnalyzer(dsl, objectMapper, llmClient, eventStreamService, ChatImportAiProperties())
+
         fun analysisWorker(llmClient: LlmClient = FakeLlmClient()): ChatImportAnalysisWorker =
-            ChatImportAnalysisWorker(ChatImportAnalyzer(dsl, objectMapper, llmClient, eventStreamService, ChatImportAiProperties()))
+            ChatImportAnalysisWorker(analyzer(llmClient))
 
         fun findThreadId(meetingId: UUID, category: ThreadCategory): UUID =
             dsl.select(TOPIC_THREAD.ID)

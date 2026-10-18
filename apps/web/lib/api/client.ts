@@ -347,6 +347,36 @@ export type ChatImportView = {
   purgeAt?: string | null;
   createdAt: string;
   completedAt?: string | null;
+  deletionImpact?: ChatImportDeletionImpact | null;
+};
+
+export type ChatImportDeletionImpact = {
+  removedMessages: number;
+  removedEvidence: number;
+  affectedConfirmedDecisions: number;
+};
+
+export type DeleteChatImportResponse = ChatImportDeletionImpact & {
+  importId: string;
+};
+
+export type ApplyChatImportResponse = {
+  importId: string;
+  appliedItemIds: string[];
+  skippedItemIds: string[];
+  decisionIds: string[];
+  taskIds: string[];
+  meetingStatus: string;
+};
+
+export type ImportSpeakerView = {
+  id: string;
+  threadId: string;
+  label: string;
+  mapped: boolean;
+  membershipId?: string | null;
+  displayName?: string | null;
+  pseudonym?: string | null;
 };
 
 const API_BASE_URL =
@@ -438,7 +468,32 @@ export const apiClient = {
       headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
     }),
   listChatImports: (meetingId: string) => request<ChatImportView[]>(`/api/v1/meetings/${meetingId}/imports`),
-  getChatImport: (importId: string) => request<ChatImportView>(`/api/v1/imports/${importId}`),
+  getChatImport: (importId: string, includeDeletionImpact = false) =>
+    request<ChatImportView>(
+      `/api/v1/imports/${importId}${includeDeletionImpact ? "?includeDeletionImpact=true" : ""}`,
+    ),
+  applyChatImport: (importId: string, itemIds: string[], idempotencyKey?: string) =>
+    request<ApplyChatImportResponse>(`/api/v1/imports/${importId}/apply`, {
+      method: "POST",
+      body: JSON.stringify({ itemIds }),
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+    }),
+  deleteChatImport: (importId: string) =>
+    request<DeleteChatImportResponse>(`/api/v1/imports/${importId}`, {
+      method: "DELETE",
+    }),
+  listImportSpeakers: (meetingId: string) =>
+    request<ImportSpeakerView[]>(`/api/v1/meetings/${meetingId}/import-speakers`),
+  updateImportSpeaker: (speakerId: string, membershipId: string | null) =>
+    request<ImportSpeakerView>(`/api/v1/import-speakers/${speakerId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ membershipId }),
+    }),
+  claimImportSpeaker: (meetingId: string, displayName: string) =>
+    request<{ claimedSpeakerIds: string[] }>(`/api/v1/meetings/${meetingId}/import-speakers/claim`, {
+      method: "POST",
+      body: JSON.stringify({ displayName }),
+    }),
   listDecisions: (meetingId: string) =>
     request<DecisionResponse[]>(`/api/v1/meetings/${meetingId}/decisions`),
   getDecision: (decisionId: string) =>

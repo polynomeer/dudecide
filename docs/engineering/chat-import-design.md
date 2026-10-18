@@ -133,7 +133,7 @@ Limits enforced on both sides: 3,000 messages, 200 speakers, 90-day range, 2 MB 
 - `app/meetings/[meetingId]/import/page.tsx`: import into an existing meeting
 - `app/meetings/[meetingId]/import/[importId]/page.tsx`: progress and review
 - `components/import/`: `import-dropzone`, `export-guide` (per OS), `range-picker`, `speaker-mapper`, `mask-preview`, `import-progress`, `import-review` (item list with evidence and apply checkboxes)
-- Invite page (`app/invite/[token]/page.tsx`): report preview and "Which of these is you?" speaker claim after join
+- Invite page (`app/invite/[token]/page.tsx`): report preview and a "What is your name in the chat?" speaker claim after join
 
 ## Data Model
 
@@ -397,7 +397,19 @@ The LLM receives short message ids (`m1`, `m2`, ...) and pseudonyms. The analyze
 - `quote_snapshot` uses the speaker label visible at apply time (see Visibility).
 - A draft meeting moves to `active` and its import's `purge_at` is cleared.
 - Re-apply of an item is idempotent via `Idempotency-Key` and a per-import `appliedItemIds` list in `result`.
-- Report refresh is requested through the existing outbox path.
+- Report refresh runs synchronously through `ReportService.refreshReport` in the same transaction, since no async refresh path exists yet.
+
+Implemented details (step 6):
+
+- `decision_evidence.thread_id` is the import thread of the quoted message, not the decision's board thread.
+- `quote_snapshot` is `"<label>: <body>"` (280 characters), where the label is the mapped member name or the pseudonym; the exported name never enters a snapshot.
+- `budget` and `other` decisions go to the default free chat thread; `withdrawal` events are not stored as evidence.
+- `proposed_result` carries `source: chat_import`, `importId`, and `itemId`; non-decided items keep `options`.
+- Tasks are created through `TaskService` (`TaskCreated` event); `open_question` and `abandoned` items return `400`.
+- Applying clears `purge_at` on every import of the meeting.
+- Deleting keeps import speakers and the import thread. The analyzer's final write only lands while the import is still `analyzing`, so deleting during analysis wins.
+
+Claiming by typed name replaces the earlier "pick from a list" idea, so the exported names of other speakers are never listed to ordinary members.
 
 ## Visibility
 
@@ -417,10 +429,10 @@ All under `/api/v1`. DTOs first, then `contracts/openapi/dudecide-openapi-v1.yam
 | `GET /meetings/{meetingId}/imports` | list imports | member |
 | `GET /imports/{importId}` | status, progress, result | member |
 | `POST /imports/{importId}/apply` | apply selected items | `host`, `co_host` |
-| `DELETE /imports/{importId}` | delete import, its messages, dependent evidence | uploader or `host` |
-| `GET /meetings/{meetingId}/import-speakers` | list speakers with mapping | member |
+| `DELETE /imports/{importId}` | delete import, its messages, dependent evidence | uploader, `host`, `co_host` |
+| `GET /meetings/{meetingId}/import-speakers` | list speakers with mapping; exported names and pseudonyms only for `host`, `co_host`, and the thread uploader | member |
 | `PATCH /import-speakers/{speakerId}` | set or clear `membershipId` | `host`, `co_host` |
-| `POST /import-speakers/{speakerId}/claim` | current member claims an unmapped speaker | member, once per meeting |
+| `POST /meetings/{meetingId}/import-speakers/claim` | current member types their messenger name; all unmapped speakers with that name (case and whitespace insensitive) map to them | member, one name per meeting |
 | `GET /invite-links/{token}/preview` | meeting title + report preview without quotes | public with valid token |
 
 Responses:
@@ -432,9 +444,9 @@ Responses:
 
 ### Events
 
-Domain events (outbox): `ChatImportSubmitted`, `ChatImportCompleted`, `ChatImportFailed`, `ChatImportApplied`, `ChatImportDeleted`, `ImportSpeakerMapped`.
+Domain events (outbox): `ChatImportSubmitted`, `ChatImportApplied`, `ChatImportDeleted`, `ImportSpeakerMapped`. Completion and failure are visible through `chat_import.status` and SSE; `ChatImportCompleted` and `ChatImportFailed` are not emitted yet.
 
-SSE types (meeting stream): `import.progress` (`progress.stage`: `claimed`, `prefilter`, `map` with `done`/`total`, `reduce`, `rules`), `import.completed` (`itemCount`), `import.failed` (`reason`). The `import_ready` notification for the uploader waits for the deferred enum value.
+SSE types (meeting stream): `import.progress` (`progress.stage`: `claimed`, `prefilter`, `map` with `done`/`total`, `reduce`, `rules`), `import.completed` (`itemCount`), `import.failed` (`reason`), `import.deleted`. The `import_ready` notification for the uploader waits for the deferred enum value.
 
 ## Limits And Abuse Controls
 
@@ -464,7 +476,7 @@ SSE types (meeting stream): `import.progress` (`progress.stage`: `claimed`, `pre
 
 ## Implementation Order
 
-Each step is one commit-sized work unit. Done: steps 1-5.
+Each step is one commit-sized work unit. Done: steps 1-6.
 
 1. `backend/shared`: prefilter, segmentation, status rules with tests.
 2. Migration `V3__chat_import.sql`, H2 test schema, jOOQ regen, `database-schema.md`.

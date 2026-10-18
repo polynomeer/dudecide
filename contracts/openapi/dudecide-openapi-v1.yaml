@@ -559,12 +559,13 @@ paths:
       operationId: getChatImport
       summary: Get chat import status and result
       parameters:
-        - name: importId
-          in: path
-          required: true
+        - $ref: '#/components/parameters/ImportId'
+        - name: includeDeletionImpact
+          in: query
+          required: false
           schema:
-            type: string
-            format: uuid
+            type: boolean
+            default: false
       responses:
         '200':
           description: Import detail
@@ -572,8 +573,119 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChatImportView'
+    delete:
+      operationId: deleteChatImport
+      summary: Delete an import, its messages, and evidence built on them
+      description: Allowed for the uploader, host, or co-host. The import row remains as a deleted tombstone.
+      parameters:
+        - $ref: '#/components/parameters/ImportId'
+      responses:
+        '200':
+          description: Import deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteChatImportResponse'
+  /imports/{importId}/apply:
+    post:
+      operationId: applyChatImport
+      summary: Apply selected staged items to the meeting board
+      description: >-
+        Requires host or co-host. Decisions are created as proposed (likely decided) or in_discussion,
+        never confirmed. Already applied items are skipped. A draft meeting becomes active.
+      parameters:
+        - $ref: '#/components/parameters/ImportId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyChatImportRequest'
+      responses:
+        '200':
+          description: Items applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyChatImportResponse'
+        '400':
+          description: Unknown item, or an item that cannot be applied (open questions, abandoned decisions)
+        '409':
+          description: Import is not ready
+  /meetings/{meetingId}/import-speakers:
+    get:
+      operationId: listImportSpeakers
+      summary: List imported speakers and their member mapping
+      description: Exported display names and pseudonyms are returned only to hosts, co-hosts, and the thread uploader.
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '200':
+          description: Speakers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ImportSpeakerView'
+  /meetings/{meetingId}/import-speakers/claim:
+    post:
+      operationId: claimImportSpeaker
+      summary: Claim the imported speaker that is the current member
+      description: Matches the typed messenger name against unmapped speakers in the meeting (case and whitespace insensitive).
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimImportSpeakerRequest'
+      responses:
+        '200':
+          description: Speakers claimed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimImportSpeakerResponse'
+        '404':
+          description: No unclaimed speaker with that name
+        '409':
+          description: The member already claimed a different speaker
+  /import-speakers/{speakerId}:
+    patch:
+      operationId: updateImportSpeaker
+      summary: Map or unmap an imported speaker to a member
+      parameters:
+        - name: speakerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateImportSpeakerRequest'
+      responses:
+        '200':
+          description: Speaker updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportSpeakerView'
 components:
   parameters:
+    ImportId:
+      name: importId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -1661,6 +1773,144 @@ components:
             - string
             - 'null'
           format: date-time
+        deletionImpact:
+          oneOf:
+            - $ref: '#/components/schemas/ChatImportDeletionImpact'
+            - type: 'null'
+          description: Present only with includeDeletionImpact=true.
+    ChatImportDeletionImpact:
+      type: object
+      required:
+        - removedMessages
+        - removedEvidence
+        - affectedConfirmedDecisions
+      properties:
+        removedMessages:
+          type: integer
+        removedEvidence:
+          type: integer
+        affectedConfirmedDecisions:
+          type: integer
+    DeleteChatImportResponse:
+      type: object
+      required:
+        - importId
+        - removedMessages
+        - removedEvidence
+        - affectedConfirmedDecisions
+      properties:
+        importId:
+          type: string
+          format: uuid
+        removedMessages:
+          type: integer
+        removedEvidence:
+          type: integer
+        affectedConfirmedDecisions:
+          type: integer
+    ApplyChatImportRequest:
+      type: object
+      required:
+        - itemIds
+      properties:
+        itemIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+    ApplyChatImportResponse:
+      type: object
+      required:
+        - importId
+        - appliedItemIds
+        - skippedItemIds
+        - decisionIds
+        - taskIds
+        - meetingStatus
+      properties:
+        importId:
+          type: string
+          format: uuid
+        appliedItemIds:
+          type: array
+          items:
+            type: string
+        skippedItemIds:
+          type: array
+          items:
+            type: string
+        decisionIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        taskIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        meetingStatus:
+          type: string
+    ImportSpeakerView:
+      type: object
+      required:
+        - id
+        - threadId
+        - label
+        - mapped
+      properties:
+        id:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+          format: uuid
+        label:
+          type: string
+          description: Mapped member name, otherwise the pseudonym.
+        mapped:
+          type: boolean
+        membershipId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        displayName:
+          type:
+            - string
+            - 'null'
+          description: Exported name; hosts, co-hosts, and the thread uploader only.
+        pseudonym:
+          type:
+            - string
+            - 'null'
+          description: Hosts, co-hosts, and the thread uploader only.
+    UpdateImportSpeakerRequest:
+      type: object
+      properties:
+        membershipId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+          description: Null clears the mapping.
+    ClaimImportSpeakerRequest:
+      type: object
+      required:
+        - displayName
+      properties:
+        displayName:
+          type: string
+    ClaimImportSpeakerResponse:
+      type: object
+      required:
+        - claimedSpeakerIds
+      properties:
+        claimedSpeakerIds:
+          type: array
+          items:
+            type: string
+            format: uuid
     ChatImportStatus:
       type: string
       enum: [submitted, analyzing, ready, applied, failed, deleted]

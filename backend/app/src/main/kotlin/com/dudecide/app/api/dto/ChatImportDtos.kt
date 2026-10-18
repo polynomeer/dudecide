@@ -87,4 +87,53 @@ data class ChatImportView(
     val purgeAt: OffsetDateTime? = null,
     val createdAt: OffsetDateTime,
     val completedAt: OffsetDateTime? = null,
+    val deletionImpact: ChatImportDeletionImpact? = null,
+)
+
+data class ApplyChatImportRequest(
+    val itemIds: List<String>,
+)
+
+data class ApplyChatImportResponse(
+    val importId: UUID,
+    val appliedItemIds: List<String>,
+    val skippedItemIds: List<String>,
+    val decisionIds: List<UUID>,
+    val taskIds: List<UUID>,
+    val meetingStatus: String,
+)
+
+data class ChatImportDeletionImpact(
+    val removedMessages: Int,
+    val removedEvidence: Int,
+    val affectedConfirmedDecisions: Int,
+)
+
+data class DeleteChatImportResponse(
+    val importId: UUID,
+    val removedMessages: Int,
+    val removedEvidence: Int,
+    val affectedConfirmedDecisions: Int,
+)
+
+data class ImportSpeakerView(
+    val id: UUID,
+    val threadId: UUID,
+    val label: String,
+    val mapped: Boolean,
+    val membershipId: UUID? = null,
+    val displayName: String? = null,
+    val pseudonym: String? = null,
+)
+
+data class UpdateImportSpeakerRequest(
+    val membershipId: UUID? = null,
+)
+
+data class ClaimImportSpeakerRequest(
+    val displayName: String,
+)
+
+data class ClaimImportSpeakerResponse(
+    val claimedSpeakerIds: List<UUID>,
 )

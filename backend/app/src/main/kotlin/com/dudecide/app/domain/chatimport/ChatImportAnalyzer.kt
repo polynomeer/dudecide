@@ -65,9 +65,10 @@ class ChatImportAnalyzer(
     fun analyze(importId: UUID) {
         val record = dsl.selectFrom(CHAT_IMPORT).where(CHAT_IMPORT.ID.eq(importId)).fetchOne() ?: return
         val meetingId = requireNotNull(record.meetingId)
+        // Final writes only land while the import is still analyzing, so a delete during analysis wins.
         try {
             val result = run(importId, meetingId, requireNotNull(record.rangeEnd).toInstant())
-            dsl.update(CHAT_IMPORT)
+            val stored = dsl.update(CHAT_IMPORT)
                 .set(CHAT_IMPORT.STATUS, ChatImportStatus.ready)
                 .set(CHAT_IMPORT.RESULT, toJson(result))
                 .set(CHAT_IMPORT.PROGRESS, toJson(mapOf("stage" to "done")))
@@ -75,7 +76,9 @@ class ChatImportAnalyzer(
                 .set(CHAT_IMPORT.MODEL_VERSIONS, toJson(llmClient.modelVersions))
                 .set(CHAT_IMPORT.COMPLETED_AT, OffsetDateTime.now())
                 .where(CHAT_IMPORT.ID.eq(importId))
-                .execute()
+                .and(CHAT_IMPORT.STATUS.eq(ChatImportStatus.analyzing))
+                .execute() == 1
+            if (!stored) return
             @Suppress("UNCHECKED_CAST")
             val itemCount = (result["items"] as List<Any?>).size
             eventStreamService.publish(
@@ -86,12 +89,14 @@ class ChatImportAnalyzer(
         } catch (exception: Exception) {
             logger.warn("Chat import analysis failed importId={}", importId, exception)
             val reason = (exception.message ?: exception.javaClass.simpleName).take(200)
-            dsl.update(CHAT_IMPORT)
+            val stored = dsl.update(CHAT_IMPORT)
                 .set(CHAT_IMPORT.STATUS, ChatImportStatus.failed)
                 .set(CHAT_IMPORT.FAILURE_REASON, reason)
                 .set(CHAT_IMPORT.COMPLETED_AT, OffsetDateTime.now())
                 .where(CHAT_IMPORT.ID.eq(importId))
-                .execute()
+                .and(CHAT_IMPORT.STATUS.eq(ChatImportStatus.analyzing))
+                .execute() == 1
+            if (!stored) return
             eventStreamService.publish(
                 meetingId = meetingId,
                 eventType = "import.failed",

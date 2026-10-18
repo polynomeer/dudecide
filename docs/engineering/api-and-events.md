@@ -152,6 +152,36 @@ Design: [`chat-import-design.md`](./chat-import-design.md).
 - import status, progress, and staged result
 - requires meeting membership
 
+`POST /api/v1/imports/{importId}/apply`
+
+- apply selected staged `itemIds`: decisions become `proposed` (likely decided) or `in_discussion` with evidence; tasks are created; nothing is confirmed
+- already applied items are reported in `skippedItemIds`; `open_question` and `abandoned` items return `400`; an import that is not `ready` or `applied` returns `409`
+- moves a draft meeting to `active`, clears `purge_at`, refreshes the report
+- supports `Idempotency-Key`
+- requires `host` or `co_host`
+
+`DELETE /api/v1/imports/{importId}`
+
+- removes the import's messages; dependent decision evidence cascades and task sources are cleared; the import stays as a `deleted` tombstone
+- `GET /api/v1/imports/{importId}?includeDeletionImpact=true` previews `removedMessages`, `removedEvidence`, `affectedConfirmedDecisions`
+- allowed for the uploader, `host`, or `co_host`
+
+`GET /api/v1/meetings/{meetingId}/import-speakers`
+
+- list speakers with `label` (member name or pseudonym) and mapping; `displayName` and `pseudonym` only for `host`, `co_host`, and the thread uploader
+- requires meeting membership
+
+`PATCH /api/v1/import-speakers/{speakerId}`
+
+- set or clear `membershipId`
+- requires `host` or `co_host`
+
+`POST /api/v1/meetings/{meetingId}/import-speakers/claim`
+
+- the caller types their messenger name; all unmapped speakers in the meeting with that name map to the caller
+- `404` when nothing matches, `409` when the caller already claimed a different name
+- requires meeting membership
+
 Limits (both create endpoints): `400` when consent is missing, the source type is not `kakao_export` or `paste`, the range exceeds 90 days, a message falls outside the range, or there are more than 3,000 messages or 200 speakers; the reason names the limit. `413` when the body exceeds 2 MB. Message bodies are truncated to 4,000 characters.
 
 ### Decisions
@@ -358,6 +388,9 @@ Current implementation detail:
 - `TaskCreated`
 - `TaskUpdated`
 - `ChatImportSubmitted`
+- `ChatImportApplied`
+- `ChatImportDeleted`
+- `ImportSpeakerMapped`
 
 ## Event Flows
 
@@ -412,6 +445,7 @@ sequenceDiagram
 - `import.progress`
 - `import.completed`
 - `import.failed`
+- `import.deleted`
 
 ## Idempotency Guidance
 
