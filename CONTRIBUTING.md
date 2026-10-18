@@ -37,6 +37,15 @@ Examples:
 - `docs(repo): define documentation structure`
 - `chore(tooling): add lint script`
 
+## Commit Message Style
+
+- Write commit messages in English, regardless of the language used in task discussion.
+- Summary: imperative mood (`add`, `fix`, `align`), lowercase start, no trailing period, 72 characters or fewer including the type prefix.
+- Scope: lowercase area name such as `web`, `api`, `dev`, `repo`, `docs`, `decision`, `vote`.
+- Body (optional): separated by a blank line, wrapped at 72 characters, explaining what and why rather than how.
+- Breaking changes: add `!` after the type or scope (`feat(api)!: ...`) and a `BREAKING CHANGE:` footer.
+- Footers such as `Co-Authored-By:` go at the end of the message.
+
 ## Commit Granularity
 
 - One commit per completed work unit
