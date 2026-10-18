@@ -489,8 +489,97 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VoteResponseView'
+  /imports:
+    post:
+      operationId: createChatImport
+      summary: Import a chat into a new draft meeting
+      description: Creates a draft meeting owned by the caller. Unconverted guest imports are purged after 7 days.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChatImportRequest'
+      responses:
+        '202':
+          description: Import accepted for analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatImportCreatedResponse'
+        '400':
+          description: Invalid payload or a limit was exceeded; the reason names the limit
+        '413':
+          description: Request body exceeds 2 MB
+  /meetings/{meetingId}/imports:
+    get:
+      operationId: listChatImports
+      summary: List chat imports of a meeting
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '200':
+          description: Imports, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatImportView'
+    post:
+      operationId: createMeetingChatImport
+      summary: Import a chat into an existing meeting
+      description: Requires host or co-host. Messages already imported into the same source room thread are skipped.
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChatImportRequest'
+      responses:
+        '202':
+          description: Import accepted for analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatImportCreatedResponse'
+        '400':
+          description: Invalid payload or a limit was exceeded; the reason names the limit
+        '409':
+          description: All messages were already imported
+        '413':
+          description: Request body exceeds 2 MB
+  /imports/{importId}:
+    get:
+      operationId: getChatImport
+      summary: Get chat import status and result
+      parameters:
+        - name: importId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Import detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatImportView'
 components:
   parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
     MeetingId:
       name: meetingId
       in: path
@@ -1333,3 +1422,245 @@ components:
     VoteResponseValue:
       type: string
       enum: [available, maybe, unavailable, good, okay, dislike, yes, no]
+    CreateChatImportRequest:
+      type: object
+      description: Normalized, masked chat produced by the browser parser. Raw export files are never uploaded.
+      required:
+        - source
+        - range
+        - speakers
+        - messages
+        - consent
+      properties:
+        source:
+          type: object
+          required:
+            - type
+            - format
+          properties:
+            type:
+              type: string
+              enum: [kakao_export, paste]
+            format:
+              type: string
+              maxLength: 64
+            formatVersion:
+              type:
+                - string
+                - 'null'
+            roomName:
+              type:
+                - string
+                - 'null'
+              maxLength: 200
+        range:
+          type: object
+          description: At most 90 days. Every message sentAt must fall inside it.
+          required:
+            - start
+            - end
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+        speakers:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/ChatImportSpeakerInput'
+        messages:
+          type: array
+          minItems: 1
+          maxItems: 3000
+          items:
+            $ref: '#/components/schemas/ChatImportMessageInput'
+        consent:
+          type: object
+          required:
+            - isParticipant
+            - version
+          properties:
+            isParticipant:
+              type: boolean
+              description: Must be true.
+            version:
+              type: string
+        mediaCounts:
+          type:
+            - array
+            - 'null'
+          items:
+            type: object
+            required:
+              - date
+              - count
+            properties:
+              date:
+                type: string
+                format: date
+              count:
+                type: integer
+        stats:
+          type:
+            - object
+            - 'null'
+          properties:
+            parsedCount:
+              type: integer
+            uploadedCount:
+              type: integer
+            maskedCount:
+              type: integer
+            unparsedLineCount:
+              type: integer
+        meetingTitle:
+          type:
+            - string
+            - 'null'
+          description: Guest import only; defaults to the room name.
+        meetingType:
+          type:
+            - string
+            - 'null'
+          description: Guest import only; defaults to outing.
+    ChatImportSpeakerInput:
+      type: object
+      required:
+        - key
+        - displayName
+      properties:
+        key:
+          type: string
+        displayName:
+          type: string
+          maxLength: 120
+        isSelf:
+          type:
+            - boolean
+            - 'null'
+          description: Maps the speaker to the uploader's membership.
+        membershipId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+    ChatImportMessageInput:
+      type: object
+      required:
+        - speakerKey
+        - sentAt
+        - body
+      properties:
+        speakerKey:
+          type: string
+        sentAt:
+          type: string
+          format: date-time
+        body:
+          type: string
+          description: Truncated to 4000 characters.
+    ChatImportCreatedResponse:
+      type: object
+      required:
+        - importId
+        - meetingId
+        - threadId
+        - status
+        - messageCount
+        - duplicateCount
+      properties:
+        importId:
+          type: string
+          format: uuid
+        meetingId:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/ChatImportStatus'
+        messageCount:
+          type: integer
+        duplicateCount:
+          type: integer
+    ChatImportView:
+      type: object
+      required:
+        - id
+        - meetingId
+        - threadId
+        - uploadedByUserId
+        - sourceType
+        - sourceFormat
+        - rangeStart
+        - rangeEnd
+        - messageCount
+        - duplicateCount
+        - status
+        - progress
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        meetingId:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+          format: uuid
+        uploadedByUserId:
+          type: string
+          format: uuid
+        sourceType:
+          type: string
+        sourceFormat:
+          type: string
+        sourceRoomName:
+          type:
+            - string
+            - 'null'
+        rangeStart:
+          type: string
+          format: date-time
+        rangeEnd:
+          type: string
+          format: date-time
+        messageCount:
+          type: integer
+        duplicateCount:
+          type: integer
+        status:
+          $ref: '#/components/schemas/ChatImportStatus'
+        progress:
+          type: object
+          additionalProperties: true
+        result:
+          type:
+            - object
+            - 'null'
+          additionalProperties: true
+        failureReason:
+          type:
+            - string
+            - 'null'
+        purgeAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+    ChatImportStatus:
+      type: string
+      enum: [submitted, analyzing, ready, applied, failed, deleted]

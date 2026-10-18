@@ -280,6 +280,75 @@ export type NotificationView = {
   createdAt: string;
 };
 
+export type ChatImportSourceType = "kakao_export" | "paste";
+
+export type ChatImportStatus = "submitted" | "analyzing" | "ready" | "applied" | "failed" | "deleted";
+
+export type ChatImportSpeakerInput = {
+  key: string;
+  displayName: string;
+  isSelf?: boolean | null;
+  membershipId?: string | null;
+};
+
+export type ChatImportMessageInput = {
+  speakerKey: string;
+  sentAt: string;
+  body: string;
+};
+
+export type CreateChatImportRequest = {
+  source: {
+    type: ChatImportSourceType;
+    format: string;
+    formatVersion?: string | null;
+    roomName?: string | null;
+  };
+  range: { start: string; end: string };
+  speakers: ChatImportSpeakerInput[];
+  messages: ChatImportMessageInput[];
+  consent: { isParticipant: boolean; version: string };
+  mediaCounts?: Array<{ date: string; count: number }> | null;
+  stats?: {
+    parsedCount?: number;
+    uploadedCount?: number;
+    maskedCount?: number;
+    unparsedLineCount?: number;
+  } | null;
+  meetingTitle?: string | null;
+  meetingType?: string | null;
+};
+
+export type ChatImportCreatedResponse = {
+  importId: string;
+  meetingId: string;
+  threadId: string;
+  status: ChatImportStatus;
+  messageCount: number;
+  duplicateCount: number;
+};
+
+export type ChatImportView = {
+  id: string;
+  meetingId: string;
+  threadId: string;
+  uploadedByUserId: string;
+  sourceType: string;
+  sourceFormat: string;
+  sourceRoomName?: string | null;
+  rangeStart: string;
+  rangeEnd: string;
+  messageCount: number;
+  duplicateCount: number;
+  status: ChatImportStatus;
+  progress: Record<string, unknown>;
+  result?: Record<string, unknown> | null;
+  failureReason?: string | null;
+  purgeAt?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+};
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8080";
 
@@ -356,6 +425,20 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  createChatImport: (body: CreateChatImportRequest, idempotencyKey?: string) =>
+    request<ChatImportCreatedResponse>("/api/v1/imports", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+    }),
+  createMeetingChatImport: (meetingId: string, body: CreateChatImportRequest, idempotencyKey?: string) =>
+    request<ChatImportCreatedResponse>(`/api/v1/meetings/${meetingId}/imports`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+    }),
+  listChatImports: (meetingId: string) => request<ChatImportView[]>(`/api/v1/meetings/${meetingId}/imports`),
+  getChatImport: (importId: string) => request<ChatImportView>(`/api/v1/imports/${importId}`),
   listDecisions: (meetingId: string) =>
     request<DecisionResponse[]>(`/api/v1/meetings/${meetingId}/decisions`),
   getDecision: (decisionId: string) =>

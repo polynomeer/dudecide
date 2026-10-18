@@ -124,6 +124,36 @@ This document defines the MVP external API surface and internal async events.
 - allowed for the original sender, `host`, or `co_host`
 - returns `422` for imported messages
 
+### Chat Imports
+
+Design: [`chat-import-design.md`](./chat-import-design.md).
+
+`POST /api/v1/imports`
+
+- import a normalized, masked chat into a new draft meeting owned by the caller (guest session is enough)
+- sets `purge_at` to 7 days later until the import is applied
+- supports `Idempotency-Key`
+- returns `202 Accepted` with `importId`, `meetingId`, `threadId`, `status`, `messageCount`, `duplicateCount`
+
+`POST /api/v1/meetings/{meetingId}/imports`
+
+- import into an existing meeting; messages already in the same source room thread are skipped by content hash
+- returns `409` when every message was already imported
+- supports `Idempotency-Key`
+- requires `host` or `co_host`
+
+`GET /api/v1/meetings/{meetingId}/imports`
+
+- list imports, newest first
+- requires meeting membership
+
+`GET /api/v1/imports/{importId}`
+
+- import status, progress, and staged result
+- requires meeting membership
+
+Limits (both create endpoints): `400` when consent is missing, the source type is not `kakao_export` or `paste`, the range exceeds 90 days, a message falls outside the range, or there are more than 3,000 messages or 200 speakers; the reason names the limit. `413` when the body exceeds 2 MB. Message bodies are truncated to 4,000 characters.
+
 ### Decisions
 
 `GET /api/v1/meetings/{meetingId}/decisions`
@@ -327,6 +357,7 @@ Current implementation detail:
 - `NotificationRequested`
 - `TaskCreated`
 - `TaskUpdated`
+- `ChatImportSubmitted`
 
 ## Event Flows
 
@@ -378,6 +409,7 @@ sequenceDiagram
 - `decision.updated`
 - `report.updated`
 - `notification.created`
+- `import.progress`
 
 ## Idempotency Guidance
 

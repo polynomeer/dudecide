@@ -1,6 +1,12 @@
 package com.dudecide.app.domain
 
 import com.dudecide.app.api.dto.BudgetRangeDto
+import com.dudecide.app.api.dto.ChatImportConsentInput
+import com.dudecide.app.api.dto.ChatImportMessageInput
+import com.dudecide.app.api.dto.ChatImportRangeInput
+import com.dudecide.app.api.dto.ChatImportSourceInput
+import com.dudecide.app.api.dto.ChatImportSpeakerInput
+import com.dudecide.app.api.dto.CreateChatImportRequest
 import com.dudecide.app.api.dto.ConfirmDecisionRequest
 import com.dudecide.app.api.dto.CreateThreadRequest
 import com.dudecide.app.api.dto.CreateDecisionRequest
@@ -20,9 +26,11 @@ import com.dudecide.app.api.dto.UpdateMembershipRequest
 import com.dudecide.app.api.dto.AddDecisionEvidenceRequest
 import com.dudecide.app.api.dto.VoteSubmissionItem
 import com.dudecide.app.api.dto.VoteSubmissionRequest
+import com.dudecide.app.domain.chatimport.ChatImportService
 import com.dudecide.app.jooq.enums.ChatImportSource
 import com.dudecide.app.jooq.enums.DecisionStatus
 import com.dudecide.app.jooq.enums.MeetingRole
+import com.dudecide.app.jooq.enums.MeetingStatus
 import com.dudecide.app.jooq.enums.MessageOrigin
 import com.dudecide.app.jooq.enums.ThreadCategory
 import com.dudecide.app.jooq.tables.ChatImport.Companion.CHAT_IMPORT
@@ -613,6 +621,157 @@ class AppServicesIntegrationTest {
         }
     }
 
+    @Test
+    fun `guest chat import creates a draft meeting with a read only import thread`() {
+        testContext().use { context ->
+            val created = context.chatImportService.createImport(
+                chatImportRequest(
+                    messages = listOf(
+                        "me" to "Let's go with the 18th",
+                        "junho" to "ㅇㅇ",
+                        "seoyeon" to "Aewol for lodging?",
+                    ),
+                ),
+            )
+
+            assertEquals("submitted", created.status)
+            assertEquals(3, created.messageCount)
+            assertEquals(0, created.duplicateCount)
+
+            val meeting = context.dsl.selectFrom(MEETING).where(MEETING.ID.eq(created.meetingId)).fetchOne()!!
+            assertEquals("Jeju trip", meeting.title)
+            assertEquals(MeetingStatus.draft, meeting.status)
+
+            val thread = context.dsl.selectFrom(TOPIC_THREAD).where(TOPIC_THREAD.ID.eq(created.threadId)).fetchOne()!!
+            assertEquals(true, thread.readOnly)
+            assertEquals("Imported: Jeju trip", thread.title)
+            assertEquals(5, thread.sortOrder)
+
+            val speakers = context.dsl.selectFrom(IMPORT_SPEAKER)
+                .where(IMPORT_SPEAKER.THREAD_ID.eq(created.threadId))
+                .fetch()
+                .associateBy { it.displayName }
+            assertEquals(setOf("Participant A", "Participant B", "Participant C"), speakers.values.map { it.pseudonym }.toSet())
+            val hostMembershipId = context.dsl.select(MEMBERSHIP.ID).from(MEMBERSHIP)
+                .where(MEMBERSHIP.MEETING_ID.eq(created.meetingId))
+                .fetchOne(MEMBERSHIP.ID)
+            assertEquals(hostMembershipId, speakers.getValue("Minji").membershipId)
+            assertEquals(null, speakers.getValue("Junho").membershipId)
+
+            val view = context.chatImportService.getImport(created.importId)
+            assertNotNull(view.purgeAt)
+            assertEquals("kakao_export", view.sourceType)
+            assertEquals(3, context.dsl.fetchCount(MESSAGE, MESSAGE.IMPORT_ID.eq(created.importId)))
+            assertEquals(1, context.dsl.fetchCount(OUTBOX_EVENT, OUTBOX_EVENT.EVENT_TYPE.eq("ChatImportSubmitted")))
+
+            val listed = context.messageService.listMessages(created.threadId)
+            assertEquals(listOf("Let's go with the 18th", "ㅇㅇ", "Aewol for lodging?"), listed.map { it.body })
+            assertEquals(meeting.ownerUserId, listed.first().speaker.userId)
+            assertEquals("Junho", listed[1].speaker.displayName)
+        }
+    }
+
+    @Test
+    fun `meeting chat import skips messages already imported into the same room`() {
+        testContext().use { context ->
+            val first = context.chatImportService.createImport(
+                chatImportRequest(messages = listOf("me" to "Book the ferry", "junho" to "I'll do it")),
+            )
+
+            val second = context.chatImportService.createMeetingImport(
+                first.meetingId,
+                chatImportRequest(
+                    messages = listOf("me" to "Book the ferry", "junho" to "I'll do it", "seoyeon" to "Thanks!"),
+                ),
+            )
+
+            assertEquals(first.threadId, second.threadId)
+            assertEquals(1, second.messageCount)
+            assertEquals(2, second.duplicateCount)
+            assertEquals(null, context.chatImportService.getImport(second.importId).purgeAt)
+            assertEquals(3, context.dsl.fetchCount(IMPORT_SPEAKER, IMPORT_SPEAKER.THREAD_ID.eq(first.threadId)))
+            assertEquals(2, context.chatImportService.listImports(first.meetingId).size)
+
+            val conflict = assertThrows(ResponseStatusException::class.java) {
+                context.chatImportService.createMeetingImport(
+                    first.meetingId,
+                    chatImportRequest(messages = listOf("me" to "Book the ferry")),
+                )
+            }
+            assertEquals(409, conflict.statusCode.value())
+        }
+    }
+
+    @Test
+    fun `chat import rejects invalid payloads and non host importers`() {
+        testContext().use { context ->
+            val invalidRequests = listOf(
+                chatImportRequest().copy(consent = ChatImportConsentInput(isParticipant = false, version = "v1")),
+                chatImportRequest().copy(source = ChatImportSourceInput(type = "discord", format = "bot")),
+                chatImportRequest().copy(range = ChatImportRangeInput(IMPORT_START, IMPORT_START.plusDays(91))),
+                chatImportRequest().copy(
+                    messages = listOf(ChatImportMessageInput("me", IMPORT_START.minusDays(1), "too early")),
+                ),
+                chatImportRequest().copy(messages = listOf(ChatImportMessageInput("ghost", IMPORT_START, "who?"))),
+                chatImportRequest().copy(
+                    messages = List(3_001) { ChatImportMessageInput("me", IMPORT_START.plusMinutes(it.toLong() % 60), "m$it") },
+                ),
+            )
+            invalidRequests.forEach { request ->
+                val error = assertThrows(ResponseStatusException::class.java) {
+                    context.chatImportService.createImport(request)
+                }
+                assertEquals(400, error.statusCode.value(), error.reason)
+            }
+
+            val created = context.chatImportService.createImport(chatImportRequest())
+            val participantId = context.addParticipant(created.meetingId, "Participant User")
+            val forbidden = withActor(participantId, "Participant User") {
+                assertThrows(ResponseStatusException::class.java) {
+                    context.chatImportService.createMeetingImport(created.meetingId, chatImportRequest())
+                }
+            }
+            assertEquals(403, forbidden.statusCode.value())
+        }
+    }
+
+    @Test
+    fun `chat import request deserializes boolean flags from json`() {
+        val request = ObjectMapper().findAndRegisterModules().readValue(
+            """
+            {
+              "source": { "type": "paste", "format": "free_text" },
+              "range": { "start": "2026-10-01T00:00:00+09:00", "end": "2026-10-02T00:00:00+09:00" },
+              "speakers": [{ "key": "s1", "displayName": "Minji", "isSelf": true }],
+              "messages": [{ "speakerKey": "s1", "sentAt": "2026-10-01T21:14:00+09:00", "body": "hi" }],
+              "consent": { "isParticipant": true, "version": "chat-import-consent-v1" }
+            }
+            """.trimIndent(),
+            CreateChatImportRequest::class.java,
+        )
+
+        assertEquals(true, request.speakers.single().isSelf)
+        assertTrue(request.consent.isParticipant)
+        assertEquals(null, request.stats)
+    }
+
+    private fun chatImportRequest(
+        messages: List<Pair<String, String>> = listOf("me" to "Let's go with the 18th"),
+    ): CreateChatImportRequest =
+        CreateChatImportRequest(
+            source = ChatImportSourceInput(type = "kakao_export", format = "kakao_android", roomName = "Jeju trip"),
+            range = ChatImportRangeInput(start = IMPORT_START, end = IMPORT_START.plusDays(1)),
+            speakers = listOf(
+                ChatImportSpeakerInput(key = "me", displayName = "Minji", isSelf = true),
+                ChatImportSpeakerInput(key = "junho", displayName = "Junho"),
+                ChatImportSpeakerInput(key = "seoyeon", displayName = "Seoyeon"),
+            ),
+            messages = messages.mapIndexed { index, (speakerKey, body) ->
+                ChatImportMessageInput(speakerKey, IMPORT_START.plusMinutes(index.toLong()), body)
+            },
+            consent = ChatImportConsentInput(isParticipant = true, version = "chat-import-consent-v1"),
+        )
+
     private fun testContext(): TestContext {
         val dataSource = JdbcDataSource().apply {
             setURL("jdbc:h2:mem:${UUID.randomUUID()};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1")
@@ -636,10 +795,12 @@ class AppServicesIntegrationTest {
         val outboxService = OutboxService(dsl, objectMapper)
         val notificationService = NotificationService(dsl, objectMapper, localActorProvider, meetingAccessService, eventStreamService)
 
+        val meetingService = MeetingService(dsl, localActorProvider, meetingAccessService, outboxService, eventStreamService, notificationService)
+
         return TestContext(
             dsl = dsl,
             objectMapper = objectMapper,
-            meetingService = MeetingService(dsl, localActorProvider, meetingAccessService, outboxService, eventStreamService, notificationService),
+            meetingService = meetingService,
             voteService = VoteService(dsl, objectMapper, localActorProvider, meetingAccessService, outboxService, eventStreamService, notificationService),
             decisionService = DecisionService(dsl, objectMapper, localActorProvider, meetingAccessService, outboxService, eventStreamService, notificationService),
             messageService = MessageService(dsl, objectMapper, localActorProvider, meetingAccessService, outboxService, eventStreamService),
@@ -648,6 +809,15 @@ class AppServicesIntegrationTest {
             searchService = SearchService(dsl, meetingAccessService),
             taskService = TaskService(dsl, meetingAccessService, outboxService, eventStreamService),
             notificationService = notificationService,
+            chatImportService = ChatImportService(
+                dsl,
+                objectMapper,
+                localActorProvider,
+                meetingAccessService,
+                meetingService,
+                outboxService,
+                eventStreamService,
+            ),
         )
     }
 
@@ -940,6 +1110,10 @@ class AppServicesIntegrationTest {
         """.trimIndent()
     }
 
+    private companion object {
+        val IMPORT_START: OffsetDateTime = OffsetDateTime.parse("2026-10-01T09:00:00+09:00")
+    }
+
     private data class SeededImport(val threadId: UUID, val importId: UUID, val speakerId: UUID)
 
     private data class TestContext(
@@ -954,6 +1128,7 @@ class AppServicesIntegrationTest {
         val searchService: SearchService,
         val taskService: TaskService,
         val notificationService: NotificationService,
+        val chatImportService: ChatImportService,
     ) : AutoCloseable {
         override fun close() = Unit
 

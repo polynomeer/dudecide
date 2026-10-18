@@ -1,6 +1,6 @@
 # Chat Import Design
 
-Status: Accepted design, not implemented (2026-10-18).
+Status: Accepted design, partially implemented (see Implementation Order).
 
 Product plan: [`../product/chat-import-planning.md`](../product/chat-import-planning.md). Policy: [ADR 0005](../adr/0005-user-initiated-chat-import.md). AI rules: [ADR 0003](../adr/0003-ai-evidence-first-assistance.md), [`ai-pipeline.md`](./ai-pipeline.md).
 
@@ -125,7 +125,7 @@ Masking errs toward over-masking. The wizard shows the masked count and a previe
 }
 ```
 
-Limits enforced on both sides: 3,000 messages, 90-day range, 2 MB request body, 4,000 characters per message (truncate).
+Limits enforced on both sides: 3,000 messages, 200 speakers, 90-day range, 2 MB request body, 4,000 characters per message (truncate). The server also requires every `sentAt` inside the range, unique speaker keys and display names, and at most one `isSelf` speaker; `isSelf` maps the speaker to the uploader's membership. Guest imports accept optional `meetingTitle` (default: room name) and `meetingType` (default: `outing`).
 
 ### Routes And Components
 
@@ -219,7 +219,7 @@ Notes:
 
 ### Content Hash
 
-`sha256(speakerDisplayName + "\n" + sentAt truncated to minute + "\n" + normalizedBody + "\n" + occurrence)` where `occurrence` counts identical `(speaker, minute, body)` tuples within the upload. This keeps two real "ㅋㅋ" messages in the same minute while deduplicating overlapping re-imports. Computed on the server.
+`sha256(speakerDisplayName + "\n" + sentAt truncated to minute + "\n" + normalizedBody + "\n" + occurrence)` where `occurrence` counts identical `(speaker, minute, body)` tuples within the upload. This keeps two real "ㅋㅋ" messages in the same minute while deduplicating overlapping re-imports. Computed on the server by `ChatContentHasher` in `backend/shared` after sorting messages by `sentAt` (stable). Known gap: a re-import whose range starts between identical same-minute messages shifts the occurrence index and can insert one duplicate.
 
 ### Existing Code Impact
 
@@ -410,7 +410,7 @@ Responses:
 
 - `POST` import endpoints return `202 Accepted` with `{ importId, meetingId, status, duplicateCount }`.
 - `Idempotency-Key` supported on both create endpoints and on apply.
-- Errors: `400` payload invalid or over limits (with `limit` field), `409` apply on an import not `ready`, `422` write into a read-only thread, `429` daily import limit.
+- Errors: `400` payload invalid or over limits (the reason names the limit), `413` body over 2 MB (checked from `Content-Length` after binding; a request filter is the follow-up), `409` all messages already imported or apply on an import not `ready`, `422` write into a read-only thread, `429` daily import limit.
 - `DELETE` response includes `{ removedMessages, removedEvidence, affectedConfirmedDecisions }`; the UI shows the last count in the confirm dialog via a dry-run `GET /imports/{importId}?includeDeletionImpact=true`.
 
 ### Events
@@ -447,7 +447,7 @@ SSE types (meeting stream): `import.progress`, `import.completed`, `import.faile
 
 ## Implementation Order
 
-Each step is one commit-sized work unit.
+Each step is one commit-sized work unit. Done: steps 1-4.
 
 1. `backend/shared`: prefilter, segmentation, status rules with tests.
 2. Migration `V3__chat_import.sql`, H2 test schema, jOOQ regen, `database-schema.md`.
