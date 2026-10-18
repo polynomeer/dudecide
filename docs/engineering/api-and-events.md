@@ -410,6 +410,8 @@ sequenceDiagram
 - `report.updated`
 - `notification.created`
 - `import.progress`
+- `import.completed`
+- `import.failed`
 
 ## Idempotency Guidance
 

@@ -234,6 +234,8 @@ Implemented in step 3, except import thread `sort_order`, which step 4 sets when
 
 Stored in `chat_import.result` and returned by the API. Every item carries evidence message ids.
 
+The implemented document also carries `applicable` on decision items (false for `abandoned`), `appliedItemIds` (empty until step 6 applies items), and `stats` (`analyzedMessages`, `filteredMessages`, `episodeCount`, `failedEpisodes`). Statuses on the wire: `likely_decided`, `contested`, `open`, `abandoned`.
+
 ```json
 {
   "schemaVersion": "chat-import-result-v1",
@@ -279,7 +281,20 @@ Stored in `chat_import.result` and returned by the API. Every item carries evide
 
 ### Placement
 
-Phase 1 runs inside `backend/app` as `domain/chatimport/ChatImportAnalysisWorker`, a scheduled poller over `outbox_event` (`ChatImportSubmitted`) like the existing `OutboxRelayWorker`. Pure logic lives in `backend/shared`. Move the job to `backend/worker` when load or isolation needs it; the `LlmClient` port keeps that move mechanical.
+Phase 1 runs inside `backend/app`:
+
+- `ChatImportAnalysisWorker` is a scheduled poller (`dudecide.workers.chat-import.fixed-delay-ms`, default 3000).
+- It claims work through `chat_import.status`, not the outbox. `OutboxRelayWorker` already marks every outbox row `published`, so `ChatImportSubmitted` is an audit event only.
+- Claiming is a conditional update (`submitted` to `analyzing`), so several pollers can run safely.
+- `ChatImportAnalyzer` runs the stages and `ChatImportResultAssembler` builds the result document.
+
+Pure logic lives in `backend/shared`. Move the job to `backend/worker` when load or isolation needs it; the `LlmClient` port keeps that move mechanical.
+
+Phase 1 limits:
+
+- Analysis covers only the messages of the claimed import. Re-import delta analysis against existing subjects is Phase 2.
+- An import left in `analyzing` by a crashed process is not reclaimed yet. Add a stale-claim timeout before running more than one instance.
+- The `digest` is a deterministic count summary until a real provider writes it.
 
 ### Stages
 
@@ -362,7 +377,9 @@ dudecide:
     max-concurrency: 4
 ```
 
-The `fake` provider returns deterministic fixtures and is the default for local development and tests. `backend/worker` already declares `openai-java`; provider choice stays configuration, not code.
+The `fake` provider (`FakeLlmClient`) is a deterministic keyword extractor for Korean and English chat, and the default for local development and tests (`DUDECIDE_AI_PROVIDER`). Any other provider value fails at startup until step 11 adds an adapter. `backend/worker` already declares `openai-java`; provider choice stays configuration, not code.
+
+The LLM receives short message ids (`m1`, `m2`, ...) and pseudonyms. The analyzer maps ids back to message UUIDs and drops any event, question, or task that points outside its episode or uses an unknown speaker. Each LLM call is retried once.
 
 ## Applying Results
 
@@ -417,7 +434,7 @@ Responses:
 
 Domain events (outbox): `ChatImportSubmitted`, `ChatImportCompleted`, `ChatImportFailed`, `ChatImportApplied`, `ChatImportDeleted`, `ImportSpeakerMapped`.
 
-SSE types (meeting stream): `import.progress`, `import.completed`, `import.failed`. `import.completed` also creates an `import_ready` notification for the uploader.
+SSE types (meeting stream): `import.progress` (`progress.stage`: `claimed`, `prefilter`, `map` with `done`/`total`, `reduce`, `rules`), `import.completed` (`itemCount`), `import.failed` (`reason`). The `import_ready` notification for the uploader waits for the deferred enum value.
 
 ## Limits And Abuse Controls
 
@@ -447,7 +464,7 @@ SSE types (meeting stream): `import.progress`, `import.completed`, `import.faile
 
 ## Implementation Order
 
-Each step is one commit-sized work unit. Done: steps 1-4.
+Each step is one commit-sized work unit. Done: steps 1-5.
 
 1. `backend/shared`: prefilter, segmentation, status rules with tests.
 2. Migration `V3__chat_import.sql`, H2 test schema, jOOQ regen, `database-schema.md`.

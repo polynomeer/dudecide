@@ -13,3 +13,9 @@ management:
     web:
       exposure:
         include: health,info
+
+dudecide:
+  ai:
+    provider: ${DUDECIDE_AI_PROVIDER:fake}
+    max-concurrency: 4
+    timeout-seconds: 60

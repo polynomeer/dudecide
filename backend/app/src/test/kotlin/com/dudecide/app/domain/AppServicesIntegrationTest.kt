@@ -26,8 +26,18 @@ import com.dudecide.app.api.dto.UpdateMembershipRequest
 import com.dudecide.app.api.dto.AddDecisionEvidenceRequest
 import com.dudecide.app.api.dto.VoteSubmissionItem
 import com.dudecide.app.api.dto.VoteSubmissionRequest
+import com.dudecide.app.config.ChatImportAiProperties
+import com.dudecide.app.domain.chatimport.ChatImportAnalysisWorker
+import com.dudecide.app.domain.chatimport.ChatImportAnalyzer
 import com.dudecide.app.domain.chatimport.ChatImportService
+import com.dudecide.app.domain.chatimport.EpisodeMapRequest
+import com.dudecide.app.domain.chatimport.EpisodeMapResult
+import com.dudecide.app.domain.chatimport.FakeLlmClient
+import com.dudecide.app.domain.chatimport.LlmClient
+import com.dudecide.app.domain.chatimport.SubjectReduceRequest
+import com.dudecide.app.domain.chatimport.SubjectReduceResult
 import com.dudecide.app.jooq.enums.ChatImportSource
+import com.dudecide.app.jooq.enums.ChatImportStatus
 import com.dudecide.app.jooq.enums.DecisionStatus
 import com.dudecide.app.jooq.enums.MeetingRole
 import com.dudecide.app.jooq.enums.MeetingStatus
@@ -755,6 +765,74 @@ class AppServicesIntegrationTest {
         assertEquals(null, request.stats)
     }
 
+    @Test
+    fun `chat import analysis stages decisions questions and tasks with evidence`() {
+        testContext().use { context ->
+            val created = context.chatImportService.createImport(
+                chatImportRequest(
+                    messages = listOf(
+                        "me" to "18일 어때?",
+                        "junho" to "ㅇㅇ 좋아",
+                        "seoyeon" to "콜",
+                        "me" to "그럼 18일로 확정!",
+                        "seoyeon" to "배편은 제가 예약할게요",
+                        "junho" to "숙소는 어디로 하지?",
+                    ),
+                ),
+            )
+
+            assertEquals(1, context.analysisWorker().analyzePendingBatch())
+            assertEquals(0, context.analysisWorker().analyzePendingBatch())
+
+            val view = context.chatImportService.getImport(created.importId)
+            assertEquals("ready", view.status)
+            assertEquals("done", view.progress["stage"])
+            assertNotNull(view.completedAt)
+
+            @Suppress("UNCHECKED_CAST")
+            val items = requireNotNull(view.result)["items"] as List<Map<String, Any?>>
+            assertEquals(listOf("decision", "open_question", "task"), items.map { it["kind"] })
+
+            val date = items.first()
+            assertEquals("likely_decided", date["status"])
+            assertEquals("date", date["decisionType"])
+            assertEquals(mapOf("option" to "18일"), date["proposedResult"])
+            @Suppress("UNCHECKED_CAST")
+            val evidenceIds = (date["evidence"] as List<Map<String, Any?>>).map { UUID.fromString(it["messageId"] as String) }
+            assertEquals(4, evidenceIds.size)
+            assertEquals(4, context.dsl.fetchCount(MESSAGE, MESSAGE.ID.`in`(evidenceIds).and(MESSAGE.IMPORT_ID.eq(created.importId))))
+
+            val seoyeonId = context.dsl.select(IMPORT_SPEAKER.ID).from(IMPORT_SPEAKER)
+                .where(IMPORT_SPEAKER.DISPLAY_NAME.eq("Seoyeon"))
+                .fetchOne(IMPORT_SPEAKER.ID)
+            assertEquals(seoyeonId.toString(), items.last()["ownerSpeakerId"])
+            assertEquals("숙소는 어디로 하지?", items[1]["title"])
+
+            val record = context.dsl.selectFrom(CHAT_IMPORT).where(CHAT_IMPORT.ID.eq(created.importId)).fetchOne()!!
+            assertEquals("chat-import-v1", record.promptVersion)
+            assertTrue(record.modelVersions!!.data().contains("fake-map-v1"))
+        }
+    }
+
+    @Test
+    fun `chat import analysis marks the import failed when the map stage fails`() {
+        testContext().use { context ->
+            val created = context.chatImportService.createImport(chatImportRequest())
+            val failing = object : LlmClient {
+                override val modelVersions = mapOf("map" to "broken")
+                override fun mapEpisode(request: EpisodeMapRequest): EpisodeMapResult = error("provider unavailable")
+                override fun reduceSubjects(request: SubjectReduceRequest): SubjectReduceResult = error("unused")
+            }
+
+            assertEquals(1, context.analysisWorker(failing).analyzePendingBatch())
+
+            val record = context.dsl.selectFrom(CHAT_IMPORT).where(CHAT_IMPORT.ID.eq(created.importId)).fetchOne()!!
+            assertEquals(ChatImportStatus.failed, record.status)
+            assertTrue(record.failureReason!!.contains("map stage failed"), record.failureReason)
+            assertEquals(null, record.result)
+        }
+    }
+
     private fun chatImportRequest(
         messages: List<Pair<String, String>> = listOf("me" to "Let's go with the 18th"),
     ): CreateChatImportRequest =
@@ -818,6 +896,7 @@ class AppServicesIntegrationTest {
                 outboxService,
                 eventStreamService,
             ),
+            eventStreamService = eventStreamService,
         )
     }
 
@@ -1129,8 +1208,12 @@ class AppServicesIntegrationTest {
         val taskService: TaskService,
         val notificationService: NotificationService,
         val chatImportService: ChatImportService,
+        val eventStreamService: EventStreamService,
     ) : AutoCloseable {
         override fun close() = Unit
+
+        fun analysisWorker(llmClient: LlmClient = FakeLlmClient()): ChatImportAnalysisWorker =
+            ChatImportAnalysisWorker(ChatImportAnalyzer(dsl, objectMapper, llmClient, eventStreamService, ChatImportAiProperties()))
 
         fun findThreadId(meetingId: UUID, category: ThreadCategory): UUID =
             dsl.select(TOPIC_THREAD.ID)
