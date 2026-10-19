@@ -4,7 +4,6 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.util.UUID
 
-// Optional request fields are nullable: without jackson-module-kotlin, Kotlin defaults are not applied on missing JSON fields.
 data class CreateChatImportRequest(
     val source: ChatImportSourceInput,
     val range: ChatImportRangeInput,
