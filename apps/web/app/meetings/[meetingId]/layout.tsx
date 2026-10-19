@@ -1,3 +1,4 @@
+import { SpeakerClaimCard } from "@/components/import/speaker-claim-card";
 import { MeetingRealtimeBridge } from "@/components/meeting-realtime-bridge";
 
 export default async function MeetingScopedLayout({
@@ -12,6 +13,7 @@ export default async function MeetingScopedLayout({
   return (
     <>
       <MeetingRealtimeBridge meetingId={meetingId} />
+      <SpeakerClaimCard meetingId={meetingId} />
       {children}
     </>
   );

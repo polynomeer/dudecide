@@ -1,14 +1,17 @@
 package com.dudecide.app.api
 
+import com.dudecide.app.api.dto.InvitePreviewResponse
 import com.dudecide.app.api.dto.JoinInviteRequest
 import com.dudecide.app.api.dto.MembershipResponse
 import com.dudecide.app.domain.AuthSessionService
 import com.dudecide.app.domain.MeetingService
+import com.dudecide.app.domain.chatimport.InvitePreviewService
 import io.swagger.v3.oas.annotations.Operation
 import jakarta.servlet.http.HttpServletRequest
 import io.swagger.v3.oas.annotations.tags.Tag
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -21,7 +24,13 @@ import org.springframework.web.bind.annotation.RestController
 class InviteController(
     private val meetingService: MeetingService,
     private val authSessionService: AuthSessionService,
+    private val invitePreviewService: InvitePreviewService,
 ) {
+
+    @GetMapping("/{token}/preview")
+    @Operation(summary = "Preview the meeting behind an invite link without joining")
+    fun previewInvite(@PathVariable token: String): ResponseEntity<InvitePreviewResponse> =
+        ResponseEntity.ok(invitePreviewService.preview(token))
 
     @PostMapping("/{token}/join")
     @Operation(summary = "Join a meeting via invite token")

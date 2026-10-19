@@ -240,6 +240,7 @@ export function ImportReview({ meetingId, importId }: { meetingId: string; impor
             </p>
           ) : null}
         </section>
+        {isHost ? <ShareInviteLink meetingId={meetingId} /> : null}
         <section className="panel px-6 py-6 text-sm">
           <div className="info-chip">가져온 대화</div>
           <p className="mt-3">
@@ -260,6 +261,57 @@ export function ImportReview({ meetingId, importId }: { meetingId: string; impor
         </section>
       </aside>
     </div>
+  );
+}
+
+function ShareInviteLink({ meetingId }: { meetingId: string }) {
+  const [copied, setCopied] = useState(false);
+  const inviteMutation = useMutation({
+    mutationFn: () => apiClient.createInviteLink(meetingId),
+  });
+  const url = inviteMutation.data ? `${window.location.origin}/invite/${inviteMutation.data.token}` : null;
+
+  const copy = async () => {
+    if (!url) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <section className="panel px-6 py-6 text-sm" aria-label="카톡방에 공유">
+      <div className="info-chip">카톡방에 공유</div>
+      <p className="section-copy mt-3">
+        링크를 연 사람은 참여하기 전에는 결정 제목과 개수만 봅니다. 대화 원문과 이름은 참여한 뒤에 보입니다.
+      </p>
+      {url ? (
+        <div className="mt-4 space-y-2">
+          <input readOnly value={url} aria-label="초대 링크" className="field font-mono text-xs" />
+          <button type="button" onClick={() => void copy()} className="action-secondary w-full">
+            {copied ? "복사했어요" : "링크 복사"}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inviteMutation.mutate()}
+          disabled={inviteMutation.isPending}
+          className="action-secondary mt-4 w-full"
+        >
+          초대 링크 만들기
+        </button>
+      )}
+      {inviteMutation.error ? (
+        <p role="alert" className="mt-2 text-[color:var(--color-danger,#b42318)]">
+          {getApiErrorMessage(inviteMutation.error, { resourceName: "초대 링크" })}
+        </p>
+      ) : null}
+    </section>
   );
 }
 

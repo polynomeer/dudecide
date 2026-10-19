@@ -50,6 +50,7 @@ class ImportSpeakerService(
             IMPORT_SPEAKER.DISPLAY_NAME,
             IMPORT_SPEAKER.PSEUDONYM,
             IMPORT_SPEAKER.MEMBERSHIP_ID,
+            MEMBERSHIP.USER_ID,
             APP_USER.DISPLAY_NAME,
         )
             .from(IMPORT_SPEAKER)
@@ -71,6 +72,7 @@ class ImportSpeakerService(
                     membershipId = record.get(IMPORT_SPEAKER.MEMBERSHIP_ID),
                     displayName = record.get(IMPORT_SPEAKER.DISPLAY_NAME)?.takeIf { privileged },
                     pseudonym = pseudonym.takeIf { privileged },
+                    mine = record.get(MEMBERSHIP.USER_ID) == actorId,
                 )
             }
     }

@@ -83,6 +83,12 @@ This document defines the MVP external API surface and internal async events.
 
 - join via invite
 
+`GET /api/v1/invite-links/{token}/preview`
+
+- meeting title, member count, decision titles and statuses, and counts of pending decisions, confirmed decisions, open tasks, and open questions from imports
+- no quotes and no speaker names; public with a valid token
+- `404` unknown token, `410` expired or inactive link
+
 `PATCH /api/v1/meetings/{meetingId}/members/{memberId}`
 
 - update role or attendance state
@@ -174,7 +180,7 @@ Design: [`chat-import-design.md`](./chat-import-design.md).
 
 `GET /api/v1/meetings/{meetingId}/import-speakers`
 
-- list speakers with `label` (member name or pseudonym) and mapping; `displayName` and `pseudonym` only for `host`, `co_host`, and the thread uploader
+- list speakers with `label` (member name or pseudonym), mapping, and `mine` (mapped to the caller); `displayName` and `pseudonym` only for `host`, `co_host`, and the thread uploader
 - requires meeting membership
 
 `PATCH /api/v1/import-speakers/{speakerId}`

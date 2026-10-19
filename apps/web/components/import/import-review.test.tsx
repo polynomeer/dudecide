@@ -27,6 +27,7 @@ vi.mock("@/lib/api/client", async () => {
       getChatImport: vi.fn(),
       getChatImportEvidence: vi.fn(),
       applyChatImport: vi.fn(),
+      createInviteLink: vi.fn(),
     },
   };
 });
@@ -150,6 +151,16 @@ describe("ImportReview", () => {
       expect(apiClient.applyChatImport).toHaveBeenCalledWith("import-1", ["it_1", "it_4"], expect.any(String)),
     );
     expect(await screen.findByRole("status")).toHaveTextContent("결정 1건, 할 일 1건을 반영했습니다.");
+
+    vi.mocked(apiClient.createInviteLink).mockResolvedValue({
+      id: "invite-1",
+      meetingId: "meeting-1",
+      token: "tok-123",
+      status: "active",
+      createdAt: "2026-10-02T10:00:00+09:00",
+    });
+    await user.click(screen.getByRole("button", { name: "초대 링크 만들기" }));
+    expect(await screen.findByLabelText("초대 링크")).toHaveValue(`${window.location.origin}/invite/tok-123`);
   });
 
   it("explains a failed analysis", async () => {

@@ -148,7 +148,11 @@ Limits enforced on both sides: 3,000 messages, 200 speakers, 90-day range, 2 MB 
 - `components/meeting-realtime-bridge.tsx` listens to `import.*` events and refreshes import queries
 
 Implemented in step 8. There are no entry links yet: the landing page and meeting overview have unrelated uncommitted edits in the working tree, so `/import` and `/meetings/{id}/import` are reachable by URL only. Speaker mapping to members happens after import (host `PATCH` or member claim), not in the wizard. The export guide steps come from KakaoTalk menus as remembered and need checking against current app versions.
-- Invite page (`app/invite/[token]/page.tsx`): report preview and a "What is your name in the chat?" speaker claim after join
+- Invite page (`app/invite/[token]/page.tsx`): `components/import/invite-preview.tsx` above the join form (meeting title, decision titles and statuses, counts; no quotes or names)
+- Claim after join: `components/import/speaker-claim-card.tsx`, rendered by the meeting layout as a floating card while the meeting has unmapped speakers and the member has not claimed one; dismissal is remembered per meeting in local storage
+- Share-back: the import review lets the host create an invite link and copy it for the chat room
+
+Implemented in step 9. The join form still lands on the meeting overview; the claim card appears there. Posting into a read-only import thread is rejected by the API, but the thread page does not hide its composer yet.
 
 ## Data Model
 
@@ -449,7 +453,7 @@ All under `/api/v1`. DTOs first, then `contracts/openapi/dudecide-openapi-v1.yam
 | `GET /meetings/{meetingId}/import-speakers` | list speakers with mapping; exported names and pseudonyms only for `host`, `co_host`, and the thread uploader | member |
 | `PATCH /import-speakers/{speakerId}` | set or clear `membershipId` | `host`, `co_host` |
 | `POST /meetings/{meetingId}/import-speakers/claim` | current member types their messenger name; all unmapped speakers with that name (case and whitespace insensitive) map to them | member, one name per meeting |
-| `GET /invite-links/{token}/preview` | meeting title + report preview without quotes | public with valid token |
+| `GET /invite-links/{token}/preview` | meeting title, member count, decision titles and statuses, pending/confirmed/open task/open question counts; no quotes or names; `404` unknown, `410` expired or inactive | public with valid token |
 
 Responses:
 
@@ -492,7 +496,7 @@ SSE types (meeting stream): `import.progress` (`progress.stage`: `claimed`, `pre
 
 ## Implementation Order
 
-Each step is one commit-sized work unit. Done: steps 1-8.
+Each step is one commit-sized work unit. Done: steps 1-9.
 
 1. `backend/shared`: prefilter, segmentation, status rules with tests.
 2. Migration `V3__chat_import.sql`, H2 test schema, jOOQ regen, `database-schema.md`.

@@ -55,6 +55,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InviteLinkResponse'
+  /invite-links/{token}/preview:
+    get:
+      operationId: previewInvite
+      summary: Preview the meeting behind an invite link without joining
+      description: Titles, statuses, and counts only. No quotes and no speaker names.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invite preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitePreviewResponse'
+        '404':
+          description: Unknown invite token
+        '410':
+          description: Invite link expired or inactive
   /invite-links/{token}/join:
     post:
       operationId: joinWithInvite
@@ -1874,6 +1896,7 @@ components:
         - threadId
         - label
         - mapped
+        - mine
       properties:
         id:
           type: string
@@ -1901,6 +1924,50 @@ components:
             - string
             - 'null'
           description: Hosts, co-hosts, and the thread uploader only.
+        mine:
+          type: boolean
+          description: True when the speaker is mapped to the caller's membership.
+    InvitePreviewResponse:
+      type: object
+      required:
+        - meetingTitle
+        - meetingStatus
+        - memberCount
+        - decisions
+        - pendingDecisionCount
+        - confirmedDecisionCount
+        - openTaskCount
+        - openQuestionCount
+      properties:
+        meetingTitle:
+          type: string
+        meetingStatus:
+          type: string
+        memberCount:
+          type: integer
+        decisions:
+          type: array
+          items:
+            type: object
+            required:
+              - title
+              - decisionType
+              - status
+            properties:
+              title:
+                type: string
+              decisionType:
+                type: string
+              status:
+                type: string
+        pendingDecisionCount:
+          type: integer
+        confirmedDecisionCount:
+          type: integer
+        openTaskCount:
+          type: integer
+        openQuestionCount:
+          type: integer
     UpdateImportSpeakerRequest:
       type: object
       properties:

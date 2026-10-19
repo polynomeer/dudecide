@@ -123,6 +123,8 @@ data class ImportSpeakerView(
     val membershipId: UUID? = null,
     val displayName: String? = null,
     val pseudonym: String? = null,
+    /** True when this speaker is mapped to the caller's own membership. */
+    val mine: Boolean = false,
 )
 
 data class UpdateImportSpeakerRequest(
@@ -135,4 +137,21 @@ data class ClaimImportSpeakerRequest(
 
 data class ClaimImportSpeakerResponse(
     val claimedSpeakerIds: List<UUID>,
+)
+
+data class InvitePreviewResponse(
+    val meetingTitle: String,
+    val meetingStatus: String,
+    val memberCount: Int,
+    val decisions: List<InvitePreviewDecision>,
+    val pendingDecisionCount: Int,
+    val confirmedDecisionCount: Int,
+    val openTaskCount: Int,
+    val openQuestionCount: Int,
+)
+
+data class InvitePreviewDecision(
+    val title: String,
+    val decisionType: String,
+    val status: String,
 )

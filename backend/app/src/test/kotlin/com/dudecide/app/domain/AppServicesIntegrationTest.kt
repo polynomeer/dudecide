@@ -38,6 +38,7 @@ import com.dudecide.app.domain.chatimport.EpisodeMapRequest
 import com.dudecide.app.domain.chatimport.EpisodeMapResult
 import com.dudecide.app.domain.chatimport.FakeLlmClient
 import com.dudecide.app.domain.chatimport.ImportSpeakerService
+import com.dudecide.app.domain.chatimport.InvitePreviewService
 import com.dudecide.app.domain.chatimport.LlmClient
 import com.dudecide.app.domain.chatimport.SubjectReduceRequest
 import com.dudecide.app.domain.chatimport.SubjectReduceResult
@@ -952,6 +953,8 @@ class AppServicesIntegrationTest {
             val claimed = withActor(firstId, "Participant User") {
                 context.importSpeakerService.claimSpeaker(created.meetingId, ClaimImportSpeakerRequest("  junho "))
             }
+            val afterClaim = withActor(firstId, "Participant User") { context.importSpeakerService.listSpeakers(created.meetingId) }
+            assertEquals(listOf("Participant User"), afterClaim.filter { it.mine }.map { it.label })
             val junho = hostView.single { it.displayName == "Junho" }
             assertEquals(listOf(junho.id), claimed.claimedSpeakerIds)
             val conflict = withActor(firstId, "Participant User") {
@@ -987,6 +990,37 @@ class AppServicesIntegrationTest {
                 }
             }
             assertEquals(403, forbidden.statusCode.value())
+        }
+    }
+
+    @Test
+    fun `invite preview shows titles and counts without quotes or speaker names`() {
+        testContext().use { context ->
+            val created = context.analyzedKoreanImport()
+            context.chatImportApplyService.apply(created.importId, ApplyChatImportRequest(listOf("it_1", "it_3")))
+            val invite = context.meetingService.createInviteLink(created.meetingId, CreateInviteLinkRequest())
+
+            val preview = context.invitePreviewService.preview(invite.token)
+
+            assertEquals("Jeju trip", preview.meetingTitle)
+            assertEquals(listOf("Date"), preview.decisions.map { it.title })
+            assertEquals(1, preview.pendingDecisionCount)
+            assertEquals(0, preview.confirmedDecisionCount)
+            assertEquals(1, preview.openTaskCount)
+            assertEquals(1, preview.openQuestionCount)
+            val json = context.objectMapper.writeValueAsString(preview)
+            listOf("Minji", "Junho", "Seoyeon", "Participant", "어때", "숙소는").forEach {
+                assertTrue(it !in json, "preview leaked: $it")
+            }
+
+            val missing = assertThrows(ResponseStatusException::class.java) { context.invitePreviewService.preview("nope") }
+            assertEquals(404, missing.statusCode.value())
+            val expired = context.meetingService.createInviteLink(
+                created.meetingId,
+                CreateInviteLinkRequest(expiresAt = OffsetDateTime.now().minusMinutes(1)),
+            )
+            val gone = assertThrows(ResponseStatusException::class.java) { context.invitePreviewService.preview(expired.token) }
+            assertEquals(410, gone.statusCode.value())
         }
     }
 
@@ -1082,6 +1116,7 @@ class AppServicesIntegrationTest {
                 reportService,
             ),
             importSpeakerService = ImportSpeakerService(dsl, meetingAccessService, outboxService, eventStreamService),
+            invitePreviewService = InvitePreviewService(dsl, objectMapper),
         )
     }
 
@@ -1396,6 +1431,7 @@ class AppServicesIntegrationTest {
         val eventStreamService: EventStreamService,
         val chatImportApplyService: ChatImportApplyService,
         val importSpeakerService: ImportSpeakerService,
+        val invitePreviewService: InvitePreviewService,
     ) : AutoCloseable {
         override fun close() = Unit
 

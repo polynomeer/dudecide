@@ -377,6 +377,27 @@ export type ImportSpeakerView = {
   membershipId?: string | null;
   displayName?: string | null;
   pseudonym?: string | null;
+  mine: boolean;
+};
+
+export type InvitePreviewResponse = {
+  meetingTitle: string;
+  meetingStatus: string;
+  memberCount: number;
+  decisions: Array<{ title: string; decisionType: string; status: string }>;
+  pendingDecisionCount: number;
+  confirmedDecisionCount: number;
+  openTaskCount: number;
+  openQuestionCount: number;
+};
+
+export type InviteLinkResponse = {
+  id: string;
+  meetingId: string;
+  token: string;
+  status: string;
+  expiresAt?: string | null;
+  createdAt: string;
 };
 
 const API_BASE_URL =
@@ -432,6 +453,12 @@ export const apiClient = {
     request<CreateMeetingResponse>("/api/v1/meetings", {
       method: "POST",
       body: JSON.stringify(body),
+    }),
+  previewInvite: (token: string) => request<InvitePreviewResponse>(`/api/v1/invite-links/${token}/preview`),
+  createInviteLink: (meetingId: string, expiresAt?: string) =>
+    request<InviteLinkResponse>(`/api/v1/meetings/${meetingId}/invite-links`, {
+      method: "POST",
+      body: JSON.stringify({ expiresAt: expiresAt ?? null }),
     }),
   joinInvite: (token: string, body: JoinInviteRequest) =>
     request<MembershipResponse>(`/api/v1/invite-links/${token}/join`, {
