@@ -2,9 +2,9 @@ package com.dudecide.app.domain
 
 import com.dudecide.app.jooq.tables.AppUser.Companion.APP_USER
 import org.jooq.DSLContext
-import org.jooq.impl.DSL
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.context.request.RequestContextHolder
 import org.springframework.web.context.request.ServletRequestAttributes
@@ -12,6 +12,10 @@ import org.springframework.web.server.ResponseStatusException
 import java.time.OffsetDateTime
 import java.util.UUID
 
+/**
+ * Resolves and provisions the calling actor. Provisioning commits in its own transaction: callers are often
+ * read-only transactions, and the actor row should exist even if the request that first saw the actor fails.
+ */
 @Component
 class LocalActorProvider(
     private val dsl: DSLContext,
@@ -23,18 +27,18 @@ class LocalActorProvider(
 
     private val localHostId: UUID = UUID.fromString("00000000-0000-0000-0000-000000000001")
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun ensureHostUser(): UUID {
         ensureUser(localHostId, "Local Host")
         return localHostId
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun currentUserId(): UUID {
         return currentActor().userId
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun currentActor(): CurrentActor {
         val request = (RequestContextHolder.getRequestAttributes() as? ServletRequestAttributes)?.request
         val sessionActorId = request?.getSession(false)?.getAttribute(SESSION_ACTOR_ID_KEY)?.toString()?.trim().orEmpty()
@@ -59,7 +63,7 @@ class LocalActorProvider(
         )
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun createSessionActor(displayName: String): CurrentActor {
         val actorId = UUID.randomUUID()
         ensureUser(actorId, displayName)
@@ -73,13 +77,12 @@ class LocalActorProvider(
     }
 
     private fun ensureUser(userId: UUID, displayName: String) {
-        val exists = dsl.fetchExists(
-            DSL.selectOne()
-                .from(APP_USER)
-                .where(APP_USER.ID.eq(userId)),
-        )
+        val currentName = dsl.select(APP_USER.DISPLAY_NAME)
+            .from(APP_USER)
+            .where(APP_USER.ID.eq(userId))
+            .fetchOptional(APP_USER.DISPLAY_NAME)
 
-        if (!exists) {
+        if (currentName.isEmpty) {
             dsl.insertInto(APP_USER)
                 .set(APP_USER.ID, userId)
                 .set(APP_USER.DISPLAY_NAME, displayName)
@@ -88,11 +91,12 @@ class LocalActorProvider(
             return
         }
 
-        dsl.update(APP_USER)
-            .set(APP_USER.DISPLAY_NAME, displayName)
-            .where(APP_USER.ID.eq(userId))
-            .and(APP_USER.DISPLAY_NAME.ne(displayName))
-            .execute()
+        if (currentName.get() != displayName) {
+            dsl.update(APP_USER)
+                .set(APP_USER.DISPLAY_NAME, displayName)
+                .where(APP_USER.ID.eq(userId))
+                .execute()
+        }
     }
 
     private fun buildActor(rawActorId: String, displayName: String?, authSource: String): CurrentActor {
