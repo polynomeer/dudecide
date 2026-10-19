@@ -586,6 +586,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeleteChatImportResponse'
+  /imports/{importId}/evidence:
+    get:
+      operationId: getChatImportEvidence
+      summary: Get the messages cited by a staged import result
+      description: Evidence and objection messages of all result items, with the same speaker visibility as the thread view.
+      parameters:
+        - $ref: '#/components/parameters/ImportId'
+      responses:
+        '200':
+          description: Cited messages in chronological order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MessageView'
   /imports/{importId}/apply:
     post:
       operationId: applyChatImport

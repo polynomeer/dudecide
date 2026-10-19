@@ -472,6 +472,7 @@ export const apiClient = {
     request<ChatImportView>(
       `/api/v1/imports/${importId}${includeDeletionImpact ? "?includeDeletionImpact=true" : ""}`,
     ),
+  getChatImportEvidence: (importId: string) => request<MessageView[]>(`/api/v1/imports/${importId}/evidence`),
   applyChatImport: (importId: string, itemIds: string[], idempotencyKey?: string) =>
     request<ApplyChatImportResponse>(`/api/v1/imports/${importId}/apply`, {
       method: "POST",

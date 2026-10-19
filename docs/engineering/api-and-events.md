@@ -152,6 +152,12 @@ Design: [`chat-import-design.md`](./chat-import-design.md).
 - import status, progress, and staged result
 - requires meeting membership
 
+`GET /api/v1/imports/{importId}/evidence`
+
+- messages cited by the staged result (evidence and objections), chronological, with the same speaker visibility as the thread view
+- avoids paging the import thread, whose minute-precision timestamps make the `before` cursor skip messages
+- requires meeting membership
+
 `POST /api/v1/imports/{importId}/apply`
 
 - apply selected staged `itemIds`: decisions become `proposed` (likely decided) or `in_discussion` with evidence; tasks are created; nothing is confirmed

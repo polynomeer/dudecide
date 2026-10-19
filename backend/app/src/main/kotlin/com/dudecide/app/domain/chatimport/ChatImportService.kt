@@ -6,10 +6,12 @@ import com.dudecide.app.api.dto.ChatImportView
 import com.dudecide.app.api.dto.CreateChatImportRequest
 import com.dudecide.app.api.dto.CreateMeetingRequest
 import com.dudecide.app.api.dto.DeleteChatImportResponse
+import com.dudecide.app.api.dto.MessageView
 import com.dudecide.app.domain.EventStreamService
 import com.dudecide.app.domain.LocalActorProvider
 import com.dudecide.app.domain.MeetingAccessService
 import com.dudecide.app.domain.MeetingService
+import com.dudecide.app.domain.MessageService
 import com.dudecide.app.domain.OutboxService
 import com.dudecide.app.jooq.enums.ChatImportSource
 import com.dudecide.app.jooq.enums.ChatImportStatus
@@ -47,6 +49,7 @@ class ChatImportService(
     private val meetingService: MeetingService,
     private val outboxService: OutboxService,
     private val eventStreamService: EventStreamService,
+    private val messageService: MessageService,
 ) {
 
     private val hasher = ChatContentHasher()
@@ -83,6 +86,26 @@ class ChatImportService(
         meetingAccessService.requireMeetingMember(requireNotNull(record.meetingId))
         val view = toView(record)
         return if (includeDeletionImpact) view.copy(deletionImpact = deletionImpact(importId)) else view
+    }
+
+    /** Messages cited by the staged result, with the same speaker visibility as the thread view. */
+    @Transactional(readOnly = true)
+    fun getEvidence(importId: UUID): List<MessageView> {
+        val record = dsl.selectFrom(CHAT_IMPORT)
+            .where(CHAT_IMPORT.ID.eq(importId))
+            .fetchOne()
+            ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "import not found")
+        meetingAccessService.requireMeetingMember(requireNotNull(record.meetingId))
+        @Suppress("UNCHECKED_CAST")
+        val items = jsonToMap(record.result)?.get("items") as? List<Map<String, Any?>> ?: emptyList()
+        val ids = items.flatMap { item ->
+            @Suppress("UNCHECKED_CAST")
+            val evidence = item["evidence"] as? List<Map<String, Any?>> ?: emptyList()
+            @Suppress("UNCHECKED_CAST")
+            val objections = item["objections"] as? List<String> ?: emptyList()
+            evidence.mapNotNull { it["messageId"] as? String } + objections
+        }.map(UUID::fromString)
+        return messageService.listMessagesByIds(requireNotNull(record.threadId), ids)
     }
 
     /**

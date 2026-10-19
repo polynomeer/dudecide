@@ -816,6 +816,10 @@ class AppServicesIntegrationTest {
             assertEquals(seoyeonId.toString(), items.last()["ownerSpeakerId"])
             assertEquals("숙소는 어디로 하지?", items[1]["title"])
 
+            val evidenceMessages = context.chatImportService.getEvidence(created.importId)
+            assertEquals(6, evidenceMessages.size)
+            assertEquals("18일 어때?", evidenceMessages.first().body)
+
             val record = context.dsl.selectFrom(CHAT_IMPORT).where(CHAT_IMPORT.ID.eq(created.importId)).fetchOne()!!
             assertEquals("chat-import-v1", record.promptVersion)
             assertTrue(record.modelVersions!!.data().contains("fake-map-v1"))
@@ -1041,6 +1045,7 @@ class AppServicesIntegrationTest {
         val notificationService = NotificationService(dsl, objectMapper, localActorProvider, meetingAccessService, eventStreamService)
 
         val meetingService = MeetingService(dsl, localActorProvider, meetingAccessService, outboxService, eventStreamService, notificationService)
+        val messageService = MessageService(dsl, objectMapper, localActorProvider, meetingAccessService, outboxService, eventStreamService)
         val taskService = TaskService(dsl, meetingAccessService, outboxService, eventStreamService)
         val reportService = ReportService(dsl, objectMapper, meetingAccessService, outboxService, eventStreamService, notificationService)
 
@@ -1050,7 +1055,7 @@ class AppServicesIntegrationTest {
             meetingService = meetingService,
             voteService = VoteService(dsl, objectMapper, localActorProvider, meetingAccessService, outboxService, eventStreamService, notificationService),
             decisionService = DecisionService(dsl, objectMapper, localActorProvider, meetingAccessService, outboxService, eventStreamService, notificationService),
-            messageService = MessageService(dsl, objectMapper, localActorProvider, meetingAccessService, outboxService, eventStreamService),
+            messageService = messageService,
             threadService = ThreadService(dsl, meetingAccessService, outboxService, eventStreamService),
             reportService = reportService,
             searchService = SearchService(dsl, meetingAccessService),
@@ -1064,6 +1069,7 @@ class AppServicesIntegrationTest {
                 meetingService,
                 outboxService,
                 eventStreamService,
+                messageService,
             ),
             eventStreamService = eventStreamService,
             chatImportApplyService = ChatImportApplyService(

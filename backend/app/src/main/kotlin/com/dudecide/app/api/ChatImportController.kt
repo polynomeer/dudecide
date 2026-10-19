@@ -9,6 +9,7 @@ import com.dudecide.app.api.dto.ClaimImportSpeakerResponse
 import com.dudecide.app.api.dto.CreateChatImportRequest
 import com.dudecide.app.api.dto.DeleteChatImportResponse
 import com.dudecide.app.api.dto.ImportSpeakerView
+import com.dudecide.app.api.dto.MessageView
 import com.dudecide.app.api.dto.UpdateImportSpeakerRequest
 import com.dudecide.app.domain.IdempotencyService
 import com.dudecide.app.domain.IdempotentResponse
@@ -92,6 +93,11 @@ class ChatImportController(
         @RequestParam(required = false, defaultValue = "false") includeDeletionImpact: Boolean,
     ): ResponseEntity<ChatImportView> =
         ResponseEntity.ok(chatImportService.getImport(importId, includeDeletionImpact))
+
+    @GetMapping("/imports/{importId}/evidence")
+    @Operation(summary = "Get the messages cited by a staged import result")
+    fun getEvidence(@PathVariable importId: UUID): ResponseEntity<List<MessageView>> =
+        ResponseEntity.ok(chatImportService.getEvidence(importId))
 
     @PostMapping("/imports/{importId}/apply")
     @Operation(summary = "Apply selected staged items to the meeting board")

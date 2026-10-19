@@ -142,7 +142,12 @@ Limits enforced on both sides: 3,000 messages, 200 speakers, 90-day range, 2 MB 
 - `app/import/page.tsx`: guest entry wizard (creates a draft meeting)
 - `app/meetings/[meetingId]/import/page.tsx`: import into an existing meeting
 - `app/meetings/[meetingId]/import/[importId]/page.tsx`: progress and review
-- `components/import/`: `import-dropzone`, `export-guide` (per OS), `range-picker`, `speaker-mapper`, `mask-preview`, `import-progress`, `import-review` (item list with evidence and apply checkboxes)
+- `components/import/import-wizard.tsx`: one page with file or paste input, export guide per OS, range presets (default, 7 days, all, custom dates), "which one is me", masked preview, consent, submit
+- `components/import/import-review.tsx`: progress (polling every 2 s plus SSE), review grouped by status with evidence quotes, apply with preselected likely decisions and tasks (host only), delete with impact confirmation
+- `components/import/import-copy.ts`: Korean copy, stage and status labels, builder error messages
+- `components/meeting-realtime-bridge.tsx` listens to `import.*` events and refreshes import queries
+
+Implemented in step 8. There are no entry links yet: the landing page and meeting overview have unrelated uncommitted edits in the working tree, so `/import` and `/meetings/{id}/import` are reachable by URL only. Speaker mapping to members happens after import (host `PATCH` or member claim), not in the wizard. The export guide steps come from KakaoTalk menus as remembered and need checking against current app versions.
 - Invite page (`app/invite/[token]/page.tsx`): report preview and a "What is your name in the chat?" speaker claim after join
 
 ## Data Model
@@ -438,6 +443,7 @@ All under `/api/v1`. DTOs first, then `contracts/openapi/dudecide-openapi-v1.yam
 | `POST /meetings/{meetingId}/imports` | import into existing meeting | `host`, `co_host` |
 | `GET /meetings/{meetingId}/imports` | list imports | member |
 | `GET /imports/{importId}` | status, progress, result | member |
+| `GET /imports/{importId}/evidence` | messages cited by the result, with thread speaker visibility | member |
 | `POST /imports/{importId}/apply` | apply selected items | `host`, `co_host` |
 | `DELETE /imports/{importId}` | delete import, its messages, dependent evidence | uploader, `host`, `co_host` |
 | `GET /meetings/{meetingId}/import-speakers` | list speakers with mapping; exported names and pseudonyms only for `host`, `co_host`, and the thread uploader | member |
@@ -486,7 +492,7 @@ SSE types (meeting stream): `import.progress` (`progress.stage`: `claimed`, `pre
 
 ## Implementation Order
 
-Each step is one commit-sized work unit. Done: steps 1-7.
+Each step is one commit-sized work unit. Done: steps 1-8.
 
 1. `backend/shared`: prefilter, segmentation, status rules with tests.
 2. Migration `V3__chat_import.sql`, H2 test schema, jOOQ regen, `database-schema.md`.

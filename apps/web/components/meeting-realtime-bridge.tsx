@@ -68,6 +68,13 @@ export function MeetingRealtimeBridge({
       if (eventType === "decision.updated") {
         await queryClient.invalidateQueries({ queryKey: ["decision-detail"] });
       }
+
+      if (eventType.startsWith("import.")) {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["chat-import"] }),
+          queryClient.invalidateQueries({ queryKey: ["meeting-imports", meetingId] }),
+        ]);
+      }
     };
 
     const connect = () => {
@@ -95,6 +102,9 @@ export function MeetingRealtimeBridge({
       eventSource.addEventListener("report.updated", () => void handleEvent("report.updated"));
       eventSource.addEventListener("notification.created", () =>
         void handleEvent("notification.created"),
+      );
+      ["import.progress", "import.completed", "import.failed", "import.deleted"].forEach((eventType) =>
+        eventSource?.addEventListener(eventType, () => void handleEvent(eventType)),
       );
       eventSource.onerror = () => {
         eventSource?.close();

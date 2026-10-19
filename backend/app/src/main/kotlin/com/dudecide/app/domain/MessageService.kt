@@ -40,8 +40,39 @@ class MessageService(
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "limit must be between 1 and 100")
         }
 
+        val query = messageViewQuery().where(MESSAGE.THREAD_ID.eq(threadId))
+        if (before != null) {
+            query.and(MESSAGE.CREATED_AT.lt(before))
+        }
+
         val actorId = localActorProvider.currentUserId()
-        val query = dsl.select(
+        return query
+            .orderBy(MESSAGE.CREATED_AT.desc())
+            .limit(limit)
+            .fetch()
+            .reversed()
+            .map { toView(it, actorId) }
+    }
+
+    /** Messages of one thread by id, in chronological order; used to show evidence quotes. */
+    @Transactional(readOnly = true)
+    fun listMessagesByIds(threadId: UUID, messageIds: Collection<UUID>): List<MessageView> {
+        meetingAccessService.requireThreadMember(threadId)
+        if (messageIds.isEmpty()) {
+            return emptyList()
+        }
+        val actorId = localActorProvider.currentUserId()
+        return messageIds.distinct().chunked(ID_LOOKUP_CHUNK).flatMap { chunk ->
+            messageViewQuery()
+                .where(MESSAGE.THREAD_ID.eq(threadId))
+                .and(MESSAGE.ID.`in`(chunk))
+                .fetch()
+                .map { toView(it, actorId) }
+        }.sortedWith(compareBy<MessageView> { it.createdAt }.thenBy { it.id })
+    }
+
+    private fun messageViewQuery() =
+        dsl.select(
             MESSAGE.ID,
             MESSAGE.THREAD_ID,
             MESSAGE.SENDER_USER_ID,
@@ -65,32 +96,21 @@ class MessageService(
             .leftJoin(MAPPED_MEMBERSHIP).on(MAPPED_MEMBERSHIP.ID.eq(IMPORT_SPEAKER.MEMBERSHIP_ID))
             .leftJoin(MAPPED_USER).on(MAPPED_USER.ID.eq(MAPPED_MEMBERSHIP.USER_ID))
             .leftJoin(CHAT_IMPORT).on(CHAT_IMPORT.ID.eq(MESSAGE.IMPORT_ID))
-            .where(MESSAGE.THREAD_ID.eq(threadId))
 
-        if (before != null) {
-            query.and(MESSAGE.CREATED_AT.lt(before))
-        }
-
-        return query
-            .orderBy(MESSAGE.CREATED_AT.desc())
-            .limit(limit)
-            .fetch()
-            .reversed()
-            .map { record ->
-                val origin = requireNotNull(record.get(MESSAGE.ORIGIN))
-                MessageView(
-                    id = requireNotNull(record.get(MESSAGE.ID)),
-                    threadId = requireNotNull(record.get(MESSAGE.THREAD_ID)),
-                    senderUserId = record.get(MESSAGE.SENDER_USER_ID),
-                    origin = origin.literal,
-                    speaker = resolveSpeaker(record, origin, actorId),
-                    body = requireNotNull(record.get(MESSAGE.BODY)),
-                    attachments = jsonToList(record.get(MESSAGE.ATTACHMENTS)),
-                    aiLabels = jsonToMap(record.get(MESSAGE.AI_LABELS)),
-                    createdAt = requireNotNull(record.get(MESSAGE.CREATED_AT)),
-                    editedAt = record.get(MESSAGE.EDITED_AT),
-                )
-            }
+    private fun toView(record: Record, actorId: UUID): MessageView {
+        val origin = requireNotNull(record.get(MESSAGE.ORIGIN))
+        return MessageView(
+            id = requireNotNull(record.get(MESSAGE.ID)),
+            threadId = requireNotNull(record.get(MESSAGE.THREAD_ID)),
+            senderUserId = record.get(MESSAGE.SENDER_USER_ID),
+            origin = origin.literal,
+            speaker = resolveSpeaker(record, origin, actorId),
+            body = requireNotNull(record.get(MESSAGE.BODY)),
+            attachments = jsonToList(record.get(MESSAGE.ATTACHMENTS)),
+            aiLabels = jsonToMap(record.get(MESSAGE.AI_LABELS)),
+            createdAt = requireNotNull(record.get(MESSAGE.CREATED_AT)),
+            editedAt = record.get(MESSAGE.EDITED_AT),
+        )
     }
 
     @Transactional
@@ -274,6 +294,7 @@ class MessageService(
 
     private companion object {
         const val UNKNOWN_SPEAKER = "Unknown"
+        const val ID_LOOKUP_CHUNK = 500
 
         val SENDER_USER = APP_USER.`as`("sender_user")
         val MAPPED_MEMBERSHIP = MEMBERSHIP.`as`("mapped_membership")
