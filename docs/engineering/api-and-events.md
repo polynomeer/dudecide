@@ -194,7 +194,12 @@ Design: [`chat-import-design.md`](./chat-import-design.md).
 - `404` when nothing matches, `409` when the caller already claimed a different name
 - requires meeting membership
 
-Limits (both create endpoints): `400` when consent is missing, the source type is not `kakao_export` or `paste`, the range exceeds 90 days, a message falls outside the range, or there are more than 3,000 messages or 200 speakers; the reason names the limit. `413` when the body exceeds 2 MB. Message bodies are truncated to 4,000 characters.
+`POST /api/v1/telemetry/import-parse`
+
+- anonymous parser telemetry: format, format version, counts, and up to 5 line shapes (`D`, `H`, `W`, `*`, separators); anything else is dropped
+- returns `204`; no session needed
+
+Limits (both create endpoints): `429` after 3 imports per person or 10 per meeting in 24 hours. `400` when consent is missing, the source type is not `kakao_export` or `paste`, the range exceeds 90 days, a message falls outside the range, or there are more than 3,000 messages or 200 speakers; the reason names the limit. `413` when the body exceeds 2 MB. Message bodies are truncated to 4,000 characters.
 
 ### Decisions
 

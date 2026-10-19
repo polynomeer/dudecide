@@ -19,3 +19,6 @@ dudecide:
     provider: ${DUDECIDE_AI_PROVIDER:fake}
     max-concurrency: 4
     timeout-seconds: 60
+  imports:
+    daily-per-actor: ${DUDECIDE_IMPORTS_DAILY_PER_ACTOR:3}
+    daily-per-meeting: ${DUDECIDE_IMPORTS_DAILY_PER_MEETING:10}

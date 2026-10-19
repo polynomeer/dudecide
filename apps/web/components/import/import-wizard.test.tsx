@@ -5,7 +5,7 @@ import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ImportWizard } from "@/components/import/import-wizard";
-import { apiClient } from "@/lib/api/client";
+import { ApiError, apiClient } from "@/lib/api/client";
 import { renderWithQueryClient } from "@/test-utils/render-with-query-client";
 
 const push = vi.fn();
@@ -23,6 +23,7 @@ vi.mock("@/lib/api/client", async () => {
       createChatImport: vi.fn(),
       createMeetingChatImport: vi.fn(),
       listChatImports: vi.fn(),
+      reportImportParse: vi.fn().mockResolvedValue(undefined),
     },
   };
 });
@@ -73,6 +74,34 @@ describe("ImportWizard", () => {
     expect(payload.consent).toEqual({ isParticipant: true, version: "chat-import-consent-v1" });
     expect(JSON.stringify(payload)).not.toContain("010-1234-5678");
     expect(JSON.stringify(payload)).not.toContain("3333-01-2345678");
+  });
+
+  it("reports anonymous parse telemetry once the input settles", async () => {
+    vi.useFakeTimers();
+    try {
+      renderWithQueryClient(<ImportWizard />);
+      fireEvent.change(screen.getByLabelText("대화 붙여넣기"), { target: { value: "민지: 계좌 3333-01-2345678\n준호: ㅇㅇ" } });
+      await vi.advanceTimersByTimeAsync(1600);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(apiClient.reportImportParse).toHaveBeenCalledTimes(1);
+    const telemetry = vi.mocked(apiClient.reportImportParse).mock.calls[0][0];
+    expect(telemetry).toMatchObject({ format: "free_text", parsedCount: 2 });
+    expect(JSON.stringify(telemetry)).not.toMatch(/민지|3333|준호/);
+  });
+
+  it("explains the daily import limit", async () => {
+    vi.mocked(apiClient.createChatImport).mockRejectedValue(new ApiError(429, '{"status":429}'));
+    const user = userEvent.setup();
+    renderWithQueryClient(<ImportWizard />);
+
+    fireEvent.change(screen.getByLabelText("대화 붙여넣기"), { target: { value: androidExport } });
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "분석 시작" }));
+
+    expect(await screen.findByText(/오늘 가져올 수 있는 횟수를 모두 썼어요/)).toBeInTheDocument();
   });
 
   it("reports text without readable messages", () => {

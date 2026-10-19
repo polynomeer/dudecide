@@ -7,6 +7,7 @@ import com.dudecide.app.api.dto.CreateChatImportRequest
 import com.dudecide.app.api.dto.CreateMeetingRequest
 import com.dudecide.app.api.dto.DeleteChatImportResponse
 import com.dudecide.app.api.dto.MessageView
+import com.dudecide.app.config.ChatImportLimitProperties
 import com.dudecide.app.domain.EventStreamService
 import com.dudecide.app.domain.LocalActorProvider
 import com.dudecide.app.domain.MeetingAccessService
@@ -50,6 +51,7 @@ class ChatImportService(
     private val outboxService: OutboxService,
     private val eventStreamService: EventStreamService,
     private val messageService: MessageService,
+    private val limits: ChatImportLimitProperties = ChatImportLimitProperties(),
 ) {
 
     private val hasher = ChatContentHasher()
@@ -59,6 +61,7 @@ class ChatImportService(
     fun createImport(request: CreateChatImportRequest): ChatImportCreatedResponse {
         val actorId = localActorProvider.currentUserId()
         val validated = ChatImportValidator.validate(request)
+        requireWithinLimits(actorId, meetingId = null)
         val meeting = meetingService.createMeeting(
             CreateMeetingRequest(
                 title = request.meetingTitle?.trim()?.takeIf { it.isNotEmpty() }?.take(200)
@@ -74,6 +77,7 @@ class ChatImportService(
     fun createMeetingImport(meetingId: UUID, request: CreateChatImportRequest): ChatImportCreatedResponse {
         val actorId = meetingAccessService.requireMeetingHostOrCoHost(meetingId)
         val validated = ChatImportValidator.validate(request)
+        requireWithinLimits(actorId, meetingId)
         return persist(meetingId, actorId, validated, purgeAt = null)
     }
 
@@ -264,6 +268,32 @@ class ChatImportService(
         )
     }
 
+    private fun requireWithinLimits(actorId: UUID, meetingId: UUID?) {
+        val since = OffsetDateTime.now().minus(LIMIT_WINDOW)
+        val byActor = dsl.fetchCount(
+            CHAT_IMPORT,
+            CHAT_IMPORT.UPLOADED_BY_USER_ID.eq(actorId).and(CHAT_IMPORT.CREATED_AT.gt(since)),
+        )
+        if (byActor >= limits.dailyPerActor) {
+            throw ResponseStatusException(
+                HttpStatus.TOO_MANY_REQUESTS,
+                "daily import limit of ${limits.dailyPerActor} per person reached; try again tomorrow",
+            )
+        }
+        if (meetingId != null) {
+            val byMeeting = dsl.fetchCount(
+                CHAT_IMPORT,
+                CHAT_IMPORT.MEETING_ID.eq(meetingId).and(CHAT_IMPORT.CREATED_AT.gt(since)),
+            )
+            if (byMeeting >= limits.dailyPerMeeting) {
+                throw ResponseStatusException(
+                    HttpStatus.TOO_MANY_REQUESTS,
+                    "daily import limit of ${limits.dailyPerMeeting} per meeting reached; try again tomorrow",
+                )
+            }
+        }
+    }
+
     // One read-only import thread per (meeting, source room); re-imports reuse it.
     private fun findOrCreateThread(meetingId: UUID, roomName: String?): UUID {
         dsl.select(CHAT_IMPORT.THREAD_ID)
@@ -423,6 +453,7 @@ class ChatImportService(
         const val DEFAULT_MEETING_TYPE = "outing"
         const val HASH_LOOKUP_CHUNK = 500
         val GUEST_RETENTION: Duration = Duration.ofDays(7)
+        val LIMIT_WINDOW: Duration = Duration.ofHours(24)
 
         fun pseudonym(index: Int): String {
             var remaining = index

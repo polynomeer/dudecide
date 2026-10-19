@@ -7,6 +7,7 @@ This document maps the MVP relational model to the Flyway migrations.
 - migration: [`backend/app/src/main/resources/db/migration/V1__initial_schema.sql`](../../backend/app/src/main/resources/db/migration/V1__initial_schema.sql)
 - migration: [`V2__idempotency_records.sql`](../../backend/app/src/main/resources/db/migration/V2__idempotency_records.sql)
 - migration: [`V3__chat_import.sql`](../../backend/app/src/main/resources/db/migration/V3__chat_import.sql)
+- migration: [`V4__chat_import_claims.sql`](../../backend/app/src/main/resources/db/migration/V4__chat_import_claims.sql)
 - model reference: [`data-model-erd.md`](./data-model-erd.md)
 
 ## Scope
@@ -21,6 +22,7 @@ The initial schema covers:
 - infrastructure support through an outbox table
 - idempotency records (V2)
 - chat imports, imported speakers, and imported message origin (V3)
+- analysis claim time and attempt count on chat imports (V4)
 
 It does not yet include:
 
@@ -78,6 +80,7 @@ Design: [`chat-import-design.md`](./chat-import-design.md).
 - imported chat lives in `message` with `origin = 'imported'`, `sender_user_id` null, and `import_id`, `import_speaker_id`, `content_hash` set; `message_sender_origin_ck` enforces exactly one sender kind
 - `topic_thread.read_only` marks import threads that cannot receive native messages
 - `message_thread_content_hash_uk` (partial unique index) deduplicates re-imports per thread
+- `chat_import.claimed_at` and `attempts` (V4) let the maintenance worker requeue or fail analyses left behind by a crashed process; `(uploaded_by_user_id, created_at)` backs the daily import limit
 - deleting a `chat_import` cascades to its messages and, through `decision_evidence.message_id`, to evidence built on them; `task_item.source_message_id` is set to null
 
 ### Vote Modeling

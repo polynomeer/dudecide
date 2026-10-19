@@ -14,10 +14,12 @@ import com.dudecide.shared.chatimport.SubjectEvent
 import com.dudecide.shared.chatimport.SubjectStatus
 import com.dudecide.shared.chatimport.SubjectStatusRules
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.micrometer.core.instrument.MeterRegistry
 import org.jooq.DSLContext
 import org.jooq.JSON
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.util.UUID
@@ -36,6 +38,7 @@ class ChatImportAnalyzer(
     private val llmClient: LlmClient,
     private val eventStreamService: EventStreamService,
     private val properties: ChatImportAiProperties,
+    private val meterRegistry: MeterRegistry,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
     private val prefilter = ChatPrefilter()
@@ -56,6 +59,8 @@ class ChatImportAnalyzer(
             dsl.update(CHAT_IMPORT)
                 .set(CHAT_IMPORT.STATUS, ChatImportStatus.analyzing)
                 .set(CHAT_IMPORT.PROGRESS, toJson(mapOf("stage" to "claimed")))
+                .set(CHAT_IMPORT.CLAIMED_AT, OffsetDateTime.now())
+                .set(CHAT_IMPORT.ATTEMPTS, CHAT_IMPORT.ATTEMPTS.plus(1))
                 .where(CHAT_IMPORT.ID.eq(importId))
                 .and(CHAT_IMPORT.STATUS.eq(ChatImportStatus.submitted))
                 .execute() == 1
@@ -80,7 +85,16 @@ class ChatImportAnalyzer(
                 .execute() == 1
             if (!stored) return
             @Suppress("UNCHECKED_CAST")
-            val itemCount = (result["items"] as List<Any?>).size
+            val items = result["items"] as List<Map<String, Any?>>
+            val itemCount = items.size
+            meterRegistry.counter("dudecide.import.analysis", "outcome", "ready").increment()
+            items.forEach { item ->
+                meterRegistry.counter(
+                    "dudecide.import.items",
+                    "kind", item["kind"] as String,
+                    "status", (item["status"] as? String) ?: "none",
+                ).increment()
+            }
             eventStreamService.publish(
                 meetingId = meetingId,
                 eventType = "import.completed",
@@ -97,6 +111,7 @@ class ChatImportAnalyzer(
                 .and(CHAT_IMPORT.STATUS.eq(ChatImportStatus.analyzing))
                 .execute() == 1
             if (!stored) return
+            meterRegistry.counter("dudecide.import.analysis", "outcome", "failed").increment()
             eventStreamService.publish(
                 meetingId = meetingId,
                 eventType = "import.failed",
@@ -107,17 +122,19 @@ class ChatImportAnalyzer(
 
     private fun run(importId: UUID, meetingId: UUID, asOf: Instant): Map<String, Any?> {
         progress(importId, meetingId, mapOf("stage" to "prefilter"))
-        val loaded = loadMessages(importId)
-        val prefiltered = prefilter.filter(loaded.messages.map { ImportedMessage(it.shortId, it.pseudonym, it.sentAt, it.body) })
-        val episodes = segmenter.segment(prefiltered)
+        val (loaded, prefiltered, episodes) = timed("prefilter") {
+            val loaded = loadMessages(importId)
+            val prefiltered = prefilter.filter(loaded.messages.map { ImportedMessage(it.shortId, it.pseudonym, it.sentAt, it.body) })
+            Triple(loaded, prefiltered, segmenter.segment(prefiltered))
+        }
 
-        val mapResults = mapEpisodes(importId, meetingId, episodes.map { episode ->
+        val mapResults = timed("map") { mapEpisodes(importId, meetingId, episodes.map { episode ->
             EpisodeMapRequest(
                 episodeIndex = episode.index,
                 messages = episode.messages.map { LlmMessage(it.id, it.speaker, it.sentAt, it.body) },
                 filteredCount = episode.filteredCount,
             )
-        })
+        }) }
         val succeeded = mapResults.filterNotNull()
         val failedEpisodes = mapResults.size - succeeded.size
         if (failedEpisodes * 5 > mapResults.size) {
@@ -129,11 +146,11 @@ class ChatImportAnalyzer(
         val merged = if (localSubjects.isEmpty()) {
             emptyList()
         } else {
-            withRetry { llmClient.reduceSubjects(SubjectReduceRequest(localSubjects)) }.subjects
+            timed("reduce") { withRetry { llmClient.reduceSubjects(SubjectReduceRequest(localSubjects)) }.subjects }
         }
 
         progress(importId, meetingId, mapOf("stage" to "rules"))
-        return ChatImportResultAssembler(loaded).assemble(
+        return timed("rules") { ChatImportResultAssembler(loaded).assemble(
             subjects = merged.mapNotNull { toSubject(it, loaded) },
             assess = { rules.assess(it, asOf) },
             questions = succeeded.flatMap { it.questions },
@@ -144,7 +161,16 @@ class ChatImportAnalyzer(
                 "episodeCount" to episodes.size,
                 "failedEpisodes" to failedEpisodes,
             ),
-        )
+        ) }
+    }
+
+    private fun <T> timed(stage: String, block: () -> T): T {
+        val started = System.nanoTime()
+        try {
+            return block()
+        } finally {
+            meterRegistry.timer("dudecide.import.stage", "stage", stage).record(Duration.ofNanos(System.nanoTime() - started))
+        }
     }
 
     private fun mapEpisodes(importId: UUID, meetingId: UUID, requests: List<EpisodeMapRequest>): List<EpisodeMapResult?> {
@@ -172,6 +198,12 @@ class ChatImportAnalyzer(
     private fun sanitize(result: EpisodeMapResult, request: EpisodeMapRequest): EpisodeMapResult {
         val ids = request.messages.map { it.id }.toSet()
         val speakers = request.messages.map { it.speaker }.toSet()
+        val dropped = result.subjects.sumOf { subject -> subject.events.count { it.messageId !in ids || it.speaker !in speakers } } +
+            result.questions.count { it.messageId !in ids } +
+            result.tasks.count { it.messageId !in ids }
+        if (dropped > 0) {
+            meterRegistry.counter("dudecide.import.llm.dropped", "stage", "map").increment(dropped.toDouble())
+        }
         return EpisodeMapResult(
             messages = result.messages.filter { it.id in ids },
             subjects = result.subjects

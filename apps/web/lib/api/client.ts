@@ -495,6 +495,17 @@ export const apiClient = {
       headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
     }),
   listChatImports: (meetingId: string) => request<ChatImportView[]>(`/api/v1/meetings/${meetingId}/imports`),
+  reportImportParse: (body: {
+    format: string;
+    formatVersion: string;
+    parsedCount: number;
+    unparsedLineCount: number;
+    signatures: string[];
+  }) =>
+    request<void>("/api/v1/telemetry/import-parse", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   getChatImport: (importId: string, includeDeletionImpact = false) =>
     request<ChatImportView>(
       `/api/v1/imports/${importId}${includeDeletionImpact ? "?includeDeletionImpact=true" : ""}`,

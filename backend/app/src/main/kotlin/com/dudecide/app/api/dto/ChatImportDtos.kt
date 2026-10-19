@@ -155,3 +155,12 @@ data class InvitePreviewDecision(
     val decisionType: String,
     val status: String,
 )
+
+data class ParseTelemetryRequest(
+    val format: String,
+    val formatVersion: String? = null,
+    val parsedCount: Int = 0,
+    val unparsedLineCount: Int = 0,
+    /** Line shapes such as `DDDDH DDH DH H D:DD, H : H`, never content. */
+    val signatures: List<String> = emptyList(),
+)

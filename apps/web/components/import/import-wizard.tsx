@@ -3,9 +3,9 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getApiErrorMessage } from "@/lib/api/error-display";
-import { apiClient } from "@/lib/api/client";
+import { ApiError, apiClient } from "@/lib/api/client";
 import {
   buildImportPayload,
   defaultRange,
@@ -15,6 +15,7 @@ import {
   type ParsedMessage,
   type ParseResult,
 } from "@/lib/import";
+import { buildParseTelemetry } from "@/lib/import/signature";
 import {
   buildErrorMessage,
   CONSENT_VERSION,
@@ -26,6 +27,7 @@ import {
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MASK_TOKEN = /\[(phone|account|card|rrn|email)\]/;
+const TELEMETRY_DELAY_MS = 1500;
 
 type RangePreset = "default" | "week" | "all" | "custom";
 
@@ -43,6 +45,25 @@ export function ImportWizard({ meetingId }: { meetingId?: string }) {
   const [selfSpeaker, setSelfSpeaker] = useState<string | null>(null);
   const [consented, setConsented] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const lastTelemetryKey = useRef<string | null>(null);
+
+  // Anonymous parse telemetry (format, counts, line shapes) once the input settles; never message content.
+  useEffect(() => {
+    if (!parse) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const telemetry = buildParseTelemetry(rawText, parse);
+      const key = JSON.stringify(telemetry);
+      if (key === lastTelemetryKey.current) {
+        return;
+      }
+      lastTelemetryKey.current = key;
+      apiClient.reportImportParse(telemetry).catch(() => undefined);
+    }, TELEMETRY_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [parse, rawText]);
 
   const importsQuery = useQuery({
     queryKey: ["meeting-imports", meetingId],
@@ -99,7 +120,11 @@ export function ImportWizard({ meetingId }: { meetingId?: string }) {
       setSubmitError(
         error instanceof BuildError
           ? error.message
-          : getApiErrorMessage(error, {
+          : error instanceof ApiError && error.status === 429
+            ? "오늘 가져올 수 있는 횟수를 모두 썼어요. 내일 다시 시도하거나, 기간을 넓혀 한 번에 가져와 주세요."
+            : error instanceof ApiError && error.status === 413
+              ? "보낼 내용이 너무 큽니다. 기간을 줄여 주세요."
+              : getApiErrorMessage(error, {
               resourceName: "대화 가져오기",
               conflictMessage: "이미 가져온 메시지뿐입니다. 새 대화가 생긴 뒤 다시 가져와 주세요.",
             }),
@@ -161,6 +186,7 @@ export function ImportWizard({ meetingId }: { meetingId?: string }) {
           <h2 className="mt-4 text-2xl font-semibold tracking-[-0.03em]">카카오톡 대화를 올리거나 붙여넣으세요</h2>
           <p className="section-copy mt-2">
             파일 원본은 이 브라우저 밖으로 나가지 않습니다. 고른 기간의 메시지만, 전화번호·계좌번호 등을 가린 뒤 보냅니다.
+            형식 인식을 개선하기 위해 줄 모양(숫자·글자 종류)과 개수만 익명으로 보냅니다.
           </p>
         </div>
         <label className="block">

@@ -535,6 +535,8 @@ paths:
           description: Invalid payload or a limit was exceeded; the reason names the limit
         '413':
           description: Request body exceeds 2 MB
+        '429':
+          description: Daily import limit reached (3 per person, 10 per meeting in 24 hours)
   /meetings/{meetingId}/imports:
     get:
       operationId: listChatImports
@@ -576,6 +578,21 @@ paths:
           description: All messages were already imported
         '413':
           description: Request body exceeds 2 MB
+        '429':
+          description: Daily import limit reached (3 per person, 10 per meeting in 24 hours)
+  /telemetry/import-parse:
+    post:
+      operationId: reportImportParse
+      summary: Report anonymous chat export parse results (line shapes only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParseTelemetryRequest'
+      responses:
+        '204':
+          description: Recorded
   /imports/{importId}:
     get:
       operationId: getChatImport
@@ -1994,6 +2011,28 @@ components:
           items:
             type: string
             format: uuid
+    ParseTelemetryRequest:
+      type: object
+      required:
+        - format
+      properties:
+        format:
+          type: string
+        formatVersion:
+          type:
+            - string
+            - 'null'
+        parsedCount:
+          type: integer
+        unparsedLineCount:
+          type: integer
+        signatures:
+          type: array
+          maxItems: 5
+          items:
+            type: string
+            pattern: "^[DHW* .,:;\\-\\[\\]()/~!?']{1,80}$"
+          description: Line shapes only; values outside the pattern are dropped.
     ChatImportStatus:
       type: string
       enum: [submitted, analyzing, ready, applied, failed, deleted]

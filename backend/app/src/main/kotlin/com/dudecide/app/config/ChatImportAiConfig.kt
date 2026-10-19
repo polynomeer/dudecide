@@ -16,8 +16,15 @@ data class ChatImportAiProperties(
     val maxConcurrency: Int = 4,
 )
 
+/** Free-tier import limits over a rolling 24 hours, counted from `chat_import` rows (deleted ones included). */
+@ConfigurationProperties("dudecide.imports")
+data class ChatImportLimitProperties(
+    val dailyPerActor: Int = 3,
+    val dailyPerMeeting: Int = 10,
+)
+
 @Configuration
-@EnableConfigurationProperties(ChatImportAiProperties::class)
+@EnableConfigurationProperties(ChatImportAiProperties::class, ChatImportLimitProperties::class)
 class ChatImportAiConfig {
 
     @Bean

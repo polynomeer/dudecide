@@ -26,6 +26,7 @@ import com.dudecide.app.jooq.tables.Membership.Companion.MEMBERSHIP
 import com.dudecide.app.jooq.tables.Message.Companion.MESSAGE
 import com.dudecide.app.jooq.tables.TopicThread.Companion.TOPIC_THREAD
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.micrometer.core.instrument.MeterRegistry
 import org.jooq.DSLContext
 import org.jooq.JSON
 import org.springframework.http.HttpStatus
@@ -48,6 +49,7 @@ class ChatImportApplyService(
     private val eventStreamService: EventStreamService,
     private val taskService: TaskService,
     private val reportService: ReportService,
+    private val meterRegistry: MeterRegistry,
 ) {
 
     @Transactional
@@ -89,6 +91,13 @@ class ChatImportApplyService(
         }
 
         val appliedIds = toApply.map { it["itemId"] as String }
+        toApply.forEach { item ->
+            meterRegistry.counter(
+                "dudecide.import.applied.items",
+                "kind", item["kind"] as String,
+                "status", (item["status"] as? String) ?: "none",
+            ).increment()
+        }
         dsl.update(CHAT_IMPORT)
             .set(CHAT_IMPORT.STATUS, ChatImportStatus.applied)
             .set(CHAT_IMPORT.RESULT, toJson(result + ("appliedItemIds" to (alreadyApplied.toList() + appliedIds))))

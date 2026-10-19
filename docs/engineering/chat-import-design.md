@@ -470,20 +470,23 @@ SSE types (meeting stream): `import.progress` (`progress.stage`: `claimed`, `pre
 
 ## Limits And Abuse Controls
 
-- Per actor: 3 imports per day; per meeting: 10 per day. Redis counters keyed by date; in-memory fallback for local runs.
-- Server re-checks payload limits and rejects bodies over 2 MB before parsing.
+- Per actor: 3 imports per rolling 24 hours; per meeting: 10. Counted from `chat_import` rows, deleted tombstones included, so the limit holds across instances without Redis (the app has no Redis client yet). Configured by `dudecide.imports.daily-per-actor` and `daily-per-meeting` (`DUDECIDE_IMPORTS_DAILY_PER_ACTOR`, `DUDECIDE_IMPORTS_DAILY_PER_MEETING`).
+- Over the limit the create endpoints return `429`; the wizard explains it in Korean.
+- Server re-checks payload limits and rejects bodies over 2 MB (`413`).
 - Re-import into an existing meeting: `host` and `co_host` only.
 
 ## Retention Jobs
 
-- `ChatImportPurgeWorker` (scheduled, hourly): delete meetings still in `draft` whose import has `purge_at < now()`.
+- `ChatImportMaintenanceWorker.purgeExpired` (hourly, `dudecide.workers.chat-import-purge.fixed-delay-ms`): delete meetings still in `draft` whose import has `purge_at < now()`; everything imported cascades with the meeting.
+- `ChatImportMaintenanceWorker.reclaimStale` (every 5 minutes, `dudecide.workers.chat-import-reclaim.fixed-delay-ms`): an import still `analyzing` 15 minutes after its claim goes back to `submitted`; after 2 attempts it fails with `analysis timed out`. Claims record `claimed_at` and `attempts` (V4).
 - `purge_at` is set to `created_at + 7 days` for imports that create a draft meeting, and cleared on apply.
 - Deleted imports keep a tombstone row (`status = 'deleted'`, `result = NULL`, stats only) for metrics.
 
 ## Telemetry
 
-- Client sends parse telemetry only: `format`, `formatVersion`, `parsedCount`, `unparsedLineCount`, and a failure signature (line shape such as `D+. D+. D+. W D+:D+, *`), never content.
-- Server records stage durations, token usage per stage, dropped items, and apply ratio per item status.
+- The wizard sends `POST /api/v1/telemetry/import-parse` 1.5 s after the input settles: `format`, `formatVersion`, `parsedCount`, `unparsedLineCount`, and, only when parsing fell back or missed lines, up to 5 line shapes (`lib/import/signature.ts`: digits `D`, Hangul runs `H`, Latin runs `W`, other `*`, e.g. `DDDDH DDH DH H D:DD, H : DDH H?`). The server drops any signature outside that alphabet and bounds tag values.
+- Server metrics (Micrometer): `dudecide.import.parse` (format, formatVersion, outcome), `dudecide.import.stage` timer (prefilter, map, reduce, rules), `dudecide.import.llm.dropped`, `dudecide.import.analysis` (ready, failed), `dudecide.import.items` and `dudecide.import.applied.items` (kind, status, giving the apply ratio), `dudecide.import.purged.meetings`, `dudecide.import.reclaimed` (requeued, failed).
+- Token usage per stage waits for a real provider (step 11).
 - Product metrics are listed in the product plan.
 
 ## Testing
@@ -496,7 +499,7 @@ SSE types (meeting stream): `import.progress` (`progress.stage`: `claimed`, `pre
 
 ## Implementation Order
 
-Each step is one commit-sized work unit. Done: steps 1-9.
+Each step is one commit-sized work unit. Done: steps 1-10.
 
 1. `backend/shared`: prefilter, segmentation, status rules with tests.
 2. Migration `V3__chat_import.sql`, H2 test schema, jOOQ regen, `database-schema.md`.

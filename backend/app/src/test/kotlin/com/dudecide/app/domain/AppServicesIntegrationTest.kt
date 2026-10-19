@@ -30,9 +30,11 @@ import com.dudecide.app.api.dto.AddDecisionEvidenceRequest
 import com.dudecide.app.api.dto.VoteSubmissionItem
 import com.dudecide.app.api.dto.VoteSubmissionRequest
 import com.dudecide.app.config.ChatImportAiProperties
+import com.dudecide.app.config.ChatImportLimitProperties
 import com.dudecide.app.domain.chatimport.ChatImportAnalysisWorker
 import com.dudecide.app.domain.chatimport.ChatImportAnalyzer
 import com.dudecide.app.domain.chatimport.ChatImportApplyService
+import com.dudecide.app.domain.chatimport.ChatImportMaintenanceWorker
 import com.dudecide.app.domain.chatimport.ChatImportService
 import com.dudecide.app.domain.chatimport.EpisodeMapRequest
 import com.dudecide.app.domain.chatimport.EpisodeMapResult
@@ -65,6 +67,7 @@ import com.dudecide.app.jooq.tables.TopicThread.Companion.TOPIC_THREAD
 import com.dudecide.app.jooq.tables.Vote.Companion.VOTE
 import com.dudecide.app.jooq.tables.VoteOption.Companion.VOTE_OPTION
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import org.h2.jdbcx.JdbcDataSource
 import org.h2.tools.RunScript
 import org.jooq.DSLContext
@@ -792,6 +795,8 @@ class AppServicesIntegrationTest {
 
             assertEquals(1, context.analysisWorker().analyzePendingBatch())
             assertEquals(0, context.analysisWorker().analyzePendingBatch())
+            assertEquals(1.0, context.meterRegistry.counter("dudecide.import.analysis", "outcome", "ready").count())
+            assertEquals(1.0, context.meterRegistry.counter("dudecide.import.items", "kind", "decision", "status", "likely_decided").count())
 
             val view = context.chatImportService.getImport(created.importId)
             assertEquals("ready", view.status)
@@ -1024,6 +1029,67 @@ class AppServicesIntegrationTest {
         }
     }
 
+    @Test
+    fun `chat imports are limited per person and per meeting over 24 hours`() {
+        testContext().use { context ->
+            repeat(3) { context.chatImportService.createImport(chatImportRequest(messages = listOf("me" to "memo $it"))) }
+
+            val perActor = assertThrows(ResponseStatusException::class.java) {
+                context.chatImportService.createImport(chatImportRequest())
+            }
+            assertEquals(429, perActor.statusCode.value())
+
+            val generous = context.chatImportServiceFactory(ChatImportLimitProperties(dailyPerActor = 100, dailyPerMeeting = 2))
+            val first = generous.createImport(chatImportRequest(messages = listOf("me" to "first")))
+            generous.createMeetingImport(first.meetingId, chatImportRequest(messages = listOf("me" to "second")))
+            val perMeeting = assertThrows(ResponseStatusException::class.java) {
+                generous.createMeetingImport(first.meetingId, chatImportRequest(messages = listOf("me" to "third")))
+            }
+            assertEquals(429, perMeeting.statusCode.value())
+            assertTrue(perMeeting.reason!!.contains("per meeting"))
+        }
+    }
+
+    @Test
+    fun `purge removes expired draft meetings but keeps applied ones`() {
+        testContext().use { context ->
+            val expired = context.chatImportService.createImport(chatImportRequest(messages = listOf("me" to "old")))
+            val applied = context.analyzedKoreanImport()
+            context.chatImportApplyService.apply(applied.importId, ApplyChatImportRequest(listOf("it_1")))
+            context.dsl.update(CHAT_IMPORT)
+                .set(CHAT_IMPORT.PURGE_AT, OffsetDateTime.now().minusMinutes(1))
+                .execute()
+
+            assertEquals(1, context.maintenanceWorker().purgeExpired(OffsetDateTime.now()))
+
+            assertEquals(0, context.dsl.fetchCount(MEETING, MEETING.ID.eq(expired.meetingId)))
+            assertEquals(0, context.dsl.fetchCount(MESSAGE, MESSAGE.IMPORT_ID.eq(expired.importId)))
+            assertEquals(1, context.dsl.fetchCount(MEETING, MEETING.ID.eq(applied.meetingId)))
+            assertEquals(1.0, context.meterRegistry.counter("dudecide.import.purged.meetings").count())
+        }
+    }
+
+    @Test
+    fun `stale analysis claims are requeued once and then failed`() {
+        testContext().use { context ->
+            val created = context.chatImportService.createImport(chatImportRequest())
+            val analyzer = context.analyzer()
+            val stale = { context.dsl.update(CHAT_IMPORT).set(CHAT_IMPORT.CLAIMED_AT, OffsetDateTime.now().minusMinutes(20)).execute() }
+
+            assertEquals(created.importId, analyzer.claimNext())
+            stale()
+            assertEquals(ChatImportMaintenanceWorker.ReclaimResult(requeued = 1, failed = 0), context.maintenanceWorker().reclaimStale(OffsetDateTime.now()))
+            assertEquals(ChatImportStatus.submitted, context.dsl.select(CHAT_IMPORT.STATUS).from(CHAT_IMPORT).fetchOne(CHAT_IMPORT.STATUS))
+
+            assertEquals(created.importId, analyzer.claimNext())
+            stale()
+            assertEquals(ChatImportMaintenanceWorker.ReclaimResult(requeued = 0, failed = 1), context.maintenanceWorker().reclaimStale(OffsetDateTime.now()))
+            val record = context.dsl.selectFrom(CHAT_IMPORT).fetchOne()!!
+            assertEquals(ChatImportStatus.failed, record.status)
+            assertEquals(2, record.attempts)
+        }
+    }
+
     private fun TestContext.analyzedKoreanImport() =
         chatImportService.createImport(
             chatImportRequest(
@@ -1082,6 +1148,20 @@ class AppServicesIntegrationTest {
         val messageService = MessageService(dsl, objectMapper, localActorProvider, meetingAccessService, outboxService, eventStreamService)
         val taskService = TaskService(dsl, meetingAccessService, outboxService, eventStreamService)
         val reportService = ReportService(dsl, objectMapper, meetingAccessService, outboxService, eventStreamService, notificationService)
+        val meterRegistry = SimpleMeterRegistry()
+        val chatImportServiceFactory = { limits: ChatImportLimitProperties ->
+            ChatImportService(
+                dsl,
+                objectMapper,
+                localActorProvider,
+                meetingAccessService,
+                meetingService,
+                outboxService,
+                eventStreamService,
+                messageService,
+                limits,
+            )
+        }
 
         return TestContext(
             dsl = dsl,
@@ -1095,16 +1175,7 @@ class AppServicesIntegrationTest {
             searchService = SearchService(dsl, meetingAccessService),
             taskService = taskService,
             notificationService = notificationService,
-            chatImportService = ChatImportService(
-                dsl,
-                objectMapper,
-                localActorProvider,
-                meetingAccessService,
-                meetingService,
-                outboxService,
-                eventStreamService,
-                messageService,
-            ),
+            chatImportService = chatImportServiceFactory(ChatImportLimitProperties()),
             eventStreamService = eventStreamService,
             chatImportApplyService = ChatImportApplyService(
                 dsl,
@@ -1114,9 +1185,12 @@ class AppServicesIntegrationTest {
                 eventStreamService,
                 taskService,
                 reportService,
+                meterRegistry,
             ),
             importSpeakerService = ImportSpeakerService(dsl, meetingAccessService, outboxService, eventStreamService),
             invitePreviewService = InvitePreviewService(dsl, objectMapper),
+            meterRegistry = meterRegistry,
+            chatImportServiceFactory = chatImportServiceFactory,
         )
     }
 
@@ -1223,6 +1297,8 @@ class AppServicesIntegrationTest {
                 purge_at TIMESTAMP WITH TIME ZONE,
                 created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 completed_at TIMESTAMP WITH TIME ZONE,
+                claimed_at TIMESTAMP WITH TIME ZONE,
+                attempts INTEGER NOT NULL DEFAULT 0,
                 CONSTRAINT chat_import_meeting_fk FOREIGN KEY (meeting_id) REFERENCES meeting(id) ON DELETE CASCADE,
                 CONSTRAINT chat_import_thread_fk FOREIGN KEY (thread_id) REFERENCES topic_thread(id) ON DELETE CASCADE,
                 CONSTRAINT chat_import_uploader_fk FOREIGN KEY (uploaded_by_user_id) REFERENCES app_user(id),
@@ -1432,11 +1508,15 @@ class AppServicesIntegrationTest {
         val chatImportApplyService: ChatImportApplyService,
         val importSpeakerService: ImportSpeakerService,
         val invitePreviewService: InvitePreviewService,
+        val meterRegistry: SimpleMeterRegistry,
+        val chatImportServiceFactory: (ChatImportLimitProperties) -> ChatImportService,
     ) : AutoCloseable {
         override fun close() = Unit
 
         fun analyzer(llmClient: LlmClient = FakeLlmClient()): ChatImportAnalyzer =
-            ChatImportAnalyzer(dsl, objectMapper, llmClient, eventStreamService, ChatImportAiProperties())
+            ChatImportAnalyzer(dsl, objectMapper, llmClient, eventStreamService, ChatImportAiProperties(), meterRegistry)
+
+        fun maintenanceWorker(): ChatImportMaintenanceWorker = ChatImportMaintenanceWorker(dsl, meterRegistry)
 
         fun analysisWorker(llmClient: LlmClient = FakeLlmClient()): ChatImportAnalysisWorker =
             ChatImportAnalysisWorker(analyzer(llmClient))
