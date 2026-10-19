@@ -266,3 +266,5 @@ This is required to debug trust failures later.
 ## Batch Import Analysis
 
 Imported chat history is analyzed as a batch (prefilter, episode segmentation, map, reduce, deterministic status rules) rather than per message. See [`chat-import-design.md`](./chat-import-design.md).
+
+Providers, prompt versions, and the evaluation harness for imports are described in [`chat-import-design.md`](./chat-import-design.md) (Model Configuration, Testing).

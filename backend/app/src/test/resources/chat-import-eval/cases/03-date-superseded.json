@@ -1,0 +1,17 @@
+{
+  "id": "03-date-superseded",
+  "description": "First date agreed, then replaced by a later date",
+  "messages": [
+    {"speaker": "A", "minute": 0, "text": "11일 어때?"},
+    {"speaker": "B", "minute": 1, "text": "ㅇㅇ"},
+    {"speaker": "C", "minute": 2, "text": "11일은 나 안 돼 ㅠ 18일은?"},
+    {"speaker": "D", "minute": 3, "text": "18일 좋아"},
+    {"speaker": "A", "minute": 4, "text": "그럼 18일로 하자"},
+    {"speaker": "B", "minute": 5, "text": "ㅇㅋ"}
+  ],
+  "expected": {
+    "decisions": [{"decisionType": "date", "status": "likely_decided", "option": "18일"}],
+    "openQuestions": 0,
+    "taskOwners": []
+  }
+}

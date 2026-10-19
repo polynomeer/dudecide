@@ -1,6 +1,6 @@
 # Chat Import Design
 
-Status: Accepted design, partially implemented (see Implementation Order).
+Status: Accepted design, implemented through step 11 (see Implementation Order for remaining gaps).
 
 Product plan: [`../product/chat-import-planning.md`](../product/chat-import-planning.md). Policy: [ADR 0005](../adr/0005-user-initiated-chat-import.md). AI rules: [ADR 0003](../adr/0003-ai-evidence-first-assistance.md), [`ai-pipeline.md`](./ai-pipeline.md).
 
@@ -339,7 +339,9 @@ Progress is written to `chat_import.progress` (`{ "stage": "map", "done": 7, "to
 
 ### LLM Contracts
 
-Prompts live in code with explicit versions (`chat-import-map-v1`, `chat-import-reduce-v1`). Inputs use pseudonyms and message ids only.
+Prompts and output schemas live in `ChatImportPrompts` under one version, `LlmClient.PROMPT_VERSION` (`chat-import-v1`), stored on each import. Inputs use pseudonyms and message ids only, and the system prompts treat chat text as content, never instructions.
+
+As implemented in step 11, the map stage returns only `subjects`, `questions`, and `tasks` (per-message labels were never used downstream and cost tokens), and the reduce stage returns groups, not events: `subjectKey`, `decisionType`, `title`, `mergedFrom`, and `optionAliases`. `PromptedLlmClient` rebuilds each merged subject from the map events of its `mergedFrom` keys and rewrites aliased options to the canonical spelling, so reduce cannot invent evidence. Local subjects the model leaves out stay as their own subjects. Unknown decision types become `other`; unknown event kinds or malformed JSON fail the call, which the pipeline retries once.
 
 Map output per episode:
 
@@ -364,7 +366,7 @@ Map output per episode:
 }
 ```
 
-Reduce output: `subjects` with a stable `subjectKey`, merged `events` ordered by time, and `mergedFrom` local keys. Event kinds: `proposal`, `support`, `opposition`, `condition`, `confirmation`, `withdrawal`.
+Reduce output (original design; see the step 11 note above for the shipped shape): `subjects` with a stable `subjectKey`, merged `events` ordered by time, and `mergedFrom` local keys. Event kinds: `proposal`, `support`, `opposition`, `condition`, `confirmation`, `withdrawal`.
 
 ### Status Inference Rules
 
@@ -389,14 +391,23 @@ Questions with `answeredBy = null` become `open_question` items. Tasks become `t
 ```yaml
 dudecide:
   ai:
-    provider: fake          # fake | openai | anthropic
-    map-model: ""           # fast tier
-    reduce-model: ""        # strong tier
+    provider: fake          # fake | anthropic | openai  (DUDECIDE_AI_PROVIDER)
+    map-model: ""           # fast tier; anthropic default claude-haiku-5-5, required for openai
+    reduce-model: ""        # strong tier; anthropic default claude-opus-5-5, required for openai
+    map-effort: low         # anthropic effort / openai reasoning_effort
+    reduce-effort: medium
+    max-tokens: 16000
+    refusal-fallback: true  # anthropic reduce stage: server-side refusal fallback
     timeout-seconds: 60
     max-concurrency: 4
 ```
 
-The `fake` provider (`FakeLlmClient`) is a deterministic keyword extractor for Korean and English chat, and the default for local development and tests (`DUDECIDE_AI_PROVIDER`). Any other provider value fails at startup until step 11 adds an adapter. `backend/worker` already declares `openai-java`; provider choice stays configuration, not code.
+- `fake` (`FakeLlmClient`) is a deterministic keyword extractor for Korean and English chat, and the default for local development and tests.
+- `anthropic` and `openai` both run through `PromptedLlmClient` (shared prompts, schemas, validation, token metrics) with a provider transport built on the official SDK: `AnthropicJsonTransport` (`anthropic-java`, Messages API with `output_config.format` JSON schema and per-stage effort) and `OpenAiJsonTransport` (`openai-java`, Chat Completions with a strict `json_schema` response format and `reasoning_effort`). Credentials come from `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`.
+- Anthropic defaults: map on `claude-haiku-5-5`, reduce on `claude-opus-5-5`. The reduce call opts into the server-side refusal fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`); Haiku has none, so a refused map call fails that episode. Both transports treat a refusal or a truncated response as a failed call.
+- OpenAI model names are deliberately not defaulted: set both models explicitly.
+- `JsonTransportWireTest` checks both transports' request bodies against a local HTTP server; no test calls a paid API.
+- Before enabling a real provider in production, disclose the provider and cross-border processing in the privacy policy (ADR 0005 follow-up).
 
 The LLM receives short message ids (`m1`, `m2`, ...) and pseudonyms. The analyzer maps ids back to message UUIDs and drops any event, question, or task that points outside its episode or uses an unknown speaker. Each LLM call is retried once.
 
@@ -494,12 +505,13 @@ SSE types (meeting stream): `import.progress` (`progress.stage`: `claimed`, `pre
 - **Parsers and masking:** Vitest over `__fixtures__`, one fixture per format, version, and locale; property tests for masking (no digits run of 10+ survives unmasked next to account keywords).
 - **Rules:** `backend/shared` unit tests for segmentation, prefilter, and every status rule, including tie and late-objection cases.
 - **Backend integration:** H2 tests with the `fake` LLM provider for create, analyze, apply, delete, purge, dedupe on re-import, and the `message_sender_origin_ck` constraint.
-- **Evaluation:** offline harness over the labeled chat set (product plan) reporting decision precision, recall, and false-decided rate per prompt version; run before any prompt or model change.
+- **Evaluation:** `gradle :backend:app:evalChatImport -PevalProvider=fake|anthropic|openai` runs `ChatAnalysisPipeline` (the worker's stages without the database) over the labeled cases in `backend/app/src/test/resources/chat-import-eval/cases` and writes `build/reports/chat-import-eval/<promptVersion>-<provider>.md|json`: false-decided rate (headline), decided precision and recall, status accuracy, task owner recall, open question error. Model overrides: `DUDECIDE_AI_MAP_MODEL`, `DUDECIDE_AI_REDUCE_MODEL`. Real providers spend API credits. `ChatImportEvaluationTest` keeps the harness and scorer working with the fake provider. The set has 10 hand-labeled synthetic chats; the product plan target is 30+ including consented real chats.
+- Fake provider baseline (chat-import-v1): false-decided 0%, decided precision 100%, recall 80%, status accuracy 67%, task owner recall 100%.
 - **E2E:** Playwright paste flow with the fake provider: paste, map speakers, analyze, apply, invite preview.
 
 ## Implementation Order
 
-Each step is one commit-sized work unit. Done: steps 1-10.
+Each step is one commit-sized work unit. Done: steps 1-11.
 
 1. `backend/shared`: prefilter, segmentation, status rules with tests.
 2. Migration `V3__chat_import.sql`, H2 test schema, jOOQ regen, `database-schema.md`.

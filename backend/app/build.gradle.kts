@@ -24,6 +24,8 @@ dependencies {
     implementation("org.postgresql:postgresql:42.7.7")
     implementation("org.jooq:jooq:$jooqVersion")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9")
+    implementation("com.anthropic:anthropic-java:2.73.0")
+    implementation("com.openai:openai-java:4.86.0")
 
     jooqGenerator("org.postgresql:postgresql:42.7.7")
     jooqGenerator("org.jooq:jooq-meta-extensions:$jooqVersion")
@@ -73,4 +75,18 @@ flyway {
 
 tasks.named("compileKotlin") {
     dependsOn("generateJooq")
+}
+
+tasks.register<JavaExec>("evalChatImport") {
+    group = "verification"
+    description = "Scores chat import analysis on the labeled cases. -PevalProvider=fake|anthropic|openai (real providers spend API credits)."
+    dependsOn("testClasses")
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("com.dudecide.app.domain.chatimport.eval.ChatImportEvaluationKt")
+    workingDir = projectDir
+    args = listOf(
+        providers.gradleProperty("evalProvider").orElse("fake").get(),
+        "src/test/resources/chat-import-eval/cases",
+        layout.buildDirectory.dir("reports/chat-import-eval").get().asFile.path,
+    )
 }

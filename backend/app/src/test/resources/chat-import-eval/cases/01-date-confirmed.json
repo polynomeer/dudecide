@@ -1,0 +1,16 @@
+{
+  "id": "01-date-confirmed",
+  "description": "Clear proposal, two supports, explicit confirmation",
+  "messages": [
+    {"speaker": "A", "minute": 0, "text": "다들 10월에 언제 시간 돼?"},
+    {"speaker": "B", "minute": 1, "text": "18일 어때?"},
+    {"speaker": "C", "minute": 2, "text": "ㅇㅇ 좋아"},
+    {"speaker": "D", "minute": 3, "text": "콜"},
+    {"speaker": "A", "minute": 4, "text": "그럼 18일로 확정!"}
+  ],
+  "expected": {
+    "decisions": [{"decisionType": "date", "status": "likely_decided", "option": "18일"}],
+    "openQuestions": 0,
+    "taskOwners": []
+  }
+}

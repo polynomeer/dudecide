@@ -6,26 +6,16 @@ import com.dudecide.app.jooq.enums.ChatImportStatus
 import com.dudecide.app.jooq.tables.ChatImport.Companion.CHAT_IMPORT
 import com.dudecide.app.jooq.tables.ImportSpeaker.Companion.IMPORT_SPEAKER
 import com.dudecide.app.jooq.tables.Message.Companion.MESSAGE
-import com.dudecide.shared.chatimport.ChatPrefilter
-import com.dudecide.shared.chatimport.EpisodeSegmenter
-import com.dudecide.shared.chatimport.ImportedMessage
-import com.dudecide.shared.chatimport.Subject
-import com.dudecide.shared.chatimport.SubjectEvent
 import com.dudecide.shared.chatimport.SubjectStatus
-import com.dudecide.shared.chatimport.SubjectStatusRules
 import com.fasterxml.jackson.databind.ObjectMapper
 import io.micrometer.core.instrument.MeterRegistry
 import org.jooq.DSLContext
 import org.jooq.JSON
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
-import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.util.UUID
-import java.util.concurrent.Callable
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
 /**
  * Runs the batch analysis for one claimed import: prefilter, segment, map (LLM), reduce (LLM), deterministic
@@ -41,9 +31,7 @@ class ChatImportAnalyzer(
     private val meterRegistry: MeterRegistry,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
-    private val prefilter = ChatPrefilter()
-    private val segmenter = EpisodeSegmenter()
-    private val rules = SubjectStatusRules()
+    private val pipeline = ChatAnalysisPipeline(llmClient, properties.maxConcurrency, properties.timeoutSeconds, meterRegistry)
 
     /** Atomically moves the oldest submitted import to analyzing; safe with several pollers. */
     fun claimNext(): UUID? {
@@ -122,105 +110,7 @@ class ChatImportAnalyzer(
 
     private fun run(importId: UUID, meetingId: UUID, asOf: Instant): Map<String, Any?> {
         progress(importId, meetingId, mapOf("stage" to "prefilter"))
-        val (loaded, prefiltered, episodes) = timed("prefilter") {
-            val loaded = loadMessages(importId)
-            val prefiltered = prefilter.filter(loaded.messages.map { ImportedMessage(it.shortId, it.pseudonym, it.sentAt, it.body) })
-            Triple(loaded, prefiltered, segmenter.segment(prefiltered))
-        }
-
-        val mapResults = timed("map") { mapEpisodes(importId, meetingId, episodes.map { episode ->
-            EpisodeMapRequest(
-                episodeIndex = episode.index,
-                messages = episode.messages.map { LlmMessage(it.id, it.speaker, it.sentAt, it.body) },
-                filteredCount = episode.filteredCount,
-            )
-        }) }
-        val succeeded = mapResults.filterNotNull()
-        val failedEpisodes = mapResults.size - succeeded.size
-        if (failedEpisodes * 5 > mapResults.size) {
-            error("map stage failed for $failedEpisodes of ${mapResults.size} episodes")
-        }
-
-        progress(importId, meetingId, mapOf("stage" to "reduce"))
-        val localSubjects = succeeded.flatMap { it.subjects }
-        val merged = if (localSubjects.isEmpty()) {
-            emptyList()
-        } else {
-            timed("reduce") { withRetry { llmClient.reduceSubjects(SubjectReduceRequest(localSubjects)) }.subjects }
-        }
-
-        progress(importId, meetingId, mapOf("stage" to "rules"))
-        return timed("rules") { ChatImportResultAssembler(loaded).assemble(
-            subjects = merged.mapNotNull { toSubject(it, loaded) },
-            assess = { rules.assess(it, asOf) },
-            questions = succeeded.flatMap { it.questions },
-            tasks = succeeded.flatMap { it.tasks },
-            stats = mapOf(
-                "analyzedMessages" to prefiltered.kept.size,
-                "filteredMessages" to prefiltered.dropped.size,
-                "episodeCount" to episodes.size,
-                "failedEpisodes" to failedEpisodes,
-            ),
-        ) }
-    }
-
-    private fun <T> timed(stage: String, block: () -> T): T {
-        val started = System.nanoTime()
-        try {
-            return block()
-        } finally {
-            meterRegistry.timer("dudecide.import.stage", "stage", stage).record(Duration.ofNanos(System.nanoTime() - started))
-        }
-    }
-
-    private fun mapEpisodes(importId: UUID, meetingId: UUID, requests: List<EpisodeMapRequest>): List<EpisodeMapResult?> {
-        if (requests.isEmpty()) return emptyList()
-        progress(importId, meetingId, mapOf("stage" to "map", "done" to 0, "total" to requests.size))
-
-        val executor = Executors.newFixedThreadPool(properties.maxConcurrency.coerceIn(1, requests.size))
-        try {
-            val futures = requests.map { request ->
-                executor.submit(Callable { withRetry { llmClient.mapEpisode(request) } })
-            }
-            return futures.mapIndexed { index, future ->
-                val result = runCatching { future.get(properties.timeoutSeconds, TimeUnit.SECONDS) }
-                    .onFailure { logger.warn("Episode map failed importId={} episode={}", importId, index, it) }
-                    .getOrNull()
-                progress(importId, meetingId, mapOf("stage" to "map", "done" to index + 1, "total" to requests.size))
-                result?.let { sanitize(it, requests[index]) }
-            }
-        } finally {
-            executor.shutdownNow()
-        }
-    }
-
-    // Drops anything that points at a message outside the episode; the LLM must not invent evidence.
-    private fun sanitize(result: EpisodeMapResult, request: EpisodeMapRequest): EpisodeMapResult {
-        val ids = request.messages.map { it.id }.toSet()
-        val speakers = request.messages.map { it.speaker }.toSet()
-        val dropped = result.subjects.sumOf { subject -> subject.events.count { it.messageId !in ids || it.speaker !in speakers } } +
-            result.questions.count { it.messageId !in ids } +
-            result.tasks.count { it.messageId !in ids }
-        if (dropped > 0) {
-            meterRegistry.counter("dudecide.import.llm.dropped", "stage", "map").increment(dropped.toDouble())
-        }
-        return EpisodeMapResult(
-            messages = result.messages.filter { it.id in ids },
-            subjects = result.subjects
-                .map { subject -> subject.copy(events = subject.events.filter { it.messageId in ids && it.speaker in speakers }) }
-                .filter { it.events.isNotEmpty() },
-            questions = result.questions.filter { it.messageId in ids },
-            tasks = result.tasks.filter { it.messageId in ids },
-        )
-    }
-
-    private fun toSubject(merged: MergedSubject, loaded: LoadedImport): Subject? {
-        val events = merged.events.mapNotNull { event ->
-            val message = loaded.byShortId[event.messageId] ?: return@mapNotNull null
-            SubjectEvent(event.messageId, message.pseudonym, event.kind, event.option, message.sentAt, event.confidence)
-        }
-        if (events.isEmpty()) return null
-        return Subject(merged.subjectKey, merged.decisionType, merged.title, events)
+        return pipeline.run(loadMessages(importId), asOf) { progress(importId, meetingId, it) }
     }
 
     private fun loadMessages(importId: UUID): LoadedImport {
@@ -259,12 +149,6 @@ class ChatImportAnalyzer(
             ),
         )
     }
-
-    private fun <T> withRetry(block: () -> T): T =
-        runCatching(block).getOrElse { first ->
-            logger.info("Retrying LLM call after failure: {}", first.message)
-            block()
-        }
 
     private fun toJson(value: Any): JSON = JSON.valueOf(objectMapper.writeValueAsString(value))
 

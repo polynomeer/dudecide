@@ -1,0 +1,16 @@
+{
+  "id": "02-lodging-contested",
+  "description": "Two lodging options with two supporters each",
+  "messages": [
+    {"speaker": "A", "minute": 0, "text": "숙소는 애월 펜션 어때?"},
+    {"speaker": "B", "minute": 1, "text": "좋아 애월"},
+    {"speaker": "C", "minute": 2, "text": "서귀포 호텔은 어때?"},
+    {"speaker": "D", "minute": 3, "text": "나도 서귀포!"},
+    {"speaker": "E", "minute": 4, "text": "ㅋㅋㅋ 둘 다 좋은데"}
+  ],
+  "expected": {
+    "decisions": [{"decisionType": "lodging", "status": "contested"}],
+    "openQuestions": 0,
+    "taskOwners": []
+  }
+}
