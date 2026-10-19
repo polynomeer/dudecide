@@ -43,19 +43,29 @@ flowchart TD
 
 ```
 apps/web/lib/import/
-  types.ts            ParsedChat, ParsedMessage, ParseResult
-  detect.ts           format detection from the first lines
+  index.ts            public API: parseChat, buildImportPayload, defaultRange, maskSensitive
+  types.ts            ParsedMessage, ParseResult, ParseOptions
+  shared.ts           12/24-hour time, ISO with offset, room header, media/system classification
+  detect.ts           runs every line parser, keeps the best match ratio, else free text
   parsers/
-    kakao-pc.ts
-    kakao-android.ts
-    kakao-ios.ts
-    kakao-csv.ts
+    line-engine.ts    shared line loop: separators, message starts, continuations
+    kakao.ts          PC (Korean, English), Android (Korean), iOS (Korean, 24-hour) line rules
+    kakao-csv.ts      Mac `Date,User,Message` CSV with quoted multi-line fields
     free-text.ts      fallback: "name: message" lines, or one anonymous speaker
   mask.ts             sensitive pattern masking
-  prefilter.ts        drop system lines, media placeholders, pure reactions
-  normalize.ts        build the upload payload, assign pseudonyms
-  __fixtures__/       anonymized real exports per format, version, locale
+  prefilter.ts        drop system lines; media placeholders become per-date counts
+  normalize.ts        range filter, masking, speaker keys, limits, upload payload
+  __fixtures__/       synthetic exports per format today; anonymized real exports to be added
 ```
+
+Implemented in step 7. Notes:
+
+- Pseudonyms are assigned by the server; the client only assigns speaker keys (`s1`, `s2`, ...).
+- Pure-reaction filtering stays on the server (`ChatPrefilter`) so stance reactions still reach the analysis.
+- `buildImportPayload` returns typed errors (`consent_required`, `range_too_long`, `no_messages`, `too_many_messages`, `too_many_speakers`) for the wizard to turn into "narrow the range" prompts.
+- `defaultRange` returns the last 30 days, or the span since the previous import, and null when nothing is newer.
+- Free text has no timestamps: messages get consecutive minutes ending at the paste time.
+- The fixtures are hand-written from known export shapes. English Android and iOS exports are not supported yet; they fall back to free text until a real export is added.
 
 ### Types
 
@@ -79,7 +89,7 @@ type ParseResult = {
 
 ### Parsing Rules
 
-- Detection reads the header and first 50 lines and picks the parser with the highest match ratio. Below 60% match, fall back to `free_text`.
+- Detection runs every line parser over the whole text and picks the highest ratio of recognized lines (headers, separators, message starts, system lines) to unrecognized lines; continuation lines do not count. Below 60%, or with no messages, it falls back to `free_text`. The Mac CSV is recognized by its header row.
 - Multi-line messages: a line that does not start a new message is appended to the previous message body.
 - Dates: Korean (`2026년 10월 2일 오후 9:14`) and English locale variants, AM/PM markers in both languages, date-separator lines that set the current day.
 - Timezone: assume the browser timezone (normally `Asia/Seoul`) and send ISO strings with offset.
@@ -476,7 +486,7 @@ SSE types (meeting stream): `import.progress` (`progress.stage`: `claimed`, `pre
 
 ## Implementation Order
 
-Each step is one commit-sized work unit. Done: steps 1-6.
+Each step is one commit-sized work unit. Done: steps 1-7.
 
 1. `backend/shared`: prefilter, segmentation, status rules with tests.
 2. Migration `V3__chat_import.sql`, H2 test schema, jOOQ regen, `database-schema.md`.
