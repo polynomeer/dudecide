@@ -46,13 +46,15 @@ class NotificationService(
         meetingId: UUID,
         type: NotificationType,
         payload: Map<String, Any?>,
-        recipientUserId: UUID = localActorProvider.currentUserId(),
+        recipientUserId: UUID? = null,
     ) {
+        // Resolved here, not as a default argument: Kotlin evaluates defaults against the Spring proxy, whose fields are null.
+        val recipient = recipientUserId ?: localActorProvider.currentUserId()
         val notificationId = UUID.randomUUID()
         dsl.insertInto(NOTIFICATION)
             .set(NOTIFICATION.ID, notificationId)
             .set(NOTIFICATION.MEETING_ID, meetingId)
-            .set(NOTIFICATION.RECIPIENT_USER_ID, recipientUserId)
+            .set(NOTIFICATION.RECIPIENT_USER_ID, recipient)
             .set(NOTIFICATION.TYPE, type)
             .set(NOTIFICATION.PAYLOAD, JSON.valueOf(objectMapper.writeValueAsString(payload)))
             .execute()
