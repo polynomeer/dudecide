@@ -20,6 +20,7 @@ When code is added to the repository, create focused docs here instead of overlo
 - [`tech-stack.md`](./tech-stack.md): concrete implementation stack choices for the MVP
 - [`architecture-overview.md`](./architecture-overview.md): target MVP architecture and subsystem boundaries
 - [`frontend-implementation-plan.md`](./frontend-implementation-plan.md): frontend scope, route design, and phased delivery order
+- [`web-redesign-plan.md`](./web-redesign-plan.md): design tokens, board-to-route mapping, and work units for the web redesign
 - [`local-development.md`](./local-development.md): local infra and backend development commands
 - [`dev-seed-data.md`](./dev-seed-data.md): reusable local sample meeting and vote dataset
 - [`database-schema.md`](./database-schema.md): initial Flyway schema and relational design notes
