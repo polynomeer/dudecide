@@ -1,14 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import type { Route } from "next";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ApiErrorPanel } from "@/components/api-error-panel";
 import { apiClient } from "@/lib/api/client";
+import { decisionStatusChip, decisionStatusLabel } from "@/lib/display";
 
-export function SearchWorkspace({ meetingId }: { meetingId: string }) {
-  const [query, setQuery] = useState("");
-  const [submittedQuery, setSubmittedQuery] = useState("");
+export function SearchWorkspace({ meetingId, initialQuery = "" }: { meetingId: string; initialQuery?: string }) {
+  const [query, setQuery] = useState(initialQuery);
+  const [submittedQuery, setSubmittedQuery] = useState(initialQuery.trim());
+
+  // The top bar search navigates here with ?q=; follow it when it changes.
+  useEffect(() => {
+    setQuery(initialQuery);
+    setSubmittedQuery(initialQuery.trim());
+  }, [initialQuery]);
 
   const searchQuery = useQuery({
     queryKey: ["meeting-search", meetingId, submittedQuery],
@@ -17,136 +25,82 @@ export function SearchWorkspace({ meetingId }: { meetingId: string }) {
   });
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[0.82fr_1.18fr]">
-      <section className="panel px-6 py-6">
-        <div className="info-chip">Search</div>
-        <h2 className="mt-4 font-display text-4xl leading-[0.96]">
-          회의 키워드 검색
-        </h2>
-        <p className="section-copy mt-3">
-          메시지, 의사결정, 태스크를 회의 범위 안에서 동시에 검색합니다.
-        </p>
+    <div className="flex flex-col gap-4">
+      <form
+        role="search"
+        className="panel flex flex-wrap items-center gap-2.5 p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setSubmittedQuery(query.trim());
+        }}
+      >
+        <label htmlFor="search-keyword" className="sr-only">
+          검색어
+        </label>
+        <input
+          id="search-keyword"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          className="field h-11 min-w-0 flex-[1_1_280px]"
+          placeholder="예: 가평, 일정, 확정"
+        />
+        <button type="submit" disabled={query.trim().length === 0} className="action-primary">
+          검색 실행
+        </button>
+      </form>
 
-        <form
-          className="mt-5 space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setSubmittedQuery(query.trim());
-          }}
-        >
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-              Keyword
-            </span>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              className="field mt-2"
-              placeholder="예: 가평, 일정, 확정"
-            />
-          </label>
-          <div className="soft-card flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-ink/60">
-              공백 입력은 실행하지 않습니다.
-            </div>
-            <button
-              type="submit"
-              disabled={query.trim().length === 0}
-              className="action-primary disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              검색 실행
-            </button>
-          </div>
-        </form>
+      {submittedQuery.trim().length === 0 ? (
+        <div className="empty-state">메시지, 결정, 할 일에서 찾을 단어를 입력해 주세요.</div>
+      ) : searchQuery.isLoading ? (
+        <div className="panel px-6 py-6 text-sm text-muted">검색 중이에요…</div>
+      ) : searchQuery.error || !searchQuery.data ? (
+        <ApiErrorPanel error={searchQuery.error} resourceName="검색 결과" />
+      ) : (
+        <>
+          <p className="m-0 text-sm text-muted">
+            <b className="text-ink">‘{searchQuery.data.query}’</b> 검색 결과 ·{" "}
+            {searchQuery.data.messages.length + searchQuery.data.decisions.length + searchQuery.data.tasks.length}건
+          </p>
 
-        <div className="soft-card mt-5 text-sm text-ink/68">
-          검색 결과에서 메시지 스레드, 의사결정 보드, 태스크 상태를 바로 확인할 수 있습니다.
-        </div>
-      </section>
+          <ResultSection title="결정" count={searchQuery.data.decisions.length} emptyMessage="일치하는 결정이 없어요.">
+            {searchQuery.data.decisions.map((decision) => (
+              <Link
+                key={decision.id}
+                href={`/meetings/${meetingId}/decisions?decision=${decision.id}` as Route}
+                className="flex items-center justify-between gap-3 border-t border-line py-3.5 first:border-t-0 hover:text-accent-text"
+              >
+                <b className="text-[15px]">{decision.title}</b>
+                <span className={decisionStatusChip(decision.status)}>{decisionStatusLabel(decision.status)}</span>
+              </Link>
+            ))}
+          </ResultSection>
 
-      <section className="panel px-6 py-6">
-        <div className="info-chip">Results</div>
-        {submittedQuery.trim().length === 0 ? (
-          <div className="empty-state mt-4">왼쪽에서 키워드를 입력해 검색을 시작해 주세요.</div>
-        ) : searchQuery.isLoading ? (
-          <div className="mt-4 text-sm text-ink/60">검색 결과를 불러오는 중입니다.</div>
-        ) : searchQuery.error || !searchQuery.data ? (
-          <ApiErrorPanel error={searchQuery.error} resourceName="검색 결과" />
-        ) : (
-          <div className="mt-4 space-y-5">
-            <div className="soft-card text-sm text-ink/66">
-              <strong>{searchQuery.data.query}</strong> 검색 결과
-            </div>
+          <ResultSection title="메시지" count={searchQuery.data.messages.length} emptyMessage="일치하는 메시지가 없어요.">
+            {searchQuery.data.messages.map((message) => (
+              <Link
+                key={message.id}
+                href={`/meetings/${meetingId}/threads/${message.threadId}` as Route}
+                className="flex gap-3 border-t border-line py-3.5 first:border-t-0 hover:bg-surface-2"
+              >
+                <span className="num w-[84px] flex-none text-xs text-muted">{formatDateTime(message.createdAt)}</span>
+                <span className="min-w-0 text-sm leading-normal">{message.body}</span>
+              </Link>
+            ))}
+          </ResultSection>
 
-            <ResultSection
-              title="Messages"
-              count={searchQuery.data.messages.length}
-              emptyMessage="일치하는 메시지가 없습니다."
-            >
-              {searchQuery.data.messages.map((message) => (
-                <article key={message.id} className="soft-card">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                      Message
-                    </div>
-                    <span className="text-xs text-ink/45">{formatDateTime(message.createdAt)}</span>
-                  </div>
-                  <p className="mt-3 text-sm leading-6 text-ink/84">{message.body}</p>
-                  <Link
-                    href={`/meetings/${meetingId}/threads/${message.threadId}`}
-                    className="action-secondary mt-3 px-3 py-1 text-xs"
-                  >
-                    Open thread
-                  </Link>
-                </article>
-              ))}
-            </ResultSection>
-
-            <ResultSection
-              title="Decisions"
-              count={searchQuery.data.decisions.length}
-              emptyMessage="일치하는 의사결정이 없습니다."
-            >
-              {searchQuery.data.decisions.map((decision) => (
-                <article key={decision.id} className="soft-card">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="text-lg font-semibold text-ink">{decision.title}</div>
-                    <span className="info-chip">
-                      {decision.status}
-                    </span>
-                  </div>
-                  <Link
-                    href={`/meetings/${meetingId}/decisions`}
-                    className="action-secondary mt-3 px-3 py-1 text-xs"
-                  >
-                    Open board
-                  </Link>
-                </article>
-              ))}
-            </ResultSection>
-
-            <ResultSection
-              title="Tasks"
-              count={searchQuery.data.tasks.length}
-              emptyMessage="일치하는 태스크가 없습니다."
-            >
-              {searchQuery.data.tasks.map((task) => (
-                <article key={task.id} className="soft-card">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="text-lg font-semibold text-ink">{task.title}</div>
-                    <span className="info-chip">
-                      {task.status}
-                    </span>
-                  </div>
-                  <div className="mt-3 text-sm text-ink/64">
-                    {task.dueAt ? `Due ${formatDateTime(task.dueAt)}` : "마감일 미설정"}
-                  </div>
-                </article>
-              ))}
-            </ResultSection>
-          </div>
-        )}
-      </section>
+          <ResultSection title="할 일" count={searchQuery.data.tasks.length} emptyMessage="일치하는 할 일이 없어요.">
+            {searchQuery.data.tasks.map((task) => (
+              <div key={task.id} className="flex items-center justify-between gap-3 border-t border-line py-3.5 first:border-t-0">
+                <span>
+                  <b className="text-[15px]">{task.title}</b>
+                  <span className="num block text-xs text-muted">{task.dueAt ? `기한 ${formatDateTime(task.dueAt)}` : "기한 없음"}</span>
+                </span>
+                <span className="chip">{task.status}</span>
+              </div>
+            ))}
+          </ResultSection>
+        </>
+      )}
     </div>
   );
 }
@@ -163,25 +117,22 @@ function ResultSection({
   children: React.ReactNode;
 }) {
   return (
-    <section>
-      <div className="flex items-center justify-between gap-4">
-        <h3 className="font-display text-2xl">
-          {title}
-        </h3>
-        <span className="text-sm text-ink/55">{count}건</span>
+    <section aria-label={title} className="rounded-[22px] bg-surface px-6 pb-2 pt-2">
+      <div className="flex items-center justify-between pb-1 pt-4">
+        <h2 className="m-0 text-[17px] font-bold">{title}</h2>
+        <span className="chip">{count}</span>
       </div>
-      <div className="mt-3 space-y-3">
-        {count ? children : <div className="empty-state">{emptyMessage}</div>}
-      </div>
+      {count ? <div className="flex flex-col">{children}</div> : <p className="section-copy m-0 py-3">{emptyMessage}</p>}
     </section>
   );
 }
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("ko-KR", {
-    month: "short",
+    month: "numeric",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   }).format(new Date(value));
 }

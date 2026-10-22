@@ -1,8 +1,41 @@
 "use client";
 
+import Link from "next/link";
+import type { Route } from "next";
 import { useQuery } from "@tanstack/react-query";
 import { ApiErrorPanel } from "@/components/api-error-panel";
-import { apiClient } from "@/lib/api/client";
+import { apiClient, type NotificationView } from "@/lib/api/client";
+import { formatShortDateTime, notificationSummary } from "@/lib/display";
+
+const KIND_STYLE: Record<string, { icon: string; className: string }> = {
+  decision_confirmed: { icon: "✓", className: "bg-ink text-on-ink" },
+  vote_closed: { icon: "!", className: "bg-accent text-on-accent" },
+  report_ready: { icon: "“", className: "bg-accent-soft text-accent-soft-ink" },
+  invite_joined: { icon: "+", className: "bg-[#CFE9DE] text-[#15171C]" },
+  invite_created: { icon: "↗", className: "bg-surface-2 text-ink" },
+};
+
+function notificationHref(meetingId: string, notification: NotificationView): string {
+  const payload = notification.payload ?? {};
+  switch (notification.type) {
+    case "decision_confirmed":
+      return typeof payload.decisionId === "string"
+        ? `/meetings/${meetingId}/decisions?decision=${payload.decisionId}`
+        : `/meetings/${meetingId}/decisions`;
+    case "vote_closed":
+      return typeof payload.voteId === "string" ? `/votes/${payload.voteId}` : `/meetings/${meetingId}`;
+    case "report_ready":
+      return `/meetings/${meetingId}/reports/latest`;
+    default:
+      return `/meetings/${meetingId}`;
+  }
+}
+
+function isToday(value: string) {
+  const date = new Date(value);
+  const now = new Date();
+  return date.toDateString() === now.toDateString();
+}
 
 export function NotificationsWorkspace({ meetingId }: { meetingId: string }) {
   const notificationsQuery = useQuery({
@@ -11,59 +44,49 @@ export function NotificationsWorkspace({ meetingId }: { meetingId: string }) {
   });
 
   if (notificationsQuery.isLoading) {
-    return <div className="panel px-6 py-6 text-sm text-ink/60">알림 목록을 불러오는 중입니다.</div>;
+    return <div className="panel px-6 py-6 text-sm text-muted">알림 목록을 불러오는 중입니다.</div>;
   }
 
   if (notificationsQuery.error || !notificationsQuery.data) {
     return <ApiErrorPanel error={notificationsQuery.error} resourceName="알림 목록" />;
   }
 
-  return (
-    <div className="panel px-6 py-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="info-chip">Notifications</div>
-          <h2 className="mt-4 font-display text-4xl leading-[0.96]">
-            회의 알림 피드
-          </h2>
-          <p className="section-copy mt-3">
-            현재 로컬 사용자 기준으로 저장된 인앱 알림을 시간순으로 확인합니다.
-          </p>
-        </div>
-        <div className="info-chip normal-case tracking-[0.02em]">총 {notificationsQuery.data.length}건</div>
-      </div>
+  const notifications = notificationsQuery.data;
+  if (notifications.length === 0) {
+    return <div className="empty-state">현재 확인할 알림이 없습니다.</div>;
+  }
 
-      <div className="mt-5 space-y-3">
-        {notificationsQuery.data.length ? (
-          notificationsQuery.data.map((notification) => (
-            <article key={notification.id} className="soft-card">
-              <div className="flex items-center justify-between gap-4">
-                <span className="info-chip">
-                  {notification.type}
+  const groups = [
+    { label: "오늘", items: notifications.filter((item) => isToday(item.createdAt)) },
+    { label: "이전", items: notifications.filter((item) => !isToday(item.createdAt)) },
+  ].filter((group) => group.items.length > 0);
+
+  return (
+    <div className="flex max-w-3xl flex-col gap-2">
+      {groups.map((group) => (
+        <section key={group.label} aria-label={group.label} className="flex flex-col gap-2">
+          <h2 className="mono-label m-0 px-1 pt-1">{group.label}</h2>
+          {group.items.map((notification) => {
+            const kind = KIND_STYLE[notification.type] ?? { icon: "•", className: "bg-surface-2 text-ink" };
+            return (
+              <Link
+                key={notification.id}
+                href={notificationHref(meetingId, notification) as Route}
+                className="flex items-start gap-3 rounded-[14px] bg-surface px-3.5 py-3 text-ink transition hover:ring-1 hover:ring-accent/40"
+              >
+                <span
+                  aria-hidden="true"
+                  className={`flex h-9 w-9 flex-none items-center justify-center rounded-[10px] text-sm font-extrabold ${kind.className}`}
+                >
+                  {kind.icon}
                 </span>
-                <span className="text-xs text-ink/45">{formatDateTime(notification.createdAt)}</span>
-              </div>
-              <div className="mt-3 text-sm text-ink/64">
-                {notification.sentAt ? `발송 처리 ${formatDateTime(notification.sentAt)}` : "발송 처리 전"}
-              </div>
-              <pre className="mt-3 overflow-x-auto rounded-[1.25rem] bg-surface-2 px-4 py-4 text-xs leading-6 text-ink/76">
-                {JSON.stringify(notification.payload, null, 2)}
-              </pre>
-            </article>
-          ))
-        ) : (
-          <div className="empty-state">현재 확인할 알림이 없습니다.</div>
-        )}
-      </div>
+                <span className="min-w-0 flex-1 text-sm font-semibold leading-[1.45]">{notificationSummary(notification)}</span>
+                <span className="num flex-none text-[11px] text-muted">{formatShortDateTime(notification.createdAt)}</span>
+              </Link>
+            );
+          })}
+        </section>
+      ))}
     </div>
   );
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("ko-KR", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
 }
