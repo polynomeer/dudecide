@@ -23,6 +23,8 @@ import {
   FORMAT_LABELS,
   formatDateTime,
 } from "@/components/import/import-copy";
+import { ImportSteps } from "@/components/import/import-steps";
+import { avatarColor, initialOf } from "@/lib/display";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -178,217 +180,318 @@ export function ImportWizard({ meetingId }: { meetingId?: string }) {
     ? preview.payload.messages.filter((message) => MASK_TOKEN.test(message.body)).slice(0, 5)
     : [];
 
+  const textCount = parse ? parse.messages.filter((message) => message.kind === "text").length : 0;
+  const rangeDays = range ? Math.max(1, Math.round((Date.parse(range.end) - Date.parse(range.start)) / DAY_MS) + 1) : 0;
+  const step = parse ? 2 : 1;
+
+
   return (
-    <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-      <section className="panel space-y-6 px-6 py-6">
-        <div>
-          <div className="info-chip">1. 대화 넣기</div>
-          <h2 className="mt-4 text-2xl font-semibold tracking-[-0.03em]">카카오톡 대화를 올리거나 붙여넣으세요</h2>
-          <p className="section-copy mt-2">
-            파일 원본은 이 브라우저 밖으로 나가지 않습니다. 고른 기간의 메시지만, 전화번호·계좌번호 등을 가린 뒤 보냅니다.
-            형식 인식을 개선하기 위해 줄 모양(숫자·글자 종류)과 개수만 익명으로 보냅니다.
-          </p>
-        </div>
-        <label className="block">
-          <span className="mb-2 block text-sm font-semibold">내보내기 파일 (.txt, .csv)</span>
-          <input
-            type="file"
-            accept=".txt,.csv,text/plain,text/csv"
-            aria-label="내보내기 파일"
-            onChange={(event) => void onFile(event.target.files?.[0])}
-            className="field"
-          />
-        </label>
-        <label className="block">
-          <span className="mb-2 block text-sm font-semibold">또는 대화 붙여넣기</span>
-          <textarea
-            aria-label="대화 붙여넣기"
-            value={rawText}
-            onChange={(event) => loadText(event.target.value)}
-            rows={8}
-            placeholder={"민지: 18일 어때?\n준호: ㅇㅇ 좋아"}
-            className="field font-mono text-sm"
-          />
-        </label>
-        {inputError ? (
-          <p role="alert" className="text-sm text-danger">
-            {inputError}
-          </p>
-        ) : null}
+    <div className="flex flex-col gap-5">
+      <ImportSteps current={step} />
 
-        {parse && range ? (
-          <>
-            <div className="section-rule" />
-            <div>
-              <div className="info-chip">2. 기간</div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {(
-                  [
-                    ["default", lastImportedAt ? "지난번 이후" : "최근 30일"],
-                    ["week", "최근 7일"],
-                    ["all", "전체"],
-                    ["custom", "직접 고르기"],
-                  ] as const
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={preset === value}
-                    onClick={() => setPreset(value)}
-                    className={preset === value ? "action-primary" : "action-secondary"}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {preset === "custom" ? (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <label className="block text-sm">
-                    시작일
-                    <input
-                      type="date"
-                      aria-label="시작일"
-                      value={custom.start}
-                      onChange={(event) => setCustom((current) => ({ ...current, start: event.target.value }))}
-                      className="field mt-1"
-                    />
-                  </label>
-                  <label className="block text-sm">
-                    종료일
-                    <input
-                      type="date"
-                      aria-label="종료일"
-                      value={custom.end}
-                      onChange={(event) => setCustom((current) => ({ ...current, end: event.target.value }))}
-                      className="field mt-1"
-                    />
-                  </label>
-                </div>
-              ) : null}
-              <p className="section-copy mt-3">
-                {formatDateTime(range.start)} ~ {formatDateTime(range.end)} · 최대 {IMPORT_LIMITS.maxRangeDays}일,{" "}
-                {IMPORT_LIMITS.maxMessages.toLocaleString()}개 메시지
-              </p>
+      <div className="flex flex-wrap items-start gap-5">
+        <div className="flex min-w-0 flex-[999_1_600px] flex-col gap-4">
+          <h1 className="font-display m-0 text-[clamp(1.7rem,2.6vw,2.2rem)]">
+            {parse ? "이 대화가 맞는지 확인해 주세요" : "단톡방 대화를 가져와요"}
+          </h1>
+
+          {parse ? null : (
+            <p className="section-copy m-0">
+              파일 원본은 이 브라우저 밖으로 나가지 않습니다. 고른 기간의 메시지만, 전화번호·계좌번호 등을 가린 뒤 보냅니다.
+              형식 인식을 개선하기 위해 줄 모양(숫자·글자 종류)과 개수만 익명으로 보냅니다.
+              {meetingId ? " 같은 채팅방은 지난번 이후의 대화만 기본으로 고르고, 이미 가져온 메시지는 건너뜁니다." : null}
+            </p>
+          )}
+
+          <details open={!parse} className="panel group p-5 [&:not([open])]:p-0">
+            <summary className={parse ? "cursor-pointer list-none px-5 py-3 text-sm font-semibold text-accent-text" : "hidden"}>
+              다른 파일로 바꾸거나 붙여넣은 내용 고치기
+            </summary>
+            <div className={`flex flex-col gap-4 ${parse ? "px-5 pb-5" : ""}`}>
+              <label className="flex min-h-[120px] cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border-[1.5px] border-dashed border-accent/50 bg-accent-soft/40 px-4 py-6 text-center">
+                <span className="text-[15px] font-bold text-accent-text">내보내기 파일 고르기 (.txt, .csv)</span>
+                <span className="text-xs text-muted">카톡 ‘대화 내보내기’로 저장한 파일 · 이 기기에서만 읽어요</span>
+                <input
+                  type="file"
+                  accept=".txt,.csv,text/plain,text/csv"
+                  aria-label="내보내기 파일"
+                  onChange={(event) => void onFile(event.target.files?.[0])}
+                  className="sr-only"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold">또는 대화 붙여넣기</span>
+                <textarea
+                  aria-label="대화 붙여넣기"
+                  value={rawText}
+                  onChange={(event) => loadText(event.target.value)}
+                  rows={parse ? 4 : 8}
+                  placeholder={"민지: 18일 어때?\n준호: ㅇㅇ 좋아"}
+                  className="field num text-sm"
+                />
+              </label>
             </div>
+          </details>
 
-            <div>
-              <div className="info-chip">3. 나는 누구인가요?</div>
-              <fieldset className="mt-3 grid gap-2 sm:grid-cols-2">
-                <legend className="sr-only">대화 속 내 이름</legend>
-                {speakersInRange.map(([speaker, count]) => (
-                  <label key={speaker} className="soft-card flex items-center gap-3 px-4 py-3 text-sm">
-                    <input
-                      type="radio"
-                      name="self-speaker"
+          {inputError ? (
+            <p role="alert" className="m-0 rounded-xl bg-risk-soft px-4 py-3 text-sm text-risk-ink">
+              {inputError}
+            </p>
+          ) : null}
+
+          {parse && range ? (
+            <section aria-label="가져오기 미리보기" className="flex flex-col gap-4">
+              <div className="panel flex flex-wrap items-center gap-x-7 gap-y-4 p-5">
+                <div className="flex min-w-0 flex-[1_1_260px] items-center gap-3">
+                  <span className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-accent-soft text-accent-soft-ink">
+                    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />
+                    </svg>
+                  </span>
+                  <span className="min-w-0">
+                    <b className="block text-base">{parse.roomName ?? "알 수 없음"}</b>
+                    <span className="num block truncate text-xs text-muted">{FORMAT_LABELS[parse.format]} · 이 기기에서 읽음</span>
+                  </span>
+                </div>
+                <dl className="m-0 flex flex-wrap gap-7">
+                  <SummaryStat label="보낼 메시지" value={`${preview?.ok ? preview.payload.messages.length.toLocaleString() : 0}개`} />
+                  <SummaryStat label="참여자" value={`${speakersInRange.length}명`} />
+                  <SummaryStat label={`전체 ${textCount.toLocaleString()}개 중`} value={`${rangeDays}일`} />
+                </dl>
+              </div>
+
+              {parse.format === "free_text" ? (
+                <p className="section-copy m-0">붙여넣은 텍스트에는 시간이 없어 붙여넣은 시각 기준으로 1분 간격의 시간을 붙입니다.</p>
+              ) : null}
+              {parse.unparsedLineCount > 0 ? (
+                <p className="section-copy m-0">읽지 못한 줄 {parse.unparsedLineCount}개는 제외했습니다.</p>
+              ) : null}
+
+              <div className="flex flex-wrap items-stretch gap-4">
+                <section aria-label="가져올 기간" className="panel flex flex-[1_1_300px] flex-col gap-3 p-5">
+                  <div className="flex items-baseline justify-between">
+                    <h2 className="m-0 text-base font-bold">가져올 기간</h2>
+                    <span className="num text-[13px] font-semibold text-accent-text">
+                      {preview?.ok ? preview.payload.messages.length.toLocaleString() : 0}개 분석
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                    {(
+                      [
+                        ["default", lastImportedAt ? "지난번 이후" : "최근 30일"],
+                        ["week", "최근 7일"],
+                        ["all", "전체"],
+                        ["custom", "직접 고르기"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={preset === value}
+                        onClick={() => setPreset(value)}
+                        className={`min-h-[44px] rounded-[10px] px-2 text-[13px] font-bold transition ${
+                          preset === value ? "bg-ink text-on-ink" : "border border-line bg-surface text-ink hover:bg-surface-2"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {preset === "custom" ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label className="block text-xs font-semibold text-muted">
+                        시작일
+                        <input
+                          type="date"
+                          aria-label="시작일"
+                          value={custom.start}
+                          onChange={(event) => setCustom((current) => ({ ...current, start: event.target.value }))}
+                          className="field mt-1"
+                        />
+                      </label>
+                      <label className="block text-xs font-semibold text-muted">
+                        종료일
+                        <input
+                          type="date"
+                          aria-label="종료일"
+                          value={custom.end}
+                          onChange={(event) => setCustom((current) => ({ ...current, end: event.target.value }))}
+                          className="field mt-1"
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                  <p className="m-0 text-xs leading-normal text-muted">
+                    {formatDateTime(range.start)} ~ {formatDateTime(range.end)} · 최대 {IMPORT_LIMITS.maxRangeDays}일,{" "}
+                    {IMPORT_LIMITS.maxMessages.toLocaleString()}개 메시지. 기간이 짧을수록 빠르고, 덜 공유돼요.
+                  </p>
+                </section>
+
+                <section aria-label="가린 정보" className="panel flex flex-[1_1_300px] flex-col gap-2.5 p-5">
+                  <div className="flex items-baseline justify-between">
+                    <h2 className="m-0 text-base font-bold">보내기 전에 가린 정보</h2>
+                    <span className="num text-xs text-muted">{preview?.ok ? preview.maskedCount : 0}건</span>
+                  </div>
+                  {maskedSamples.length > 0 ? (
+                    <ul className="m-0 list-none rounded-xl bg-surface-2 px-3 py-2.5 text-[13px] leading-[1.7]">
+                      {maskedSamples.map((message) => (
+                        <li key={`${message.sentAt}-${message.body}`}>{message.body}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="section-copy m-0">가릴 전화번호·계좌번호·이메일을 찾지 못했어요.</p>
+                  )}
+                </section>
+              </div>
+
+              {preview && !preview.ok ? (
+                <p role="alert" className="m-0 rounded-xl bg-risk-soft px-4 py-3 text-sm font-semibold text-risk-ink">
+                  {buildErrorMessage(preview.error)}
+                </p>
+              ) : null}
+
+              <section aria-label="참여자" className="panel flex flex-col gap-3 p-5">
+                <div className="flex flex-wrap items-baseline justify-between gap-1.5">
+                  <h2 className="m-0 text-base font-bold">이 중에 누가 나예요?</h2>
+                  <span className="text-xs text-muted">다른 사람은 참여할 때 직접 골라요 · AI에는 ‘참여자 A, B…’로 보내요</span>
+                </div>
+                <fieldset className="m-0 grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-2 border-0 p-0">
+                  <legend className="sr-only">대화 속 내 이름</legend>
+                  {speakersInRange.map(([speaker, count]) => (
+                    <SpeakerOption
+                      key={speaker}
+                      name={speaker}
+                      meta={`${count}개`}
                       checked={selfSpeaker === speaker}
                       onChange={() => setSelfSpeaker(speaker)}
                     />
-                    <span className="font-semibold">{speaker}</span>
-                    <span className="ml-auto text-ink/50">{count}개</span>
-                  </label>
-                ))}
-                <label className="soft-card flex items-center gap-3 px-4 py-3 text-sm">
-                  <input
-                    type="radio"
-                    name="self-speaker"
-                    checked={selfSpeaker === null}
-                    onChange={() => setSelfSpeaker(null)}
-                  />
-                  <span>목록에 없음</span>
-                </label>
-              </fieldset>
-            </div>
-          </>
-        ) : null}
-      </section>
-
-      <aside className="space-y-5">
-        {parse ? (
-          <section className="panel px-6 py-6" aria-label="가져오기 미리보기">
-            <div className="info-chip">미리보기</div>
-            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div className="metric-card px-4 py-3">
-                <dt className="text-ink/50">형식</dt>
-                <dd className="font-semibold">{FORMAT_LABELS[parse.format]}</dd>
-              </div>
-              <div className="metric-card px-4 py-3">
-                <dt className="text-ink/50">채팅방</dt>
-                <dd className="font-semibold">{parse.roomName ?? "알 수 없음"}</dd>
-              </div>
-              <div className="metric-card px-4 py-3">
-                <dt className="text-ink/50">보낼 메시지</dt>
-                <dd className="font-semibold">{preview?.ok ? preview.payload.messages.length.toLocaleString() : 0}개</dd>
-              </div>
-              <div className="metric-card px-4 py-3">
-                <dt className="text-ink/50">가린 개인정보</dt>
-                <dd className="font-semibold">{preview?.ok ? preview.maskedCount : 0}건</dd>
-              </div>
-            </dl>
-            {parse.format === "free_text" ? (
-              <p className="section-copy mt-3">
-                붙여넣은 텍스트에는 시간이 없어 붙여넣은 시각 기준으로 1분 간격의 시간을 붙입니다.
-              </p>
-            ) : null}
-            {parse.unparsedLineCount > 0 ? (
-              <p className="section-copy mt-3">읽지 못한 줄 {parse.unparsedLineCount}개는 제외했습니다.</p>
-            ) : null}
-            {preview && !preview.ok ? (
-              <p role="alert" className="mt-3 text-sm font-semibold text-danger">
-                {buildErrorMessage(preview.error)}
-              </p>
-            ) : null}
-            {maskedSamples.length > 0 ? (
-              <div className="mt-4">
-                <h3 className="text-sm font-semibold">가려진 내용 예시</h3>
-                <ul className="mono-panel mt-2 space-y-1 px-4 py-3 text-xs">
-                  {maskedSamples.map((message) => (
-                    <li key={`${message.sentAt}-${message.body}`}>{message.body}</li>
                   ))}
-                </ul>
-              </div>
-            ) : null}
-          </section>
-        ) : (
-          <section className="panel px-6 py-6">
-            <div className="info-chip">내보내는 방법</div>
-            <ul className="mt-4 space-y-3 text-sm">
-              {EXPORT_GUIDES.map((guide) => (
-                <li key={guide.id}>
-                  <span className="font-semibold">{guide.label}</span>
-                  <span className="text-ink/60"> · {guide.steps.join(" → ")}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+                  <SpeakerOption name="목록에 없음" meta="나중에 연결" checked={selfSpeaker === null} onChange={() => setSelfSpeaker(null)} />
+                </fieldset>
+              </section>
 
-        {parse ? (
-          <section className="panel px-6 py-6">
-            <div className="info-chip">4. 확인</div>
-            <label className="mt-4 flex items-start gap-3 text-sm">
-              <input type="checkbox" checked={consented} onChange={(event) => setConsented(event.target.checked)} />
-              <span>
-                이 대화의 참여자이며, 대화 내용을 이 모임을 정리하는 데에만 사용하는 것에 동의합니다. 다른 참여자의
-                메시지가 포함되므로 언제든 가져온 대화를 삭제할 수 있습니다.
-              </span>
-            </label>
-            {submitError ? (
-              <p role="alert" className="mt-3 text-sm text-danger">
-                {submitError}
-              </p>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => submitMutation.mutate()}
-              disabled={!consented || !preview?.ok || submitMutation.isPending}
-              className="action-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {submitMutation.isPending ? "보내는 중..." : "분석 시작"}
-            </button>
+              <div className="flex flex-wrap items-center justify-between gap-3.5 py-1">
+                <label className="flex flex-[1_1_380px] cursor-pointer items-start gap-2.5 text-sm leading-normal">
+                  <input
+                    type="checkbox"
+                    checked={consented}
+                    onChange={(event) => setConsented(event.target.checked)}
+                    className="mt-0.5 h-5 w-5 flex-none accent-[rgb(var(--accent))]"
+                  />
+                  <span>
+                    이 대화의 참여자이며, 대화 내용을 이 모임을 정리하는 데에만 사용하는 것에 동의합니다. 다른 참여자의
+                    메시지가 포함되므로 언제든 가져온 대화를 삭제할 수 있습니다.
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => submitMutation.mutate()}
+                  disabled={!consented || !preview?.ok || submitMutation.isPending}
+                  className="btn-accent min-h-[52px] px-[26px] text-base"
+                >
+                  {submitMutation.isPending ? "보내는 중..." : "분석 시작"}
+                </button>
+              </div>
+              {submitError ? (
+                <p role="alert" className="m-0 text-sm text-danger">
+                  {submitError}
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+        </div>
+
+        <aside className="flex max-w-full flex-[1_1_300px] flex-col gap-4 lg:max-w-[380px]">
+          <ExportGuide />
+          <section aria-label="데이터 처리 방식" className="flex flex-col gap-3 rounded-[20px] bg-band px-6 py-[22px] text-white">
+            <h2 className="m-0 text-base font-bold">이렇게 다뤄요</h2>
+            {[
+              "원본 파일은 보내지 않아요. 고른 기간만 보내요.",
+              "AI에게는 이름 대신 가명으로 보내고, 학습에는 쓰지 않아요.",
+              "모임으로 만들지 않으면 7일 뒤 자동으로 지워져요.",
+            ].map((line) => (
+              <div key={line} className="flex gap-2.5 text-sm leading-normal text-[#C9CCD3]">
+                <span aria-hidden="true" className="text-[#9AA3FF]">✓</span>
+                <span>{line}</span>
+              </div>
+            ))}
           </section>
-        ) : null}
-      </aside>
+        </aside>
+      </div>
     </div>
+  );
+}
+
+function SummaryStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col-reverse">
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="num m-0 text-xl font-bold">{value}</dd>
+    </div>
+  );
+}
+
+function SpeakerOption({
+  name,
+  meta,
+  checked,
+  onChange,
+}: {
+  name: string;
+  meta: string;
+  checked: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <label
+      className={`flex cursor-pointer items-center gap-2.5 rounded-[14px] border px-3 py-2.5 transition ${
+        checked ? "border-accent bg-accent-soft" : "border-line bg-surface hover:bg-surface-2"
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full text-xs font-bold text-[#15171C]"
+        style={{ background: avatarColor(name) }}
+      >
+        {initialOf(name)}
+      </span>
+      <span className="min-w-0 flex-1">
+        <b className="block truncate text-sm">{name}</b>
+        <span className="num block text-[11px] text-muted">{meta}</span>
+      </span>
+      <input type="radio" name="self-speaker" checked={checked} onChange={onChange} className="h-[18px] w-[18px] accent-[rgb(var(--accent))]" />
+    </label>
+  );
+}
+
+function ExportGuide() {
+  const [tab, setTab] = useState<(typeof EXPORT_GUIDES)[number]["id"]>(EXPORT_GUIDES[0].id);
+  const guide = EXPORT_GUIDES.find((item) => item.id === tab) ?? EXPORT_GUIDES[0];
+  return (
+    <section aria-label="대화 내보내는 법" className="panel flex flex-col gap-3 p-5">
+      <h2 className="m-0 text-base font-bold">카톡 대화 내보내는 법</h2>
+      <div role="tablist" aria-label="기기" className="flex gap-0.5 rounded-[10px] bg-surface-2 p-[3px]">
+        {EXPORT_GUIDES.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={item.id === tab}
+            onClick={() => setTab(item.id)}
+            className={`min-h-[36px] flex-1 rounded-lg text-[13px] font-bold ${
+              item.id === tab ? "bg-surface text-ink shadow-[0_1px_2px_rgb(0_0_0/0.08)]" : "text-muted"
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <ol role="tabpanel" className="m-0 flex flex-col gap-2 pl-5 text-sm leading-normal">
+        {guide.steps.map((stepText) => (
+          <li key={stepText}>{stepText}</li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
