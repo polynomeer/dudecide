@@ -6,7 +6,7 @@ type FormErrorSummaryProps = {
 };
 
 export function FormErrorSummary({
-  title = "Please fix the following",
+  title = "확인이 필요해요",
   errors,
 }: FormErrorSummaryProps) {
   if (errors.length === 0) {
@@ -17,10 +17,10 @@ export function FormErrorSummary({
     <div
       role="alert"
       tabIndex={-1}
-      className="rounded-[1.5rem] border border-[rgba(220,38,38,0.18)] bg-[rgba(220,38,38,0.06)] px-5 py-4 text-sm text-ink"
+      className="rounded-xl bg-risk-soft px-5 py-4 text-sm text-risk-ink"
     >
-      <h2 className="font-semibold text-ember">{title}</h2>
-      <ul className="mt-3 space-y-2">
+      <h2 className="m-0 text-sm font-bold">{title}</h2>
+      <ul className="m-0 mt-2 space-y-1 pl-4">
         {errors.map((error) => (
           <li key={error.fieldId}>
             <a href={`#${error.fieldId}`} className="underline underline-offset-2">

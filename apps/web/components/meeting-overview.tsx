@@ -15,18 +15,11 @@ import {
   decisionStatusLabel,
   decisionTypeLabel,
   formatShortDateTime,
+  meetingTypeLabel,
   normalizeDecisionStatus,
   notificationSummary,
 } from "@/lib/display";
 import { useMeetingHostAccess } from "@/lib/session";
-
-const MEETING_TYPE_LABELS: Record<string, string> = {
-  trip: "여행",
-  travel: "여행",
-  dinner: "모임",
-  meetup: "모임",
-  workshop: "워크숍",
-};
 
 export function MeetingOverview({ meetingId }: { meetingId: string }) {
   const { isHost } = useMeetingHostAccess(meetingId);
@@ -61,7 +54,7 @@ export function MeetingOverview({ meetingId }: { meetingId: string }) {
   const openTasks = (tasksQuery.data ?? []).filter((task) => !["done", "completed", "cancelled"].includes(task.status.toLowerCase()));
   const discussing = decisions.filter((decision) => normalizeDecisionStatus(decision.status) === "in_discussion");
   const percent = decisions.length ? Math.round((confirmed.length / decisions.length) * 100) : 0;
-  const typeLabel = MEETING_TYPE_LABELS[meeting.meetingType.toLowerCase()] ?? meeting.meetingType;
+  const typeLabel = meetingTypeLabel(meeting.meetingType);
   const kicker = [typeLabel, meeting.originRegion, `멤버 ${meeting.memberCount}명`].filter(Boolean).join(" · ");
 
   return (

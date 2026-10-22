@@ -35,40 +35,39 @@ export function CreateGuestSessionForm() {
 
   return (
     <form
-      className="panel max-w-2xl space-y-5 px-6 py-6"
+      className="panel flex max-w-xl flex-col gap-5 p-7"
       onSubmit={form.handleSubmit((values) => {
         setErrorMessage(null);
         mutation.mutate(values);
       })}
     >
-      <div className="info-chip normal-case tracking-[0.02em]">Next: create a planning room</div>
       <FormErrorSummary
         errors={
           form.formState.submitCount > 0 && form.formState.errors.displayName
-            ? [{ fieldId: "display-name", message: "Enter a display name with at least two characters." }]
+            ? [{ fieldId: "display-name", message: "이름을 두 글자 이상 적어 주세요." }]
             : []
         }
       />
       <div>
-        <label className="mb-2 block text-sm font-semibold">Display name</label>
+        <label htmlFor="display-name" className="mb-1.5 block text-xs font-bold">
+          모임에서 보일 이름
+        </label>
         <input
           {...form.register("displayName", { required: true, minLength: 2 })}
           id="display-name"
-          className="field"
-          placeholder="e.g. Summer Trip Host"
+          className="field h-12 text-[15px]"
+          placeholder="예: 지수"
           aria-invalid={form.formState.errors.displayName ? "true" : "false"}
         />
         {form.formState.errors.displayName ? (
-          <p className="mt-2 text-sm text-ember">Enter at least two characters.</p>
-        ) : null}
+          <p className="mt-2 text-sm text-danger">두 글자 이상 적어 주세요.</p>
+        ) : (
+          <p className="mt-2 text-xs text-muted">가입 없이 이 브라우저에만 저장돼요. 나중에 바꿀 수 있어요.</p>
+        )}
       </div>
-      {errorMessage ? <p className="text-sm text-ember">{errorMessage}</p> : null}
-      <button
-        type="submit"
-        disabled={mutation.isPending}
-        className="action-primary disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {mutation.isPending ? "Creating session..." : "Create guest session"}
+      {errorMessage ? <p className="m-0 text-sm text-danger">{errorMessage}</p> : null}
+      <button type="submit" disabled={mutation.isPending} className="action-primary min-h-[52px] rounded-[14px] text-[15px]">
+        {mutation.isPending ? "시작하는 중…" : "시작하기"}
       </button>
     </form>
   );

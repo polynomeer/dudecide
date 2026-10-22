@@ -19,11 +19,11 @@ test("invite join redirects into the target meeting workspace", async ({ page })
 
   await page.goto("/invite/invite-token-1");
 
-  await page.getByPlaceholder("e.g. Cabin Driver").fill("Guest One");
-  await page.getByRole("button", { name: "Join meeting" }).click();
+  await page.getByLabel("모임에서 보일 이름").fill("Guest One");
+  await page.getByRole("button", { name: "참여하기" }).click();
 
   await expect(page).toHaveURL(/\/meetings\/meeting-invite-1$/);
   await expect(page.getByRole("heading", { name: "2026 Autumn Cabin Trip" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Decision board" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "결정 보드" })).toBeVisible();
   await expect(page.getByText(/Realtime/i)).toBeVisible();
 });

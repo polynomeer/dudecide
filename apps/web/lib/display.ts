@@ -126,3 +126,16 @@ export function avatarColor(seed: string): string {
   }
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
+
+export const MEETING_TYPES = [
+  { value: "trip", label: "여행", placeholder: "예: 제주 2박 3일" },
+  { value: "meal", label: "식사·술", placeholder: "예: 연말 동기 모임" },
+  { value: "camp", label: "캠핑·아웃도어", placeholder: "예: 가을 캠핑" },
+  { value: "club", label: "동호회 정모", placeholder: "예: 11월 러닝 정모" },
+  { value: "family", label: "가족 모임", placeholder: "예: 할머니 생신" },
+  { value: "other", label: "기타", placeholder: "모임 이름" },
+] as const;
+
+export function meetingTypeLabel(type: string): string {
+  return MEETING_TYPES.find((item) => item.value === type.toLowerCase())?.label ?? type;
+}
