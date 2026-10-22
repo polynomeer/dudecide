@@ -1,5 +1,5 @@
+import { MeetingPageHeader } from "@/components/meeting/meeting-page-header";
 import { ReportWorkspace } from "@/components/report-workspace";
-import { SectionShell } from "@/components/section-shell";
 
 export default async function LatestReportPage({
   params,
@@ -9,17 +9,13 @@ export default async function LatestReportPage({
   const { meetingId } = await params;
 
   return (
-    <SectionShell
-      eyebrow="Meeting Report"
-      title="Latest report"
-      description="최신 materialized 회의 리포트를 확인하고 필요 시 수동 새로고침을 실행할 수 있습니다."
-      breadcrumbs={[
-        { label: "Home", href: "/" },
-        { label: "Meeting", href: `/meetings/${meetingId}` },
-        { label: "Report" },
-      ]}
-    >
+    <>
+      <MeetingPageHeader
+        kicker="리포트"
+        title="지금 여기까지 정했어요"
+        description="확정된 것, 남은 것, 할 일을 한 장으로 공유해요."
+      />
       <ReportWorkspace meetingId={meetingId} />
-    </SectionShell>
+    </>
   );
 }

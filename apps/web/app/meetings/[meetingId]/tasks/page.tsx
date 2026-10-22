@@ -1,4 +1,4 @@
-import { SectionShell } from "@/components/section-shell";
+import { MeetingPageHeader } from "@/components/meeting/meeting-page-header";
 import { TasksWorkspace } from "@/components/tasks-workspace";
 
 export default async function TasksPage({
@@ -9,17 +9,13 @@ export default async function TasksPage({
   const { meetingId } = await params;
 
   return (
-    <SectionShell
-      eyebrow="Tasks"
-      title="Task management"
-      description="회의 후속 액션을 생성하고 상태를 업데이트할 수 있습니다."
-      breadcrumbs={[
-        { label: "Home", href: "/" },
-        { label: "Meeting", href: `/meetings/${meetingId}` },
-        { label: "Tasks" },
-      ]}
-    >
+    <>
+      <MeetingPageHeader
+        kicker="할 일"
+        title="누가 뭘 하나"
+        description="결정 뒤에 남은 할 일을 나누고 상태를 바꿔요."
+      />
       <TasksWorkspace meetingId={meetingId} />
-    </SectionShell>
+    </>
   );
 }

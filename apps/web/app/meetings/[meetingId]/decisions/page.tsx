@@ -1,5 +1,5 @@
+import { MeetingPageHeader } from "@/components/meeting/meeting-page-header";
 import { DecisionBoard } from "@/components/decision-board";
-import { SectionShell } from "@/components/section-shell";
 
 export default async function DecisionsPage({
   params,
@@ -9,17 +9,13 @@ export default async function DecisionsPage({
   const { meetingId } = await params;
 
   return (
-    <SectionShell
-      eyebrow="Decision Board"
-      title="Decision board"
-      description="회의별 결정 목록과 선택된 결정의 상세, evidence, 상태 이력을 확인하고, 새 결정을 생성하거나 확정·재검토 상태 전이를 실행할 수 있습니다."
-      breadcrumbs={[
-        { label: "Home", href: "/" },
-        { label: "Meeting", href: `/meetings/${meetingId}` },
-        { label: "Decisions" },
-      ]}
-    >
+    <>
+      <MeetingPageHeader
+        kicker="결정"
+        title="결정 보드"
+        description="결정마다 근거 메시지와 변경 이력이 함께 남아요."
+      />
       <DecisionBoard meetingId={meetingId} />
-    </SectionShell>
+    </>
   );
 }
