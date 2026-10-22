@@ -28,6 +28,8 @@ const config: Config = {
         "risk-soft": token("risk-soft"),
         "risk-ink": token("risk-ink"),
         danger: token("danger"),
+        band: token("band"),
+        "band-card": token("band-card"),
         // Legacy names kept so older components follow the new tokens.
         mist: token("on-ink"),
         sand: token("surface-2"),

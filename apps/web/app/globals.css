@@ -25,6 +25,8 @@
   --risk-soft: 255 246 241;
   --risk-ink: 122 42 8;
   --danger: 180 35 24;
+  --band: 21 23 28;
+  --band-card: 35 38 45;
 
   --shadow-panel: 0 1px 2px rgb(21 23 28 / 0.04), 0 8px 24px rgb(21 23 28 / 0.04);
   --shadow-soft: 0 1px 2px rgb(21 23 28 / 0.04);
@@ -62,6 +64,8 @@
   --risk-soft: 42 28 21;
   --risk-ink: 255 179 138;
   --danger: 255 138 120;
+  --band: 26 28 33;
+  --band-card: 35 38 45;
   --shadow-panel: none;
   --shadow-soft: none;
 }
@@ -86,6 +90,8 @@
     --risk-soft: 42 28 21;
     --risk-ink: 255 179 138;
     --danger: 255 138 120;
+  --band: 26 28 33;
+  --band-card: 35 38 45;
     --shadow-panel: none;
     --shadow-soft: none;
   }
@@ -106,6 +112,8 @@ body {
   background: rgb(var(--bg));
   color: rgb(var(--ink));
   font-family: var(--font-body);
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 a {

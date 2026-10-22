@@ -19,11 +19,19 @@ export function LogoMark({ size = 32, className = "" }: { size?: number; classNa
   );
 }
 
-export function Logo({ size = 28, className = "" }: { size?: number; className?: string }) {
+export function Logo({
+  size = 28,
+  className = "",
+  textClassName = "text-lg",
+}: {
+  size?: number;
+  className?: string;
+  textClassName?: string;
+}) {
   return (
     <span className={`inline-flex items-center gap-2 ${className}`}>
       <LogoMark size={size} />
-      <span className="font-display text-lg text-ink">dudecide</span>
+      <span className={`font-display text-ink ${textClassName}`}>dudecide</span>
     </span>
   );
 }
