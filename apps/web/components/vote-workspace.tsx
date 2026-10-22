@@ -119,7 +119,7 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
       <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
         <section className="panel px-6 py-6">
           <div className="info-chip">Vote summary</div>
-          <h2 className="mt-4 font-[var(--font-display)] text-4xl font-semibold leading-[0.96] tracking-[-0.055em]">
+          <h2 className="mt-4 font-display text-4xl leading-[0.96]">
             {labelForVoteType(vote.voteType)}
           </h2>
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -131,7 +131,7 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
             />
             <Metric label="Deadline" value={vote.deadlineAt ? formatDateTime(vote.deadlineAt) : "미설정"} />
           </div>
-          <div className="mt-5 flex flex-wrap gap-2 text-sm text-[color:rgba(13,21,38,0.62)]">
+          <div className="mt-5 flex flex-wrap gap-2 text-sm text-ink/62">
             {vote.decisionId ? (
               <Link href={`/meetings/${vote.meetingId}/decisions`} className="action-secondary">
                 Decision board
@@ -146,7 +146,7 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
           </div>
 
           <form
-            className="mt-6 rounded-[1.75rem] border border-[color:var(--color-line)] bg-[rgba(255,255,255,0.66)] p-5"
+            className="mt-6 rounded-[1.75rem] border border-line bg-surface p-5"
             onSubmit={(event) => {
               event.preventDefault();
               setErrorMessage(null);
@@ -154,10 +154,10 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
             }}
           >
             <div className="flex items-center justify-between gap-4">
-              <h3 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-0.04em]">
+              <h3 className="font-display text-2xl">
                 내 응답
               </h3>
-              <span className="text-sm text-[color:rgba(13,21,38,0.55)]">
+              <span className="text-sm text-ink/55">
                 {hasAllResponses ? "모든 옵션 응답 완료" : "미응답 옵션이 있습니다"}
               </span>
             </div>
@@ -166,7 +166,7 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
             {vote.options.map((option) => (
               <article
                 key={option.id}
-                className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/82 p-4"
+                className="rounded-[1.5rem] border border-line bg-surface p-4"
               >
                 <div className="flex items-center justify-between gap-4">
                   <div>
@@ -203,7 +203,7 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
                           "rounded-full border px-4 py-2 text-sm font-semibold transition",
                           selected
                             ? "border-pine bg-pine text-white"
-                            : "border-[color:var(--color-line)] bg-white/88 text-ink hover:bg-white",
+                            : "border-line bg-surface text-ink hover:bg-white",
                         ].join(" ")}
                       >
                         {choice.label}
@@ -224,7 +224,7 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
             <button
               type="submit"
               disabled={submitMutation.isPending || vote.status !== "OPEN"}
-              className="action-primary disabled:cursor-not-allowed disabled:bg-[rgba(13,21,38,0.4)]"
+              className="action-primary disabled:cursor-not-allowed disabled:opacity-40"
             >
               {submitMutation.isPending ? "저장 중..." : "응답 저장"}
             </button>
@@ -236,7 +236,7 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="info-chip">Aggregates</div>
-              <h3 className="mt-3 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+              <h3 className="mt-3 font-display text-3xl">
                 집계 결과
               </h3>
             </div>
@@ -245,7 +245,7 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
                 type="button"
                 onClick={() => closeMutation.mutate()}
                 disabled={closeMutation.isPending || vote.status === "CLOSED" || vote.status === "SUPERSEDED"}
-                className="inline-flex items-center justify-center rounded-full bg-[color:var(--color-ember)] px-5 py-3 text-sm font-semibold text-white transition active:translate-y-px hover:bg-[var(--color-ink)] disabled:cursor-not-allowed disabled:bg-[rgba(211,85,51,0.4)]"
+                className="inline-flex items-center justify-center rounded-full bg-ember px-5 py-3 text-sm font-semibold text-white transition active:translate-y-px hover:bg-ink disabled:cursor-not-allowed disabled:bg-[rgba(211,85,51,0.4)]"
               >
                 {closeMutation.isPending ? "마감 중..." : "투표 마감"}
               </button>
@@ -270,7 +270,7 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
                 ))}
               </div>
 
-              <div className="mt-5 rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/72 p-4 text-sm text-ink/68">
+              <div className="mt-5 rounded-[1.5rem] border border-line bg-surface p-4 text-sm text-ink/68">
                 조기 마감 가능 여부:{" "}
                 <strong>
                   {vote.aggregates.canEarlyClose == null
@@ -285,7 +285,7 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
               ) : null}
             </>
           ) : (
-            <div className="mt-5 rounded-[1.5rem] border border-dashed border-[color:var(--color-line)] bg-white/60 px-5 py-6 text-sm text-ink/58">
+            <div className="mt-5 rounded-[1.5rem] border border-dashed border-line bg-surface px-5 py-6 text-sm text-ink/58">
               집계 정보가 아직 없습니다.
             </div>
           )}
@@ -306,7 +306,7 @@ function AggregateCard({
     <article
       className={[
         "rounded-[1.5rem] border p-4",
-        isLeading ? "border-pine bg-pine/10" : "border-[color:var(--color-line)] bg-white/78",
+        isLeading ? "border-pine bg-pine/10" : "border-line bg-surface",
       ].join(" ")}
     >
       <div className="flex items-center justify-between gap-4">
@@ -317,7 +317,7 @@ function AggregateCard({
           </div>
         </div>
         {isLeading ? (
-          <span className="rounded-full border border-pine/20 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-pine">
+          <span className="rounded-full border border-pine/20 bg-surface px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-pine">
             Leading
           </span>
         ) : null}
@@ -326,7 +326,7 @@ function AggregateCard({
         {Object.entries(option.counts).map(([key, value]) => (
           <span
             key={key}
-            className="rounded-full border border-[color:var(--color-line)] bg-white/82 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink/65"
+            className="rounded-full border border-line bg-surface px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink/65"
           >
             {key} {value}
           </span>
@@ -338,9 +338,9 @@ function AggregateCard({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/70 p-4">
+    <div className="rounded-[1.5rem] border border-line bg-surface p-4">
       <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">{label}</div>
-      <div className="mt-2 font-[var(--font-display)] text-2xl font-semibold tracking-[-0.04em]">
+      <div className="mt-2 font-display text-2xl">
         {value}
       </div>
     </div>

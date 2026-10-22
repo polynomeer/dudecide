@@ -8,12 +8,12 @@ export function MarketingHero() {
         <div className="space-y-7">
           <div className="info-chip">Threads, votes, decisions, reports</div>
           <div className="max-w-xl space-y-4">
-            <h2 className="font-[var(--font-display)] text-[3.2rem] font-semibold leading-[0.92] tracking-[-0.065em] sm:text-[4.2rem]">
+            <h2 className="font-display text-[3.2rem] leading-[0.92] sm:text-[4.2rem]">
               Plan the trip.
               <br />
               Keep the rationale.
             </h2>
-            <p className="max-w-md text-base leading-7 text-[color:rgba(13,21,38,0.72)] sm:text-lg">
+            <p className="max-w-md text-base leading-7 text-ink/72 sm:text-lg">
               One workspace for availability, options, blockers, and the evidence behind every final call.
             </p>
           </div>
@@ -33,7 +33,7 @@ export function MarketingHero() {
         </div>
 
         <div className="grid gap-4">
-          <div className="relative overflow-hidden rounded-[2rem] border border-[color:var(--color-line)] bg-[rgba(255,255,255,0.56)] p-2 shadow-[0_24px_90px_rgba(19,29,53,0.08)]">
+          <div className="relative overflow-hidden rounded-[2rem] border border-line bg-surface p-2 shadow-[0_24px_90px_rgba(19,29,53,0.08)]">
             <Image
               src="/hero-editorial.png"
               alt="Editorial preview of layered meeting planning artifacts"
@@ -46,14 +46,14 @@ export function MarketingHero() {
               <div className="eyebrow !text-white/56">Live room snapshot</div>
               <div className="mt-2 grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
                 <div>
-                  <div className="font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+                  <div className="font-display text-3xl">
                     Autumn cabin shortlist
                   </div>
                   <p className="mt-2 max-w-md text-sm leading-6 text-white/72">
                     Three candidate packages, one open date matrix, and the reasons behind each tradeoff.
                   </p>
                 </div>
-                <div className="info-chip border-white/14 bg-white/10 !text-white/76">
+                <div className="info-chip border-white/14 bg-surface !text-white/76">
                   17 messages summarized
                 </div>
               </div>
@@ -63,11 +63,11 @@ export function MarketingHero() {
           <div className="grid gap-4 lg:grid-cols-[0.94fr_1.06fr]">
             <div className="panel-strong p-5">
               <div className="eyebrow">Why it feels different</div>
-              <p className="mt-3 text-sm leading-6 text-[color:rgba(13,21,38,0.72)]">
+              <p className="mt-3 text-sm leading-6 text-ink/72">
                 Casual chat stays casual. Dudecide extracts the parts that actually decide the trip.
               </p>
             </div>
-            <div className="rounded-[2rem] border border-[color:var(--color-line)] bg-[linear-gradient(135deg,rgba(36,80,255,0.92),rgba(13,21,38,0.94))] p-5 text-white shadow-[0_20px_60px_rgba(36,80,255,0.22)]">
+            <div className="rounded-[2rem] border border-line bg-[linear-gradient(135deg,rgba(36,80,255,0.92),rgba(13,21,38,0.94))] p-5 text-white shadow-[0_20px_60px_rgba(36,80,255,0.22)]">
               <div className="eyebrow !text-white/56">Decision signal</div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div>
@@ -90,8 +90,8 @@ export function MarketingHero() {
 function SignalCard({ value, label }: { value: string; label: string }) {
   return (
     <div className="metric-card">
-      <div className="font-[var(--font-display)] text-3xl font-semibold tracking-[-0.06em]">{value}</div>
-      <div className="mt-1 text-sm text-[color:rgba(13,21,38,0.66)]">{label}</div>
+      <div className="font-display text-3xl">{value}</div>
+      <div className="mt-1 text-sm text-ink/66">{label}</div>
     </div>
   );
 }

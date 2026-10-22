@@ -23,7 +23,7 @@ export function NotificationsWorkspace({ meetingId }: { meetingId: string }) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="info-chip">Notifications</div>
-          <h2 className="mt-4 font-[var(--font-display)] text-4xl font-semibold leading-[0.96] tracking-[-0.055em]">
+          <h2 className="mt-4 font-display text-4xl leading-[0.96]">
             회의 알림 피드
           </h2>
           <p className="section-copy mt-3">
@@ -46,7 +46,7 @@ export function NotificationsWorkspace({ meetingId }: { meetingId: string }) {
               <div className="mt-3 text-sm text-ink/64">
                 {notification.sentAt ? `발송 처리 ${formatDateTime(notification.sentAt)}` : "발송 처리 전"}
               </div>
-              <pre className="mt-3 overflow-x-auto rounded-[1.25rem] bg-[rgba(231,237,246,0.78)] px-4 py-4 text-xs leading-6 text-[color:rgba(13,21,38,0.76)]">
+              <pre className="mt-3 overflow-x-auto rounded-[1.25rem] bg-surface-2 px-4 py-4 text-xs leading-6 text-ink/76">
                 {JSON.stringify(notification.payload, null, 2)}
               </pre>
             </article>

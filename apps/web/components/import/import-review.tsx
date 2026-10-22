@@ -214,7 +214,7 @@ export function ImportReview({ meetingId, importId }: { meetingId: string; impor
               type="button"
               onClick={() => applyMutation.mutate()}
               disabled={selected.size === 0 || applyMutation.isPending}
-              className="action-primary mt-4 w-full disabled:cursor-not-allowed disabled:bg-[rgba(13,21,38,0.4)]"
+              className="action-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-40"
             >
               {applyMutation.isPending ? "반영하는 중..." : `${selected.size}개 항목 반영`}
             </button>
@@ -235,7 +235,7 @@ export function ImportReview({ meetingId, importId }: { meetingId: string; impor
             </div>
           ) : null}
           {actionError ? (
-            <p role="alert" className="mt-3 text-sm text-[color:var(--color-danger,#b42318)]">
+            <p role="alert" className="mt-3 text-sm text-danger">
               {actionError}
             </p>
           ) : null}
@@ -307,7 +307,7 @@ function ShareInviteLink({ meetingId }: { meetingId: string }) {
         </button>
       )}
       {inviteMutation.error ? (
-        <p role="alert" className="mt-2 text-[color:var(--color-danger,#b42318)]">
+        <p role="alert" className="mt-2 text-danger">
           {getApiErrorMessage(inviteMutation.error, { resourceName: "초대 링크" })}
         </p>
       ) : null}
@@ -335,9 +335,9 @@ function AnalysisProgress({ view }: { view: ChatImportView }) {
             aria-valuenow={percent}
             aria-valuemin={0}
             aria-valuemax={100}
-            className="h-2 overflow-hidden rounded-full bg-[rgba(13,21,38,0.08)]"
+            className="h-2 overflow-hidden rounded-full bg-line"
           >
-            <div className="h-full bg-[color:var(--color-pine,#1f6f5c)]" style={{ width: `${percent}%` }} />
+            <div className="h-full bg-accent" style={{ width: `${percent}%` }} />
           </div>
           <p className="mt-2 text-xs text-ink/50">
             {done}/{total} 구간

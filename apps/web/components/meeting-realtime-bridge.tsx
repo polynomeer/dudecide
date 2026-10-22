@@ -122,7 +122,7 @@ export function MeetingRealtimeBridge({
   }, [meetingId, queryClient, voteId]);
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 rounded-full border border-[color:var(--color-line)] bg-white/88 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink/58 shadow-[0_16px_30px_rgba(15,23,42,0.08)] backdrop-blur">
+    <div className="fixed bottom-4 right-4 z-50 rounded-full border border-line bg-surface px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink/58 shadow-[0_16px_30px_rgba(15,23,42,0.08)] backdrop-blur">
       Realtime {status}
     </div>
   );

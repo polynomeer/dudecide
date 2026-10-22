@@ -26,15 +26,15 @@ export function SectionShell({
       <section className="panel mb-5 overflow-hidden px-6 py-6 sm:px-8">
         <div className="space-y-5">
           {breadcrumbs?.length ? (
-            <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-2 text-sm text-[color:var(--color-steel)]">
+            <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-2 text-sm text-muted">
               {breadcrumbs.map((item, index) => (
                 <span key={`${item.label}-${index}`} className="inline-flex items-center gap-2">
                   {item.href ? (
-                    <Link href={item.href as Route} className="transition hover:text-[color:var(--color-ink)]">
+                    <Link href={item.href as Route} className="transition hover:text-ink">
                       {item.label}
                     </Link>
                   ) : (
-                    <span className="font-medium text-[color:var(--color-ink)]">{item.label}</span>
+                    <span className="font-medium text-ink">{item.label}</span>
                   )}
                   {index < breadcrumbs.length - 1 ? <span aria-hidden="true">/</span> : null}
                 </span>
@@ -44,11 +44,11 @@ export function SectionShell({
           <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
             <div>
               <div className="eyebrow">{eyebrow}</div>
-              <h1 className="mt-3 max-w-2xl font-[var(--font-display)] text-[2.7rem] font-semibold leading-[0.94] tracking-[-0.055em] sm:text-[3.4rem]">
+              <h1 className="mt-3 max-w-2xl font-display text-[2.7rem] leading-[0.94] sm:text-[3.4rem]">
                 {title}
               </h1>
             </div>
-            <p className="max-w-2xl text-base leading-7 text-[color:rgba(13,21,38,0.74)]">
+            <p className="max-w-2xl text-base leading-7 text-ink/74">
               {description}
             </p>
           </div>

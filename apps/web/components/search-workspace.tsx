@@ -20,7 +20,7 @@ export function SearchWorkspace({ meetingId }: { meetingId: string }) {
     <div className="grid gap-5 xl:grid-cols-[0.82fr_1.18fr]">
       <section className="panel px-6 py-6">
         <div className="info-chip">Search</div>
-        <h2 className="mt-4 font-[var(--font-display)] text-4xl font-semibold leading-[0.96] tracking-[-0.055em]">
+        <h2 className="mt-4 font-display text-4xl leading-[0.96]">
           회의 키워드 검색
         </h2>
         <p className="section-copy mt-3">
@@ -46,20 +46,20 @@ export function SearchWorkspace({ meetingId }: { meetingId: string }) {
             />
           </label>
           <div className="soft-card flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-[color:rgba(13,21,38,0.6)]">
+            <div className="text-sm text-ink/60">
               공백 입력은 실행하지 않습니다.
             </div>
             <button
               type="submit"
               disabled={query.trim().length === 0}
-              className="action-primary disabled:cursor-not-allowed disabled:bg-[rgba(13,21,38,0.4)]"
+              className="action-primary disabled:cursor-not-allowed disabled:opacity-40"
             >
               검색 실행
             </button>
           </div>
         </form>
 
-        <div className="soft-card mt-5 text-sm text-[color:rgba(13,21,38,0.68)]">
+        <div className="soft-card mt-5 text-sm text-ink/68">
           검색 결과에서 메시지 스레드, 의사결정 보드, 태스크 상태를 바로 확인할 수 있습니다.
         </div>
       </section>
@@ -74,7 +74,7 @@ export function SearchWorkspace({ meetingId }: { meetingId: string }) {
           <ApiErrorPanel error={searchQuery.error} resourceName="검색 결과" />
         ) : (
           <div className="mt-4 space-y-5">
-            <div className="soft-card text-sm text-[color:rgba(13,21,38,0.66)]">
+            <div className="soft-card text-sm text-ink/66">
               <strong>{searchQuery.data.query}</strong> 검색 결과
             </div>
 
@@ -165,7 +165,7 @@ function ResultSection({
   return (
     <section>
       <div className="flex items-center justify-between gap-4">
-        <h3 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-0.04em]">
+        <h3 className="font-display text-2xl">
           {title}
         </h3>
         <span className="text-sm text-ink/55">{count}건</span>

@@ -211,7 +211,7 @@ export function ImportWizard({ meetingId }: { meetingId?: string }) {
           />
         </label>
         {inputError ? (
-          <p role="alert" className="text-sm text-[color:var(--color-danger,#b42318)]">
+          <p role="alert" className="text-sm text-danger">
             {inputError}
           </p>
         ) : null}
@@ -333,7 +333,7 @@ export function ImportWizard({ meetingId }: { meetingId?: string }) {
               <p className="section-copy mt-3">읽지 못한 줄 {parse.unparsedLineCount}개는 제외했습니다.</p>
             ) : null}
             {preview && !preview.ok ? (
-              <p role="alert" className="mt-3 text-sm font-semibold text-[color:var(--color-danger,#b42318)]">
+              <p role="alert" className="mt-3 text-sm font-semibold text-danger">
                 {buildErrorMessage(preview.error)}
               </p>
             ) : null}
@@ -373,7 +373,7 @@ export function ImportWizard({ meetingId }: { meetingId?: string }) {
               </span>
             </label>
             {submitError ? (
-              <p role="alert" className="mt-3 text-sm text-[color:var(--color-danger,#b42318)]">
+              <p role="alert" className="mt-3 text-sm text-danger">
                 {submitError}
               </p>
             ) : null}
@@ -381,7 +381,7 @@ export function ImportWizard({ meetingId }: { meetingId?: string }) {
               type="button"
               onClick={() => submitMutation.mutate()}
               disabled={!consented || !preview?.ok || submitMutation.isPending}
-              className="action-primary mt-4 w-full disabled:cursor-not-allowed disabled:bg-[rgba(13,21,38,0.4)]"
+              className="action-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-40"
             >
               {submitMutation.isPending ? "보내는 중..." : "분석 시작"}
             </button>

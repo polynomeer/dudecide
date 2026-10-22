@@ -122,7 +122,7 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="info-chip">Decision studio</div>
-            <h2 className="mt-4 font-[var(--font-display)] text-4xl font-semibold leading-[0.96] tracking-[-0.055em]">
+            <h2 className="mt-4 font-display text-4xl leading-[0.96]">
               새 결정 초안 생성
             </h2>
             <p className="section-copy mt-3 max-w-2xl">
@@ -196,19 +196,19 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
                 onChange={(event) =>
                   setCreateForm((current) => ({ ...current, proposedResultText: event.target.value }))
                 }
-                className="mono-panel mt-2 min-h-[220px] w-full border border-[color:var(--color-line)]"
+                className="mono-panel mt-2 min-h-[220px] w-full border border-line"
                 spellCheck={false}
               />
             </label>
 
             <div className="soft-card lg:col-span-2 flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm text-[color:rgba(13,21,38,0.62)]">
+              <div className="text-sm text-ink/62">
                 {createError ? <span className="text-ember">{createError}</span> : "결정 생성 시 목록과 상세 패널이 즉시 갱신됩니다."}
               </div>
               <button
                 type="submit"
                 disabled={createDecisionMutation.isPending || meetingQuery.data.threads.length === 0}
-                className="action-primary disabled:cursor-not-allowed disabled:bg-[rgba(13,21,38,0.4)]"
+                className="action-primary disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {createDecisionMutation.isPending ? "생성 중..." : "결정 생성"}
               </button>
@@ -226,7 +226,7 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="info-chip">Decision board</div>
-              <h2 className="mt-3 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+              <h2 className="mt-3 font-display text-3xl">
                 회의 결정 목록
               </h2>
             </div>
@@ -244,7 +244,7 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
                     "w-full rounded-[1.5rem] border px-4 py-4 text-left transition",
                     decision.id === selectedDecisionId
                       ? "border-pine bg-pine/10"
-                      : "border-[color:var(--color-line)] bg-white/72 hover:bg-white/88",
+                      : "border-line bg-surface hover:bg-surface",
                   ].join(" ")}
                 >
                   <div className="flex items-center justify-between gap-4">
@@ -253,7 +253,7 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
                     </span>
                     <StatusBadge status={decision.status} />
                   </div>
-                  <div className="mt-2 font-[var(--font-display)] text-xl font-semibold tracking-[-0.04em]">
+                  <div className="mt-2 font-display text-xl">
                     {decision.title}
                   </div>
                   <div className="mt-3 text-sm text-ink/65">
@@ -438,18 +438,18 @@ function DecisionDetailPanel({
     <div className="mt-3 space-y-6">
       <div>
         <div className="flex items-center justify-between gap-4">
-          <h3 className="font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+          <h3 className="font-display text-3xl">
             {decision.title}
           </h3>
           <StatusBadge status={decision.status} />
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-sm text-ink/62">
-          <span className="rounded-full border border-[color:var(--color-line)] px-3 py-1">
+          <span className="rounded-full border border-line px-3 py-1">
             Type {decision.decisionType}
           </span>
           <Link
             href={`/meetings/${meetingId}/threads/${decision.threadId}`}
-            className="rounded-full border border-[color:var(--color-line)] px-3 py-1 transition hover:bg-white/80"
+            className="rounded-full border border-line px-3 py-1 transition hover:bg-surface"
           >
             Open thread
           </Link>
@@ -461,17 +461,17 @@ function DecisionDetailPanel({
         <StateCard title="Confirmed result" state={decision.confirmedResult} />
       </div>
 
-      <section className="rounded-[1.75rem] border border-[color:var(--color-line)] bg-white/70 p-5">
+      <section className="rounded-[1.75rem] border border-line bg-surface p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h4 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-0.04em]">
+            <h4 className="font-display text-2xl">
               Status actions
             </h4>
             <p className="mt-2 text-sm leading-6 text-ink/64">
               제안 결과를 확정하거나, 사유를 남기고 재검토 상태로 전환할 수 있습니다.
             </p>
           </div>
-          <span className="rounded-full border border-[color:var(--color-line)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-ink/52">
+          <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-ink/52">
             {decision.status}
           </span>
         </div>
@@ -479,7 +479,7 @@ function DecisionDetailPanel({
         {canManage ? (
           <div className="mt-5 grid gap-4 xl:grid-cols-2">
             <form
-              className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
+              className="rounded-[1.5rem] border border-line bg-surface p-4"
               onSubmit={handleConfirmSubmit}
             >
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
@@ -488,13 +488,13 @@ function DecisionDetailPanel({
               <textarea
                 value={confirmResultText}
                 onChange={(event) => setConfirmResultText(event.target.value)}
-                className="mt-3 min-h-[180px] w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-ink px-4 py-4 font-mono text-xs leading-6 text-mist outline-none transition focus:border-pine"
+                className="mt-3 min-h-[180px] w-full rounded-[1.2rem] border border-line bg-ink px-4 py-4 font-mono text-xs leading-6 text-mist outline-none transition focus:border-pine"
                 spellCheck={false}
               />
               <input
                 value={confirmReason}
                 onChange={(event) => setConfirmReason(event.target.value)}
-                className="mt-3 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/88 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                className="mt-3 w-full rounded-[1.2rem] border border-line bg-surface px-4 py-3 text-sm outline-none transition focus:border-pine"
                 placeholder="확정 사유 또는 비고"
               />
               <button
@@ -507,7 +507,7 @@ function DecisionDetailPanel({
             </form>
 
             <form
-              className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
+              className="rounded-[1.5rem] border border-line bg-surface p-4"
               onSubmit={handleReconsiderSubmit}
             >
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
@@ -516,7 +516,7 @@ function DecisionDetailPanel({
               <textarea
                 value={reconsiderReason}
                 onChange={(event) => setReconsiderReason(event.target.value)}
-                className="mt-3 min-h-[180px] w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/88 px-4 py-4 text-sm leading-6 outline-none transition focus:border-ember"
+                className="mt-3 min-h-[180px] w-full rounded-[1.2rem] border border-line bg-surface px-4 py-4 text-sm leading-6 outline-none transition focus:border-ember"
                 placeholder="재검토 사유를 남겨 주세요."
                 required
               />
@@ -538,16 +538,16 @@ function DecisionDetailPanel({
         {actionError ? <div className="mt-4 text-sm text-ember">{actionError}</div> : null}
       </section>
 
-      <section className="rounded-[1.75rem] border border-[color:var(--color-line)] bg-white/70 p-5">
+      <section className="rounded-[1.75rem] border border-line bg-surface p-5">
         <div className="flex items-center justify-between gap-4">
-          <h4 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-0.04em]">
+          <h4 className="font-display text-2xl">
             Evidence
           </h4>
           <span className="text-sm text-ink/55">{decision.evidence.length}건</span>
         </div>
         {canManage ? (
           <form
-            className="mt-4 rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
+            className="mt-4 rounded-[1.5rem] border border-line bg-surface p-4"
             onSubmit={handleAddEvidenceSubmit}
           >
           <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
@@ -568,7 +568,7 @@ function DecisionDetailPanel({
                       quoteSnapshot: nextMessage?.body ?? current.quoteSnapshot,
                     }));
                   }}
-                  className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                  className="mt-2 w-full rounded-[1.2rem] border border-line bg-surface px-4 py-3 text-sm outline-none transition focus:border-pine"
                   disabled={threadMessagesQuery.isLoading || addEvidenceMutation.isPending}
                 >
                   {(threadMessagesQuery.data ?? []).map((message) => (
@@ -592,7 +592,7 @@ function DecisionDetailPanel({
                         evidenceType: event.target.value,
                       }))
                     }
-                    className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/88 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                    className="mt-2 w-full rounded-[1.2rem] border border-line bg-surface px-4 py-3 text-sm outline-none transition focus:border-pine"
                     placeholder="MESSAGE_QUOTE"
                   />
                 </label>
@@ -609,7 +609,7 @@ function DecisionDetailPanel({
                         confidence: event.target.value,
                       }))
                     }
-                    className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/88 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                    className="mt-2 w-full rounded-[1.2rem] border border-line bg-surface px-4 py-3 text-sm outline-none transition focus:border-pine"
                     placeholder="0.8"
                   />
                 </label>
@@ -628,7 +628,7 @@ function DecisionDetailPanel({
                     quoteSnapshot: event.target.value,
                   }))
                 }
-                className="mt-2 min-h-[170px] w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/88 px-4 py-4 text-sm leading-6 outline-none transition focus:border-pine"
+                className="mt-2 min-h-[170px] w-full rounded-[1.2rem] border border-line bg-surface px-4 py-4 text-sm leading-6 outline-none transition focus:border-pine"
                 placeholder="결정의 근거가 되는 메시지 요약 또는 인용문"
               />
             </label>
@@ -661,7 +661,7 @@ function DecisionDetailPanel({
             decision.evidence.map((item) => (
               <article
                 key={item.id}
-                className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
+                className="rounded-[1.5rem] border border-line bg-surface p-4"
               >
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
@@ -680,9 +680,9 @@ function DecisionDetailPanel({
         </div>
       </section>
 
-      <section className="rounded-[1.75rem] border border-[color:var(--color-line)] bg-white/70 p-5">
+      <section className="rounded-[1.75rem] border border-line bg-surface p-5">
         <div className="flex items-center justify-between gap-4">
-          <h4 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-0.04em]">
+          <h4 className="font-display text-2xl">
             History
           </h4>
           <span className="text-sm text-ink/55">{decision.history.length}건</span>
@@ -707,7 +707,7 @@ function StateCard({
   state: Record<string, unknown>;
 }) {
   return (
-    <section className="rounded-[1.75rem] border border-[color:var(--color-line)] bg-white/72 p-5">
+    <section className="rounded-[1.75rem] border border-line bg-surface p-5">
       <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">{title}</div>
       <pre className="mt-3 overflow-x-auto rounded-[1.25rem] bg-ink px-4 py-4 text-xs leading-6 text-mist">
         {JSON.stringify(state, null, 2)}
@@ -718,7 +718,7 @@ function StateCard({
 
 function HistoryEntry({ entry }: { entry: DecisionHistoryView }) {
   return (
-    <article className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4">
+    <article className="rounded-[1.5rem] border border-line bg-surface p-4">
       <div className="flex items-center justify-between gap-4">
         <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
           {entry.action}

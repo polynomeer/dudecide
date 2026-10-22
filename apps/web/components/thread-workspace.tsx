@@ -105,26 +105,26 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
     <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
       <section className="panel px-6 py-6">
         <div className="info-chip">Thread context</div>
-        <h2 className="mt-4 font-[var(--font-display)] text-4xl font-semibold leading-[0.96] tracking-[-0.055em]">
+        <h2 className="mt-4 font-display text-4xl leading-[0.96]">
           {thread.title}
         </h2>
-        <div className="mt-6 space-y-3 text-sm text-[color:rgba(13,21,38,0.72)]">
+        <div className="mt-6 space-y-3 text-sm text-ink/72">
           <ContextRow label="Category" value={thread.category} />
           <ContextRow label="Status" value={thread.status} />
           <ContextRow label="Messages" value={String(thread.messageCount)} />
           <ContextRow label="Decisions" value={String(thread.decisionCount)} />
           <ContextRow label="Open votes" value={String(thread.openVoteCount)} />
         </div>
-        <div className="mt-6 rounded-[1.6rem] border border-[color:var(--color-line)] bg-[rgba(255,255,255,0.62)] p-4 text-sm leading-6 text-[color:rgba(13,21,38,0.72)]">
+        <div className="mt-6 rounded-[1.6rem] border border-line bg-surface p-4 text-sm leading-6 text-ink/72">
           다음 단계에서는 이 화면에 스레드 상태 업데이트, 메시지 수정, SSE 실시간 반영, 결정/투표 연계 액션이 추가될 예정입니다.
         </div>
       </section>
 
       <section className="panel flex min-h-[36rem] flex-col px-6 py-6">
-        <div className="flex items-start justify-between gap-4 border-b border-[color:var(--color-line)] pb-4">
+        <div className="flex items-start justify-between gap-4 border-b border-line pb-4">
           <div>
             <div className="info-chip">Discussion</div>
-            <h3 className="mt-3 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+            <h3 className="mt-3 font-display text-3xl">
               메시지 흐름
             </h3>
           </div>
@@ -147,7 +147,7 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
 
           <div className="space-y-3">
             {messages.length === 0 ? (
-              <div className="rounded-[1.5rem] border border-dashed border-[color:var(--color-line)] bg-white/50 px-5 py-6 text-sm text-[color:rgba(13,21,38,0.58)]">
+              <div className="rounded-[1.5rem] border border-dashed border-line bg-surface px-5 py-6 text-sm text-ink/58">
                 아직 메시지가 없습니다. 첫 번째 계획 메모를 남겨 주세요.
               </div>
             ) : (
@@ -160,7 +160,7 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
                       "rounded-[1.5rem] border px-4 py-4",
                       isOwnMessage
                         ? "border-pine/20 bg-pine/10"
-                        : "border-[color:var(--color-line)] bg-white/72",
+                        : "border-line bg-surface",
                     ].join(" ")}
                   >
                     <div className="flex items-center justify-between gap-4 text-xs uppercase tracking-[0.16em] text-ink/45">
@@ -179,7 +179,7 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
         </div>
 
         <form
-          className="border-t border-[color:var(--color-line)] pt-4"
+          className="border-t border-line pt-4"
           onSubmit={form.handleSubmit((values) => {
             setErrorMessage(null);
             postMutation.mutate(values);
@@ -213,9 +213,9 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
 
 function ContextRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between rounded-[1.25rem] border border-[color:var(--color-line)] bg-[rgba(255,255,255,0.62)] px-4 py-3">
-      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--color-steel)]">{label}</span>
-      <span className="font-medium text-[color:var(--color-ink)]">{value}</span>
+    <div className="flex items-center justify-between rounded-[1.25rem] border border-line bg-surface px-4 py-3">
+      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">{label}</span>
+      <span className="font-medium text-ink">{value}</span>
     </div>
   );
 }

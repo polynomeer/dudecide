@@ -23,14 +23,14 @@ export function StatusGrid() {
             "rounded-[2rem] border p-5 shadow-[var(--shadow-soft)] backdrop-blur-xl",
             index === 1
               ? "border-[rgba(36,80,255,0.2)] bg-[rgba(36,80,255,0.08)]"
-              : "border-[color:var(--color-line)] bg-[rgba(255,255,255,0.62)]",
+              : "border-line bg-surface",
           ].join(" ")}
         >
           {index === 0 ? <div className="eyebrow">What changed</div> : null}
-          <h3 className="mt-2 font-[var(--font-display)] text-[2rem] font-semibold tracking-[-0.05em]">
+          <h3 className="mt-2 font-display text-[2rem]">
             {card.title}
           </h3>
-          <p className="mt-3 max-w-sm text-sm leading-6 text-[color:rgba(13,21,38,0.7)]">
+          <p className="mt-3 max-w-sm text-sm leading-6 text-ink/70">
             {card.body}
           </p>
         </article>

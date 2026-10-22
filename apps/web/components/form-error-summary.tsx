@@ -17,9 +17,9 @@ export function FormErrorSummary({
     <div
       role="alert"
       tabIndex={-1}
-      className="rounded-[1.5rem] border border-[rgba(220,38,38,0.18)] bg-[rgba(220,38,38,0.06)] px-5 py-4 text-sm text-[color:var(--color-ink)]"
+      className="rounded-[1.5rem] border border-[rgba(220,38,38,0.18)] bg-[rgba(220,38,38,0.06)] px-5 py-4 text-sm text-ink"
     >
-      <h2 className="font-semibold text-[color:var(--color-ember)]">{title}</h2>
+      <h2 className="font-semibold text-ember">{title}</h2>
       <ul className="mt-3 space-y-2">
         {errors.map((error) => (
           <li key={error.fieldId}>

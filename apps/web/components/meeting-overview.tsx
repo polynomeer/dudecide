@@ -29,10 +29,10 @@ export function MeetingOverview({ meetingId }: { meetingId: string }) {
             <div className="info-chip">Meeting overview</div>
             <div className="info-chip">{meeting.status}</div>
           </div>
-          <h2 className="mt-4 max-w-xl font-[var(--font-display)] text-4xl font-semibold leading-[0.96] tracking-[-0.055em]">
+          <h2 className="mt-4 max-w-xl font-display text-4xl leading-[0.96]">
             {meeting.title}
           </h2>
-          <p className="mt-3 max-w-lg text-sm leading-6 text-[color:rgba(13,21,38,0.68)]">
+          <p className="mt-3 max-w-lg text-sm leading-6 text-ink/68">
             Track the current planning state, jump into the hottest threads, and move the group toward a confirmed call.
           </p>
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -82,13 +82,13 @@ export function MeetingOverview({ meetingId }: { meetingId: string }) {
               <li key={thread.id} className="metric-card">
                 <Link href={`/meetings/${meeting.id}/threads/${thread.id}`} className="block">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--color-steel)]">
+                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">
                       {thread.category}
                     </div>
                     <span className="info-chip">{thread.status}</span>
                   </div>
                   <div className="mt-3 text-xl font-semibold tracking-[-0.03em]">{thread.title}</div>
-                  <div className="mt-2 text-sm text-[color:rgba(13,21,38,0.62)]">
+                  <div className="mt-2 text-sm text-ink/62">
                     Messages {thread.messageCount} · Decisions {thread.decisionCount} · Open votes{" "}
                     {thread.openVoteCount}
                   </div>
@@ -107,8 +107,8 @@ export function MeetingOverview({ meetingId }: { meetingId: string }) {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="metric-card">
-      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--color-steel)]">{label}</div>
-      <div className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">{label}</div>
+      <div className="mt-2 font-display text-3xl">
         {value}
       </div>
     </div>

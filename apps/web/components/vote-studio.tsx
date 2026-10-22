@@ -111,7 +111,7 @@ export function VoteStudio({ meetingId }: { meetingId: string }) {
     return (
       <section className="panel px-6 py-6">
         <div className="info-chip">Vote studio</div>
-        <h3 className="mt-4 font-[var(--font-display)] text-4xl font-semibold tracking-[-0.05em]">
+        <h3 className="mt-4 font-display text-4xl">
           새 투표 생성
         </h3>
         <div className="mt-5">
@@ -126,7 +126,7 @@ export function VoteStudio({ meetingId }: { meetingId: string }) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="info-chip">Vote studio</div>
-          <h3 className="mt-4 font-[var(--font-display)] text-4xl font-semibold leading-[0.96] tracking-[-0.055em]">
+          <h3 className="mt-4 font-display text-4xl leading-[0.96]">
             새 투표 생성
           </h3>
           <p className="section-copy mt-3 max-w-2xl">
@@ -268,22 +268,22 @@ export function VoteStudio({ meetingId }: { meetingId: string }) {
                 optionText: event.target.value,
               }))
             }
-            className="mono-panel mt-2 min-h-[280px] w-full border border-[color:var(--color-line)]"
+            className="mono-panel mt-2 min-h-[280px] w-full border border-line"
             spellCheck={false}
           />
-          <div className="soft-card mt-3 text-xs leading-6 text-[color:rgba(13,21,38,0.64)]">
+          <div className="soft-card mt-3 text-xs leading-6 text-ink/64">
             {helperTextForVoteType(form.voteType)}
           </div>
         </label>
 
         <div className="soft-card xl:col-span-2 flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm text-[color:rgba(13,21,38,0.62)]">
+          <div className="text-sm text-ink/62">
             {errorMessage ?? "생성 후 투표 상세 페이지로 즉시 이동합니다."}
           </div>
           <button
             type="submit"
             disabled={createVoteMutation.isPending}
-            className="action-primary disabled:cursor-not-allowed disabled:bg-[rgba(13,21,38,0.4)]"
+            className="action-primary disabled:cursor-not-allowed disabled:opacity-40"
           >
             {createVoteMutation.isPending ? "생성 중..." : "투표 생성"}
           </button>

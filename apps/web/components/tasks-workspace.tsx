@@ -75,7 +75,7 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
     <div className="grid gap-5 xl:grid-cols-[0.78fr_1.22fr]">
       <section className="panel px-6 py-6">
         <div className="info-chip">Task studio</div>
-        <h2 className="mt-4 font-[var(--font-display)] text-4xl font-semibold leading-[0.96] tracking-[-0.055em]">
+        <h2 className="mt-4 font-display text-4xl leading-[0.96]">
           회의 태스크 추가
         </h2>
         <p className="section-copy mt-3">
@@ -122,7 +122,7 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
               <button
                 type="submit"
                 disabled={createTaskMutation.isPending}
-                className="action-primary disabled:cursor-not-allowed disabled:bg-[rgba(13,21,38,0.4)]"
+                className="action-primary disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {createTaskMutation.isPending ? "생성 중..." : "태스크 생성"}
               </button>
@@ -139,7 +139,7 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="info-chip">Task board</div>
-            <h3 className="mt-3 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+            <h3 className="mt-3 font-display text-3xl">
               현재 태스크
             </h3>
           </div>

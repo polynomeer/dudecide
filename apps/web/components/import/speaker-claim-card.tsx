@@ -88,7 +88,7 @@ export function SpeakerClaimCard({ meetingId }: { meetingId: string }) {
         </button>
       </form>
       {message ? (
-        <p role="alert" className="mt-2 text-sm text-[color:var(--color-danger,#b42318)]">
+        <p role="alert" className="mt-2 text-sm text-danger">
           {message}
         </p>
       ) : null}

@@ -36,7 +36,7 @@ export function ReportWorkspace({ meetingId }: { meetingId: string }) {
     <div className="grid gap-5 xl:grid-cols-[0.82fr_1.18fr]">
       <section className="panel px-6 py-6">
         <div className="info-chip">Report snapshot</div>
-        <h2 className="mt-4 font-[var(--font-display)] text-4xl font-semibold leading-[0.96] tracking-[-0.055em]">
+        <h2 className="mt-4 font-display text-4xl leading-[0.96]">
           최신 회의 리포트
         </h2>
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -44,7 +44,7 @@ export function ReportWorkspace({ meetingId }: { meetingId: string }) {
           <Metric label="Generated" value={formatDateTime(report.generatedAt)} />
         </div>
 
-        <div className="soft-card mt-5 text-sm leading-6 text-[color:rgba(13,21,38,0.68)]">
+        <div className="soft-card mt-5 text-sm leading-6 text-ink/68">
           리포트는 백엔드가 materialized snapshot 형태로 저장한 회의 요약본입니다. 수동 갱신 시 최신 메시지,
           결정, 투표 결과가 다시 반영됩니다.
         </div>
@@ -65,7 +65,7 @@ export function ReportWorkspace({ meetingId }: { meetingId: string }) {
                 type="button"
                 onClick={() => refreshMutation.mutate()}
                 disabled={refreshMutation.isPending}
-                className="action-primary disabled:cursor-not-allowed disabled:bg-[rgba(13,21,38,0.4)]"
+                className="action-primary disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {refreshMutation.isPending ? "갱신 중..." : "리포트 새로고침"}
               </button>
@@ -78,7 +78,7 @@ export function ReportWorkspace({ meetingId }: { meetingId: string }) {
 
       <section className="panel px-6 py-6">
         <div className="info-chip">Payload</div>
-        <h3 className="mt-3 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+        <h3 className="mt-3 font-display text-3xl">
           Snapshot JSON
         </h3>
         <pre className="mono-panel mt-5">
@@ -92,8 +92,8 @@ export function ReportWorkspace({ meetingId }: { meetingId: string }) {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="metric-card">
-      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--color-steel)]">{label}</div>
-      <div className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">{label}</div>
+      <div className="mt-2 font-display text-3xl">
         {value}
       </div>
     </div>
