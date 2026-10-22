@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
+import { FormErrorSummary } from "@/components/form-error-summary";
 import { apiClient } from "@/lib/api/client";
 
 type FormValues = {
@@ -17,6 +18,7 @@ export function CreateMeetingForm() {
   const router = useRouter();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const form = useForm<FormValues>({
+    mode: "onBlur",
     defaultValues: {
       title: "",
       meetingType: "trip",
@@ -50,20 +52,33 @@ export function CreateMeetingForm() {
         mutation.mutate(values);
       })}
     >
+      <div className="info-chip normal-case tracking-[0.02em]">Next: invite people and start threads</div>
+      <FormErrorSummary
+        errors={
+          form.formState.submitCount > 0 && form.formState.errors.title
+            ? [{ fieldId: "meeting-title", message: "Enter a meeting title with at least three characters." }]
+            : []
+        }
+      />
       <div className="grid gap-5 md:grid-cols-2">
         <div className="md:col-span-2">
           <label className="mb-2 block text-sm font-semibold">Meeting title</label>
           <input
             {...form.register("title", { required: true, minLength: 3 })}
-            className="w-full rounded-3xl border border-[color:var(--color-line)] bg-white/80 px-4 py-3 outline-none transition focus:border-ink"
+            id="meeting-title"
+            className="field"
             placeholder="e.g. 2026 Autumn Cabin Trip"
+            aria-invalid={form.formState.errors.title ? "true" : "false"}
           />
+          {form.formState.errors.title ? (
+            <p className="mt-2 text-sm text-ember">Enter a meeting title with at least three characters.</p>
+          ) : null}
         </div>
         <div>
           <label className="mb-2 block text-sm font-semibold">Meeting type</label>
           <select
             {...form.register("meetingType", { required: true })}
-            className="w-full rounded-3xl border border-[color:var(--color-line)] bg-white/80 px-4 py-3 outline-none transition focus:border-ink"
+            className="field"
           >
             <option value="trip">Trip</option>
             <option value="outing">Outing</option>
@@ -77,7 +92,7 @@ export function CreateMeetingForm() {
             {...form.register("expectedHeadcount", {
               valueAsNumber: true,
             })}
-            className="w-full rounded-3xl border border-[color:var(--color-line)] bg-white/80 px-4 py-3 outline-none transition focus:border-ink"
+            className="field"
             placeholder="8"
           />
         </div>
@@ -85,7 +100,7 @@ export function CreateMeetingForm() {
           <label className="mb-2 block text-sm font-semibold">Origin region</label>
           <input
             {...form.register("originRegion")}
-            className="w-full rounded-3xl border border-[color:var(--color-line)] bg-white/80 px-4 py-3 outline-none transition focus:border-ink"
+            className="field"
             placeholder="Seoul"
           />
         </div>
@@ -94,7 +109,7 @@ export function CreateMeetingForm() {
       <button
         type="submit"
         disabled={mutation.isPending}
-        className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:opacity-60"
+        className="action-primary disabled:cursor-not-allowed disabled:opacity-60"
       >
         {mutation.isPending ? "Creating meeting..." : "Create meeting"}
       </button>

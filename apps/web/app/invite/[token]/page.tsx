@@ -14,6 +14,7 @@ export default async function InvitePage({
       eyebrow="Invite Entry"
       title="Join an existing planning room"
       description="Invite joins create a meeting membership and bind the joined actor into the current session. After this step, the user is redirected into the meeting workspace."
+      breadcrumbs={[{ label: "Home", href: "/" }, { label: "Invite" }]}
     >
       <InvitePreview token={token} />
       <JoinInviteForm token={token} />

@@ -13,6 +13,11 @@ export default async function TasksPage({
       eyebrow="Tasks"
       title="Task management"
       description="회의 후속 액션을 생성하고 상태를 업데이트할 수 있습니다."
+      breadcrumbs={[
+        { label: "Home", href: "/" },
+        { label: "Meeting", href: `/meetings/${meetingId}` },
+        { label: "Tasks" },
+      ]}
     >
       <TasksWorkspace meetingId={meetingId} />
     </SectionShell>

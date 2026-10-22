@@ -121,18 +121,16 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
       <section className="panel px-6 py-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="eyebrow">Create decision</div>
-            <h2 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+            <div className="info-chip">Decision studio</div>
+            <h2 className="mt-4 font-[var(--font-display)] text-4xl font-semibold leading-[0.96] tracking-[-0.055em]">
               새 결정 초안 생성
             </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-ink/66">
+            <p className="section-copy mt-3 max-w-2xl">
               스레드 단위로 결정을 생성하고, 제안 결과를 JSON으로 남길 수 있습니다. 확정과 재검토는
               아래 상세 패널에서 이어서 처리합니다.
             </p>
           </div>
-          <div className="rounded-full border border-[color:var(--color-line)] bg-white/70 px-4 py-2 text-sm">
-            스레드 {meetingQuery.data.threads.length}개
-          </div>
+          <div className="info-chip normal-case tracking-[0.02em]">스레드 {meetingQuery.data.threads.length}개</div>
         </div>
 
         {isHost ? (
@@ -147,7 +145,7 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
                   onChange={(event) =>
                     setCreateForm((current) => ({ ...current, threadId: event.target.value }))
                   }
-                  className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                  className="field mt-2"
                 >
                   {meetingQuery.data.threads.map((thread) => (
                     <option key={thread.id} value={thread.id}>
@@ -167,7 +165,7 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
                     onChange={(event) =>
                       setCreateForm((current) => ({ ...current, decisionType: event.target.value }))
                     }
-                    className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                    className="field mt-2"
                     placeholder="CONSENSUS"
                   />
                 </label>
@@ -181,7 +179,7 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
                     onChange={(event) =>
                       setCreateForm((current) => ({ ...current, title: event.target.value }))
                     }
-                    className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                    className="field mt-2"
                     placeholder="예: 1차 출시 범위 확정"
                     required
                   />
@@ -198,19 +196,19 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
                 onChange={(event) =>
                   setCreateForm((current) => ({ ...current, proposedResultText: event.target.value }))
                 }
-                className="mt-2 min-h-[220px] w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-ink px-4 py-4 font-mono text-xs leading-6 text-mist outline-none transition focus:border-pine"
+                className="mono-panel mt-2 min-h-[220px] w-full border border-[color:var(--color-line)]"
                 spellCheck={false}
               />
             </label>
 
-            <div className="lg:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-[1.25rem] border border-[color:var(--color-line)] bg-white/58 px-4 py-3">
-              <div className="text-sm text-ink/62">
+            <div className="soft-card lg:col-span-2 flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm text-[color:rgba(13,21,38,0.62)]">
                 {createError ? <span className="text-ember">{createError}</span> : "결정 생성 시 목록과 상세 패널이 즉시 갱신됩니다."}
               </div>
               <button
                 type="submit"
                 disabled={createDecisionMutation.isPending || meetingQuery.data.threads.length === 0}
-                className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:bg-ink/40"
+                className="action-primary disabled:cursor-not-allowed disabled:bg-[rgba(13,21,38,0.4)]"
               >
                 {createDecisionMutation.isPending ? "생성 중..." : "결정 생성"}
               </button>
@@ -227,14 +225,12 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
         <section className="panel px-6 py-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="eyebrow">Decision list</div>
-              <h2 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+              <div className="info-chip">Decision board</div>
+              <h2 className="mt-3 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
                 회의 결정 목록
               </h2>
             </div>
-            <div className="rounded-full border border-[color:var(--color-line)] bg-white/70 px-4 py-2 text-sm">
-              총 {decisionsQuery.data?.length ?? 0}건
-            </div>
+            <div className="info-chip normal-case tracking-[0.02em]">총 {decisionsQuery.data?.length ?? 0}건</div>
           </div>
 
           <div className="mt-5 space-y-3">
@@ -267,15 +263,13 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
                 </button>
               ))
             ) : (
-              <div className="rounded-[1.5rem] border border-dashed border-[color:var(--color-line)] bg-white/55 px-5 py-6 text-sm text-ink/58">
-                아직 생성된 결정이 없습니다. 상단 생성 폼에서 첫 결정을 등록해 주세요.
-              </div>
+              <div className="empty-state">아직 생성된 결정이 없습니다. 상단 생성 폼에서 첫 결정을 등록해 주세요.</div>
             )}
           </div>
         </section>
 
         <section className="panel px-6 py-6">
-          <div className="eyebrow">Decision detail</div>
+          <div className="info-chip">Decision detail</div>
           {selectedDecision ? (
             detailQuery.isLoading ? (
               <div className="mt-4 text-sm text-ink/60">선택한 결정을 불러오는 중입니다.</div>

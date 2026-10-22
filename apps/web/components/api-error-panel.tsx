@@ -14,7 +14,7 @@ export function ApiErrorPanel({
   fallbackMessage?: string;
 }) {
   return (
-    <div className="panel px-6 py-6 text-sm text-ember">
+    <div className="soft-card text-sm text-ember">
       {getApiErrorMessage(error, { resourceName, conflictMessage, fallbackMessage })}
     </div>
   );

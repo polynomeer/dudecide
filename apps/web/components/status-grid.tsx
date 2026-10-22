@@ -1,28 +1,38 @@
 const cards = [
   {
-    title: "Session Entry",
-    body: "Guest session creation, current actor bootstrap, and sign-out are connected to backend auth endpoints.",
+    title: "Fast entry",
+    body: "Guest sessions and invite joins bring people into a planning room without onboarding friction.",
   },
   {
-    title: "Meeting Setup",
-    body: "Create-meeting route is scaffolded and ready to bind to the meeting creation API and invite generation flows.",
+    title: "Structured discussion",
+    body: "Threads isolate noisy topics so dates, lodging, and transport stop colliding in one endless scroll.",
   },
   {
-    title: "Workspace Surfaces",
-    body: "Thread, vote, decision, search, and report routes are documented and can now be implemented against existing APIs.",
+    title: "Evidence-backed wrap-up",
+    body: "Votes, decisions, search, and reports turn scattered opinions into an auditable summary.",
   },
 ];
 
 export function StatusGrid() {
   return (
-    <section className="grid gap-4 lg:grid-cols-3">
-      {cards.map((card) => (
-        <article key={card.title} className="panel px-5 py-5">
-          <div className="eyebrow">Phase 1</div>
-          <h3 className="mt-2 font-[var(--font-display)] text-2xl font-semibold tracking-[-0.04em]">
+    <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr_1fr]">
+      {cards.map((card, index) => (
+        <article
+          key={card.title}
+          className={[
+            "rounded-[2rem] border p-5 shadow-[var(--shadow-soft)] backdrop-blur-xl",
+            index === 1
+              ? "border-[rgba(36,80,255,0.2)] bg-[rgba(36,80,255,0.08)]"
+              : "border-[color:var(--color-line)] bg-[rgba(255,255,255,0.62)]",
+          ].join(" ")}
+        >
+          {index === 0 ? <div className="eyebrow">What changed</div> : null}
+          <h3 className="mt-2 font-[var(--font-display)] text-[2rem] font-semibold tracking-[-0.05em]">
             {card.title}
           </h3>
-          <p className="mt-3 text-sm leading-6 text-ink/70">{card.body}</p>
+          <p className="mt-3 max-w-sm text-sm leading-6 text-[color:rgba(13,21,38,0.7)]">
+            {card.body}
+          </p>
         </article>
       ))}
     </section>

@@ -13,6 +13,11 @@ export default async function MeetingPage({
       eyebrow="Meeting Workspace"
       title="Meeting overview"
       description="This page is the starting shell for the full workspace. It already reads the backend meeting detail endpoint and exposes thread-level navigation for the next feature units."
+      breadcrumbs={[
+        { label: "Home", href: "/" },
+        { label: "Meeting", href: `/meetings/${meetingId}` },
+        { label: "Overview" },
+      ]}
     >
       <MeetingOverview meetingId={meetingId} />
     </SectionShell>

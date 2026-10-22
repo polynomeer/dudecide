@@ -104,18 +104,18 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
   return (
     <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
       <section className="panel px-6 py-6">
-        <div className="eyebrow">Thread context</div>
-        <h2 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+        <div className="info-chip">Thread context</div>
+        <h2 className="mt-4 font-[var(--font-display)] text-4xl font-semibold leading-[0.96] tracking-[-0.055em]">
           {thread.title}
         </h2>
-        <div className="mt-5 space-y-3 text-sm text-ink/72">
+        <div className="mt-6 space-y-3 text-sm text-[color:rgba(13,21,38,0.72)]">
           <ContextRow label="Category" value={thread.category} />
           <ContextRow label="Status" value={thread.status} />
           <ContextRow label="Messages" value={String(thread.messageCount)} />
           <ContextRow label="Decisions" value={String(thread.decisionCount)} />
           <ContextRow label="Open votes" value={String(thread.openVoteCount)} />
         </div>
-        <div className="mt-6 rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/72 p-4 text-sm leading-6 text-ink/72">
+        <div className="mt-6 rounded-[1.6rem] border border-[color:var(--color-line)] bg-[rgba(255,255,255,0.62)] p-4 text-sm leading-6 text-[color:rgba(13,21,38,0.72)]">
           다음 단계에서는 이 화면에 스레드 상태 업데이트, 메시지 수정, SSE 실시간 반영, 결정/투표 연계 액션이 추가될 예정입니다.
         </div>
       </section>
@@ -123,12 +123,12 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
       <section className="panel flex min-h-[36rem] flex-col px-6 py-6">
         <div className="flex items-start justify-between gap-4 border-b border-[color:var(--color-line)] pb-4">
           <div>
-            <div className="eyebrow">Discussion</div>
-            <h3 className="mt-2 font-[var(--font-display)] text-2xl font-semibold tracking-[-0.04em]">
+            <div className="info-chip">Discussion</div>
+            <h3 className="mt-3 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
               메시지 흐름
             </h3>
           </div>
-          <div className="rounded-full border border-[color:var(--color-line)] bg-white/70 px-4 py-2 text-sm">
+          <div className="info-chip normal-case tracking-[0.02em]">
             {actorQuery.data?.displayName ?? "Local Host"}
           </div>
         </div>
@@ -139,7 +139,7 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
               type="button"
               onClick={loadOlderMessages}
               disabled={loadingOlder}
-              className="rounded-full border border-[color:var(--color-line)] px-4 py-2 text-sm font-semibold transition hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-60"
+              className="action-secondary disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loadingOlder ? "이전 메시지를 불러오는 중..." : "이전 메시지 더 보기"}
             </button>
@@ -147,7 +147,7 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
 
           <div className="space-y-3">
             {messages.length === 0 ? (
-              <div className="rounded-[1.5rem] border border-dashed border-[color:var(--color-line)] bg-white/50 px-5 py-6 text-sm text-ink/58">
+              <div className="rounded-[1.5rem] border border-dashed border-[color:var(--color-line)] bg-white/50 px-5 py-6 text-sm text-[color:rgba(13,21,38,0.58)]">
                 아직 메시지가 없습니다. 첫 번째 계획 메모를 남겨 주세요.
               </div>
             ) : (
@@ -189,7 +189,7 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
           <textarea
             {...form.register("body", { required: true, minLength: 2 })}
             rows={5}
-            className="w-full rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 outline-none transition focus:border-ink"
+            className="field min-h-[8.5rem]"
             placeholder="예: 9월 둘째 주는 전원 가능하고, 가평이면 차량 2대로도 이동 가능합니다."
           />
           {form.formState.errors.body ? (
@@ -200,7 +200,7 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
             <button
               type="submit"
               disabled={postMutation.isPending}
-              className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:opacity-60"
+              className="action-primary disabled:cursor-not-allowed disabled:opacity-60"
             >
               {postMutation.isPending ? "등록 중..." : "메시지 등록"}
             </button>
@@ -213,9 +213,9 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
 
 function ContextRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between rounded-full border border-[color:var(--color-line)] bg-white/72 px-4 py-3">
-      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">{label}</span>
-      <span className="font-medium text-ink">{value}</span>
+    <div className="flex items-center justify-between rounded-[1.25rem] border border-[color:var(--color-line)] bg-[rgba(255,255,255,0.62)] px-4 py-3">
+      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--color-steel)]">{label}</span>
+      <span className="font-medium text-[color:var(--color-ink)]">{value}</span>
     </div>
   );
 }

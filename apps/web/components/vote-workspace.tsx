@@ -118,58 +118,49 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
       <MeetingRealtimeBridge meetingId={vote.meetingId} voteId={vote.voteId} />
       <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
         <section className="panel px-6 py-6">
-        <div className="eyebrow">Vote summary</div>
-        <h2 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
-          {labelForVoteType(vote.voteType)}
-        </h2>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <Metric label="Status" value={vote.status} />
-          <Metric label="Options" value={String(vote.options.length)} />
-          <Metric
-            label="Responded"
-            value={`${vote.aggregates?.respondedParticipants ?? 0}/${vote.aggregates?.totalParticipants ?? 0}`}
-          />
-          <Metric label="Deadline" value={vote.deadlineAt ? formatDateTime(vote.deadlineAt) : "미설정"} />
-        </div>
-        <div className="mt-5 flex flex-wrap gap-2 text-sm text-ink/62">
-          {vote.decisionId ? (
-            <Link
-              href={`/meetings/${vote.meetingId}/decisions`}
-              className="rounded-full border border-[color:var(--color-line)] px-3 py-1 transition hover:bg-white/80"
-            >
-              Decision board
-            </Link>
-          ) : null}
-          <Link
-            href={`/meetings/${vote.meetingId}/threads/${vote.threadId}`}
-            className="rounded-full border border-[color:var(--color-line)] px-3 py-1 transition hover:bg-white/80"
-          >
-            Open thread
-          </Link>
-          <Link
-            href={`/meetings/${vote.meetingId}`}
-            className="rounded-full border border-[color:var(--color-line)] px-3 py-1 transition hover:bg-white/80"
-          >
-            Meeting overview
-          </Link>
-        </div>
-
-        <form
-          className="mt-6 rounded-[1.75rem] border border-[color:var(--color-line)] bg-white/72 p-5"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setErrorMessage(null);
-            submitMutation.mutate(vote);
-          }}
-        >
-          <div className="flex items-center justify-between gap-4">
-            <h3 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-0.04em]">
-              내 응답
-            </h3>
-            <span className="text-sm text-ink/55">
-              {hasAllResponses ? "모든 옵션 응답 완료" : "미응답 옵션이 있습니다"}
-            </span>
+          <div className="info-chip">Vote summary</div>
+          <h2 className="mt-4 font-[var(--font-display)] text-4xl font-semibold leading-[0.96] tracking-[-0.055em]">
+            {labelForVoteType(vote.voteType)}
+          </h2>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <Metric label="Status" value={vote.status} />
+            <Metric label="Options" value={String(vote.options.length)} />
+            <Metric
+              label="Responded"
+              value={`${vote.aggregates?.respondedParticipants ?? 0}/${vote.aggregates?.totalParticipants ?? 0}`}
+            />
+            <Metric label="Deadline" value={vote.deadlineAt ? formatDateTime(vote.deadlineAt) : "미설정"} />
           </div>
+          <div className="mt-5 flex flex-wrap gap-2 text-sm text-[color:rgba(13,21,38,0.62)]">
+            {vote.decisionId ? (
+              <Link href={`/meetings/${vote.meetingId}/decisions`} className="action-secondary">
+                Decision board
+              </Link>
+            ) : null}
+            <Link href={`/meetings/${vote.meetingId}/threads/${vote.threadId}`} className="action-secondary">
+              Open thread
+            </Link>
+            <Link href={`/meetings/${vote.meetingId}`} className="action-secondary">
+              Meeting overview
+            </Link>
+          </div>
+
+          <form
+            className="mt-6 rounded-[1.75rem] border border-[color:var(--color-line)] bg-[rgba(255,255,255,0.66)] p-5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setErrorMessage(null);
+              submitMutation.mutate(vote);
+            }}
+          >
+            <div className="flex items-center justify-between gap-4">
+              <h3 className="font-[var(--font-display)] text-2xl font-semibold tracking-[-0.04em]">
+                내 응답
+              </h3>
+              <span className="text-sm text-[color:rgba(13,21,38,0.55)]">
+                {hasAllResponses ? "모든 옵션 응답 완료" : "미응답 옵션이 있습니다"}
+              </span>
+            </div>
 
           <div className="mt-4 space-y-4">
             {vote.options.map((option) => (
@@ -233,19 +224,19 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
             <button
               type="submit"
               disabled={submitMutation.isPending || vote.status !== "OPEN"}
-              className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:bg-ink/40"
+              className="action-primary disabled:cursor-not-allowed disabled:bg-[rgba(13,21,38,0.4)]"
             >
               {submitMutation.isPending ? "저장 중..." : "응답 저장"}
             </button>
           </div>
-        </form>
+          </form>
         </section>
 
         <section className="panel px-6 py-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="eyebrow">Aggregates</div>
-              <h3 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+              <div className="info-chip">Aggregates</div>
+              <h3 className="mt-3 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
                 집계 결과
               </h3>
             </div>
@@ -254,7 +245,7 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
                 type="button"
                 onClick={() => closeMutation.mutate()}
                 disabled={closeMutation.isPending || vote.status === "CLOSED" || vote.status === "SUPERSEDED"}
-                className="rounded-full bg-ember px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink disabled:cursor-not-allowed disabled:bg-ember/40"
+                className="inline-flex items-center justify-center rounded-full bg-[color:var(--color-ember)] px-5 py-3 text-sm font-semibold text-white transition active:translate-y-px hover:bg-[var(--color-ink)] disabled:cursor-not-allowed disabled:bg-[rgba(211,85,51,0.4)]"
               >
                 {closeMutation.isPending ? "마감 중..." : "투표 마감"}
               </button>

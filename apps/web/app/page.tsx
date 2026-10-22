@@ -5,9 +5,9 @@ import { StatusGrid } from "@/components/status-grid";
 export default function HomePage() {
   return (
     <SectionShell
-      eyebrow="Frontend Bootstrap"
-      title="Dudecide web is now scaffolded."
-      description="This first web unit establishes the application shell, design system primitives, session bootstrap path, and the initial routes required to turn the existing backend into a usable product."
+      eyebrow="Meeting Operations"
+      title="Stop losing decisions inside the group chat."
+      description="Dudecide turns loose planning chatter into a live meeting surface with threads, votes, evidence trails, and a report the whole group can trust."
     >
       <div className="space-y-5">
         <MarketingHero />

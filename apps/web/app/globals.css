@@ -3,19 +3,28 @@
 @tailwind utilities;
 
 :root {
-  --color-ink: #162236;
-  --color-mist: #eef4f1;
-  --color-sand: #f6efe3;
-  --color-ember: #cf5a2e;
-  --color-pine: #245c4b;
-  --color-sky: #87b8d8;
-  --color-line: rgba(22, 34, 54, 0.12);
-  --color-panel: rgba(255, 255, 255, 0.78);
+  --color-ink: #0d1526;
+  --color-mist: #f4f7fb;
+  --color-fog: #d7dfeb;
+  --color-steel: #71819a;
+  --color-cobalt: #2450ff;
+  --color-cobalt-soft: rgba(36, 80, 255, 0.12);
+  --color-sand: #e7edf6;
+  --color-pine: #2d4ed8;
+  --color-sky: #8ab1ff;
+  --color-ember: #d35533;
+  --color-line: rgba(13, 21, 38, 0.11);
+  --color-panel: rgba(248, 250, 255, 0.76);
+  --color-panel-strong: rgba(255, 255, 255, 0.92);
   --font-body: "SUIT", "Pretendard Variable", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
-  --font-display: "Avenir Next Condensed", "Helvetica Neue", "Arial Narrow", sans-serif;
-  --background-radial: radial-gradient(circle at top left, rgba(135, 184, 216, 0.44), transparent 32%),
-    radial-gradient(circle at bottom right, rgba(207, 90, 46, 0.2), transparent 30%),
-    linear-gradient(145deg, #f7f4eb 0%, #eef4f1 42%, #f3ede2 100%);
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
+  --background-radial:
+    radial-gradient(circle at top left, rgba(36, 80, 255, 0.17), transparent 28%),
+    radial-gradient(circle at 85% 18%, rgba(13, 21, 38, 0.08), transparent 18%),
+    radial-gradient(circle at 18% 88%, rgba(115, 137, 171, 0.12), transparent 22%),
+    linear-gradient(135deg, #eef3fa 0%, #f7f9fc 32%, #edf2f9 100%);
+  --shadow-panel: 0 28px 90px rgba(19, 29, 53, 0.08);
+  --shadow-soft: 0 16px 44px rgba(19, 29, 53, 0.06);
 }
 
 * {
@@ -32,6 +41,7 @@ body {
   min-height: 100vh;
   background: var(--background-radial);
   color: var(--color-ink);
+  background-attachment: fixed;
 }
 
 a {
@@ -47,14 +57,93 @@ textarea {
 
 @layer components {
   .shell {
-    @apply min-h-screen px-4 py-5 sm:px-6 lg:px-10;
+    @apply min-h-[100dvh] px-4 py-4 sm:px-6 lg:px-10;
   }
 
   .panel {
-    @apply rounded-4xl border border-[color:var(--color-line)] bg-white/75 shadow-panel backdrop-blur;
+    @apply rounded-[2rem] border border-[color:var(--color-line)] shadow-[var(--shadow-panel)] backdrop-blur-xl;
+    background: var(--color-panel);
+  }
+
+  .panel-strong {
+    @apply rounded-[2rem] border border-[color:var(--color-line)] shadow-[var(--shadow-soft)] backdrop-blur-xl;
+    background: var(--color-panel-strong);
   }
 
   .eyebrow {
-    @apply text-xs font-semibold uppercase tracking-[0.22em] text-ember;
+    @apply text-[0.68rem] font-semibold uppercase tracking-[0.24em];
+    color: var(--color-steel);
+  }
+
+  .action-primary {
+    @apply inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold text-white transition active:translate-y-px;
+    background: var(--color-ink);
+  }
+
+  .action-primary:hover {
+    background: #16264a;
+  }
+
+  .action-secondary {
+    @apply inline-flex items-center justify-center rounded-full border px-5 py-3 text-sm font-semibold transition active:translate-y-px;
+    border-color: var(--color-line);
+    background: rgba(255, 255, 255, 0.6);
+  }
+
+  .action-secondary:hover {
+    background: rgba(255, 255, 255, 0.92);
+  }
+
+  .field {
+    @apply w-full rounded-[1.35rem] border px-4 py-3 text-sm outline-none transition;
+    border-color: var(--color-line);
+    background: rgba(255, 255, 255, 0.82);
+  }
+
+  .field:focus {
+    border-color: var(--color-cobalt);
+    box-shadow: 0 0 0 4px rgba(36, 80, 255, 0.09);
+  }
+
+  .metric-card {
+    @apply rounded-[1.6rem] border p-4;
+    border-color: var(--color-line);
+    background: rgba(255, 255, 255, 0.66);
+  }
+
+  .soft-card {
+    @apply rounded-[1.6rem] border p-4;
+    border-color: var(--color-line);
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .info-chip {
+    @apply inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em];
+    border-color: var(--color-line);
+    color: rgba(13, 21, 38, 0.72);
+    background: rgba(255, 255, 255, 0.58);
+  }
+
+  .section-rule {
+    @apply h-px w-full;
+    background: linear-gradient(90deg, transparent, rgba(13, 21, 38, 0.12), transparent);
+  }
+
+  .empty-state {
+    @apply rounded-[1.5rem] border border-dashed px-5 py-6 text-sm;
+    border-color: var(--color-line);
+    background: rgba(255, 255, 255, 0.5);
+    color: rgba(13, 21, 38, 0.58);
+  }
+
+  .mono-panel {
+    @apply overflow-x-auto rounded-[1.4rem] px-4 py-4 text-xs leading-6;
+    background: var(--color-ink);
+    color: rgba(244, 247, 251, 0.94);
+  }
+
+  .section-copy {
+    @apply text-sm leading-6;
+    color: rgba(13, 21, 38, 0.66);
   }
 }

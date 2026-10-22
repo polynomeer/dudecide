@@ -13,6 +13,11 @@ export default async function NotificationsPage({
       eyebrow="Notifications"
       title="Notification feed"
       description="현재 회의 사용자 기준의 저장형 알림을 확인할 수 있습니다."
+      breadcrumbs={[
+        { label: "Home", href: "/" },
+        { label: "Meeting", href: `/meetings/${meetingId}` },
+        { label: "Notifications" },
+      ]}
     >
       <NotificationsWorkspace meetingId={meetingId} />
     </SectionShell>

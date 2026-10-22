@@ -110,8 +110,8 @@ export function VoteStudio({ meetingId }: { meetingId: string }) {
   if (!access.isHost) {
     return (
       <section className="panel px-6 py-6">
-        <div className="eyebrow">Vote studio</div>
-        <h3 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+        <div className="info-chip">Vote studio</div>
+        <h3 className="mt-4 font-[var(--font-display)] text-4xl font-semibold tracking-[-0.05em]">
           새 투표 생성
         </h3>
         <div className="mt-5">
@@ -125,17 +125,15 @@ export function VoteStudio({ meetingId }: { meetingId: string }) {
     <section className="panel px-6 py-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="eyebrow">Vote studio</div>
-          <h3 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+          <div className="info-chip">Vote studio</div>
+          <h3 className="mt-4 font-[var(--font-display)] text-4xl font-semibold leading-[0.96] tracking-[-0.055em]">
             새 투표 생성
           </h3>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-ink/66">
+          <p className="section-copy mt-3 max-w-2xl">
             스레드와 의사결정 맥락을 연결해 투표를 만들고, 생성 직후 상세 화면으로 이동합니다.
           </p>
         </div>
-        <div className="rounded-full border border-[color:var(--color-line)] bg-white/70 px-4 py-2 text-sm">
-          결정 {filteredDecisions.length}건 연결 가능
-        </div>
+        <div className="info-chip normal-case tracking-[0.02em]">결정 {filteredDecisions.length}건 연결 가능</div>
       </div>
 
       <form className="mt-5 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]" onSubmit={handleSubmit}>
@@ -154,7 +152,7 @@ export function VoteStudio({ meetingId }: { meetingId: string }) {
                     decisionId: "",
                   }))
                 }
-                className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                className="field mt-2"
               >
                 {meetingQuery.data.threads.map((thread) => (
                   <option key={thread.id} value={thread.id}>
@@ -171,7 +169,7 @@ export function VoteStudio({ meetingId }: { meetingId: string }) {
               <select
                 value={form.voteType}
                 onChange={(event) => handleVoteTypeChange(event.target.value)}
-                className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                className="field mt-2"
               >
                 <option value="date_matrix">date_matrix</option>
                 <option value="package_preference">package_preference</option>
@@ -192,7 +190,7 @@ export function VoteStudio({ meetingId }: { meetingId: string }) {
                   decisionId: event.target.value,
                 }))
               }
-              className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+              className="field mt-2"
             >
               <option value="">새 decision 자동 생성</option>
               {filteredDecisions.map((decision) => (
@@ -215,7 +213,7 @@ export function VoteStudio({ meetingId }: { meetingId: string }) {
                   title: event.target.value,
                 }))
               }
-              className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+              className="field mt-2"
               placeholder="예: 1차 일정 투표"
               required
             />
@@ -235,7 +233,7 @@ export function VoteStudio({ meetingId }: { meetingId: string }) {
                     opensAt: event.target.value,
                   }))
                 }
-                className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                className="field mt-2"
               />
             </label>
 
@@ -252,7 +250,7 @@ export function VoteStudio({ meetingId }: { meetingId: string }) {
                     deadlineAt: event.target.value,
                   }))
                 }
-                className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                className="field mt-2"
               />
             </label>
           </div>
@@ -270,22 +268,22 @@ export function VoteStudio({ meetingId }: { meetingId: string }) {
                 optionText: event.target.value,
               }))
             }
-            className="mt-2 min-h-[280px] w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-ink px-4 py-4 font-mono text-xs leading-6 text-mist outline-none transition focus:border-pine"
+            className="mono-panel mt-2 min-h-[280px] w-full border border-[color:var(--color-line)]"
             spellCheck={false}
           />
-          <div className="mt-3 rounded-[1.25rem] border border-[color:var(--color-line)] bg-white/70 px-4 py-3 text-xs leading-6 text-ink/64">
+          <div className="soft-card mt-3 text-xs leading-6 text-[color:rgba(13,21,38,0.64)]">
             {helperTextForVoteType(form.voteType)}
           </div>
         </label>
 
-        <div className="xl:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-[1.25rem] border border-[color:var(--color-line)] bg-white/58 px-4 py-3">
-          <div className="text-sm text-ink/62">
+        <div className="soft-card xl:col-span-2 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-sm text-[color:rgba(13,21,38,0.62)]">
             {errorMessage ?? "생성 후 투표 상세 페이지로 즉시 이동합니다."}
           </div>
           <button
             type="submit"
             disabled={createVoteMutation.isPending}
-            className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:bg-ink/40"
+            className="action-primary disabled:cursor-not-allowed disabled:bg-[rgba(13,21,38,0.4)]"
           >
             {createVoteMutation.isPending ? "생성 중..." : "투표 생성"}
           </button>

@@ -13,6 +13,11 @@ export default async function SearchPage({
       eyebrow="Search"
       title="Keyword search"
       description="회의 범위의 메시지, 의사결정, 태스크를 하나의 키워드 검색 흐름에서 확인할 수 있습니다."
+      breadcrumbs={[
+        { label: "Home", href: "/" },
+        { label: "Meeting", href: `/meetings/${meetingId}` },
+        { label: "Search" },
+      ]}
     >
       <SearchWorkspace meetingId={meetingId} />
     </SectionShell>

@@ -13,6 +13,11 @@ export default async function LatestReportPage({
       eyebrow="Meeting Report"
       title="Latest report"
       description="최신 materialized 회의 리포트를 확인하고 필요 시 수동 새로고침을 실행할 수 있습니다."
+      breadcrumbs={[
+        { label: "Home", href: "/" },
+        { label: "Meeting", href: `/meetings/${meetingId}` },
+        { label: "Report" },
+      ]}
     >
       <ReportWorkspace meetingId={meetingId} />
     </SectionShell>

@@ -7,15 +7,15 @@ export function SessionBadge() {
 
   if (isLoading) {
     return (
-      <div className="rounded-full border border-[color:var(--color-line)] px-4 py-2 text-sm text-ink/60">
+      <div className="info-chip text-[color:var(--color-steel)]">
         Resolving session...
       </div>
     );
   }
 
   return (
-    <div className="rounded-full border border-[color:var(--color-line)] bg-white/70 px-4 py-2 text-sm">
-      <span className="mr-2 text-ink/55">Actor</span>
+    <div className="info-chip gap-2 text-[color:var(--color-ink)] normal-case tracking-[0.02em]">
+      <span className="text-[color:var(--color-steel)]">Actor</span>
       <span className="font-semibold">{data?.displayName ?? "Local Host"}</span>
     </div>
   );

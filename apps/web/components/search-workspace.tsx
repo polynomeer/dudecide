@@ -19,11 +19,11 @@ export function SearchWorkspace({ meetingId }: { meetingId: string }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[0.82fr_1.18fr]">
       <section className="panel px-6 py-6">
-        <div className="eyebrow">Query</div>
-        <h2 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+        <div className="info-chip">Search</div>
+        <h2 className="mt-4 font-[var(--font-display)] text-4xl font-semibold leading-[0.96] tracking-[-0.055em]">
           회의 키워드 검색
         </h2>
-        <p className="mt-3 text-sm leading-6 text-ink/66">
+        <p className="section-copy mt-3">
           메시지, 의사결정, 태스크를 회의 범위 안에서 동시에 검색합니다.
         </p>
 
@@ -41,42 +41,40 @@ export function SearchWorkspace({ meetingId }: { meetingId: string }) {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+              className="field mt-2"
               placeholder="예: 가평, 일정, 확정"
             />
           </label>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.25rem] border border-[color:var(--color-line)] bg-white/60 px-4 py-3">
-            <div className="text-sm text-ink/60">
+          <div className="soft-card flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-[color:rgba(13,21,38,0.6)]">
               공백 입력은 실행하지 않습니다.
             </div>
             <button
               type="submit"
               disabled={query.trim().length === 0}
-              className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:bg-ink/40"
+              className="action-primary disabled:cursor-not-allowed disabled:bg-[rgba(13,21,38,0.4)]"
             >
               검색 실행
             </button>
           </div>
         </form>
 
-        <div className="mt-5 rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/70 p-4 text-sm text-ink/68">
+        <div className="soft-card mt-5 text-sm text-[color:rgba(13,21,38,0.68)]">
           검색 결과에서 메시지 스레드, 의사결정 보드, 태스크 상태를 바로 확인할 수 있습니다.
         </div>
       </section>
 
       <section className="panel px-6 py-6">
-        <div className="eyebrow">Results</div>
+        <div className="info-chip">Results</div>
         {submittedQuery.trim().length === 0 ? (
-          <div className="mt-4 rounded-[1.5rem] border border-dashed border-[color:var(--color-line)] bg-white/55 px-5 py-6 text-sm text-ink/58">
-            왼쪽에서 키워드를 입력해 검색을 시작해 주세요.
-          </div>
+          <div className="empty-state mt-4">왼쪽에서 키워드를 입력해 검색을 시작해 주세요.</div>
         ) : searchQuery.isLoading ? (
           <div className="mt-4 text-sm text-ink/60">검색 결과를 불러오는 중입니다.</div>
         ) : searchQuery.error || !searchQuery.data ? (
           <ApiErrorPanel error={searchQuery.error} resourceName="검색 결과" />
         ) : (
           <div className="mt-4 space-y-5">
-            <div className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/70 px-4 py-4 text-sm text-ink/66">
+            <div className="soft-card text-sm text-[color:rgba(13,21,38,0.66)]">
               <strong>{searchQuery.data.query}</strong> 검색 결과
             </div>
 
@@ -86,10 +84,7 @@ export function SearchWorkspace({ meetingId }: { meetingId: string }) {
               emptyMessage="일치하는 메시지가 없습니다."
             >
               {searchQuery.data.messages.map((message) => (
-                <article
-                  key={message.id}
-                  className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
-                >
+                <article key={message.id} className="soft-card">
                   <div className="flex items-center justify-between gap-4">
                     <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
                       Message
@@ -99,7 +94,7 @@ export function SearchWorkspace({ meetingId }: { meetingId: string }) {
                   <p className="mt-3 text-sm leading-6 text-ink/84">{message.body}</p>
                   <Link
                     href={`/meetings/${meetingId}/threads/${message.threadId}`}
-                    className="mt-3 inline-flex rounded-full border border-[color:var(--color-line)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-ink/68 transition hover:bg-white/90"
+                    className="action-secondary mt-3 px-3 py-1 text-xs"
                   >
                     Open thread
                   </Link>
@@ -113,19 +108,16 @@ export function SearchWorkspace({ meetingId }: { meetingId: string }) {
               emptyMessage="일치하는 의사결정이 없습니다."
             >
               {searchQuery.data.decisions.map((decision) => (
-                <article
-                  key={decision.id}
-                  className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
-                >
+                <article key={decision.id} className="soft-card">
                   <div className="flex items-center justify-between gap-4">
                     <div className="text-lg font-semibold text-ink">{decision.title}</div>
-                    <span className="rounded-full border border-[color:var(--color-line)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-ink/60">
+                    <span className="info-chip">
                       {decision.status}
                     </span>
                   </div>
                   <Link
                     href={`/meetings/${meetingId}/decisions`}
-                    className="mt-3 inline-flex rounded-full border border-[color:var(--color-line)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-ink/68 transition hover:bg-white/90"
+                    className="action-secondary mt-3 px-3 py-1 text-xs"
                   >
                     Open board
                   </Link>
@@ -139,13 +131,10 @@ export function SearchWorkspace({ meetingId }: { meetingId: string }) {
               emptyMessage="일치하는 태스크가 없습니다."
             >
               {searchQuery.data.tasks.map((task) => (
-                <article
-                  key={task.id}
-                  className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
-                >
+                <article key={task.id} className="soft-card">
                   <div className="flex items-center justify-between gap-4">
                     <div className="text-lg font-semibold text-ink">{task.title}</div>
-                    <span className="rounded-full border border-[color:var(--color-line)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-ink/60">
+                    <span className="info-chip">
                       {task.status}
                     </span>
                   </div>
@@ -182,11 +171,7 @@ function ResultSection({
         <span className="text-sm text-ink/55">{count}건</span>
       </div>
       <div className="mt-3 space-y-3">
-        {count ? children : (
-          <div className="rounded-[1.5rem] border border-dashed border-[color:var(--color-line)] bg-white/55 px-5 py-6 text-sm text-ink/58">
-            {emptyMessage}
-          </div>
-        )}
+        {count ? children : <div className="empty-state">{emptyMessage}</div>}
       </div>
     </section>
   );

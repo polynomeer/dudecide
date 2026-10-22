@@ -74,11 +74,11 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[0.78fr_1.22fr]">
       <section className="panel px-6 py-6">
-        <div className="eyebrow">Create task</div>
-        <h2 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+        <div className="info-chip">Task studio</div>
+        <h2 className="mt-4 font-[var(--font-display)] text-4xl font-semibold leading-[0.96] tracking-[-0.055em]">
           회의 태스크 추가
         </h2>
-        <p className="mt-3 text-sm leading-6 text-ink/66">
+        <p className="section-copy mt-3">
           호스트 또는 코호스트가 후속 액션을 등록하고, 현재 상태를 `todo`, `doing`, `done`으로 관리할 수 있습니다.
         </p>
 
@@ -98,7 +98,7 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
               <input
                 value={form.title}
                 onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
-                className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                className="field mt-2"
                 placeholder="예: 숙소 후보 2곳 예산표 정리"
                 required
               />
@@ -112,7 +112,7 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
                 type="datetime-local"
                 value={form.dueAt}
                 onChange={(event) => setForm((current) => ({ ...current, dueAt: event.target.value }))}
-                className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
+                className="field mt-2"
               />
             </label>
 
@@ -122,7 +122,7 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
               <button
                 type="submit"
                 disabled={createTaskMutation.isPending}
-                className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:bg-ink/40"
+                className="action-primary disabled:cursor-not-allowed disabled:bg-[rgba(13,21,38,0.4)]"
               >
                 {createTaskMutation.isPending ? "생성 중..." : "태스크 생성"}
               </button>
@@ -138,23 +138,18 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
       <section className="panel px-6 py-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="eyebrow">Task list</div>
-            <h3 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
+            <div className="info-chip">Task board</div>
+            <h3 className="mt-3 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
               현재 태스크
             </h3>
           </div>
-          <div className="rounded-full border border-[color:var(--color-line)] bg-white/70 px-4 py-2 text-sm">
-            총 {tasksQuery.data.length}건
-          </div>
+          <div className="info-chip normal-case tracking-[0.02em]">총 {tasksQuery.data.length}건</div>
         </div>
 
         <div className="mt-5 space-y-3">
           {tasksQuery.data.length ? (
             tasksQuery.data.map((task) => (
-              <article
-                key={task.id}
-                className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
-              >
+              <article key={task.id} className="soft-card">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="text-lg font-semibold text-ink">{task.title}</div>
@@ -169,7 +164,7 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
                       updateTaskMutation.mutate({ taskId: task.id, status: event.target.value })
                     }
                     disabled={updateTaskMutation.isPending || !access.isHost}
-                    className="rounded-full border border-[color:var(--color-line)] bg-white px-4 py-2 text-sm font-semibold outline-none transition focus:border-pine"
+                    className="field w-auto rounded-full py-2"
                   >
                     {TASK_STATUSES.map((status) => (
                       <option key={status} value={status}>
@@ -181,9 +176,7 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
               </article>
             ))
           ) : (
-            <div className="rounded-[1.5rem] border border-dashed border-[color:var(--color-line)] bg-white/55 px-5 py-6 text-sm text-ink/58">
-              아직 생성된 태스크가 없습니다.
-            </div>
+            <div className="empty-state">아직 생성된 태스크가 없습니다.</div>
           )}
         </div>
       </section>
