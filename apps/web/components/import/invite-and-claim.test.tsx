@@ -56,7 +56,7 @@ describe("InvitePreview", () => {
     expect(preview).toHaveTextContent("제주 여행");
     expect(preview).toHaveTextContent("2개 항목이 의견을 기다리고 있어요.");
     expect(preview).toHaveTextContent("Date");
-    expect(preview).toHaveTextContent("제안됨");
+    expect(preview).toHaveTextContent("확인 필요");
   });
 
   it("explains an expired link", async () => {
