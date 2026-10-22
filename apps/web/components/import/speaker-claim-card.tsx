@@ -63,10 +63,10 @@ export function SpeakerClaimCard({ meetingId }: { meetingId: string }) {
   return (
     <aside
       aria-label="대화 속 내 이름 연결"
-      className="panel fixed bottom-4 left-4 z-50 w-[min(22rem,calc(100vw-2rem))] px-5 py-5 shadow-[0_16px_30px_rgba(15,23,42,0.12)]"
+      className="fixed bottom-4 left-4 z-50 w-[min(22rem,calc(100vw-2rem))] rounded-[20px] bg-surface px-5 py-5 shadow-[0_16px_40px_rgb(0_0_0/0.16)] ring-2 ring-accent"
     >
-      <h2 className="text-base font-semibold">가져온 대화에 나도 있나요?</h2>
-      <p className="mt-1 text-sm text-ink/60">카카오톡에서 쓰는 이름을 적으면, 대화 속 내 메시지에 내 이름이 표시됩니다.</p>
+      <h2 className="m-0 text-base font-bold">가져온 대화에 나도 있나요?</h2>
+      <p className="m-0 mt-1 text-sm text-muted">카카오톡에서 쓰는 이름을 적으면, 대화 속 내 메시지에 내 이름이 표시됩니다.</p>
       <form
         className="mt-3 flex gap-2"
         onSubmit={(event) => {
@@ -92,7 +92,7 @@ export function SpeakerClaimCard({ meetingId }: { meetingId: string }) {
           {message}
         </p>
       ) : null}
-      <button type="button" onClick={dismiss} className="mt-3 text-xs text-ink/50 underline">
+      <button type="button" onClick={dismiss} className="mt-3 text-xs text-muted underline">
         나중에 할게요
       </button>
     </aside>
