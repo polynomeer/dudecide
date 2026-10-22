@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import type { Route } from "next";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiErrorPanel } from "@/components/api-error-panel";
+import { LogoMark } from "@/components/brand/logo";
 import { HostOnlyNotice } from "@/components/host-only-notice";
 import {
   type AddDecisionEvidenceRequest,
@@ -11,18 +14,54 @@ import {
   type ConfirmDecisionRequest,
   type CreateDecisionRequest,
   type DecisionDetailResponse,
+  type DecisionEvidenceView,
   type DecisionHistoryView,
-  type DecisionResponse,
+  type MeetingDetailResponse,
+  type MessageView,
   type ReconsiderDecisionRequest,
 } from "@/lib/api/client";
 import { getApiErrorMessage } from "@/lib/api/error-display";
+import {
+  avatarColor,
+  decisionStatusChip,
+  decisionStatusLabel,
+  decisionTypeLabel,
+  formatShortDateTime,
+  initialOf,
+  normalizeDecisionStatus,
+} from "@/lib/display";
 import { useCurrentActor } from "@/lib/session";
 
-const DEFAULT_PROPOSED_RESULT = '{\n  "summary": ""\n}';
-const DEFAULT_CONFIRMED_RESULT = '{\n  "summary": ""\n}';
+const DECISION_TYPES = ["date", "location", "lodging", "transport", "budget", "task", "other"] as const;
+const EVIDENCE_TYPES = [
+  { value: "support", label: "찬성" },
+  { value: "opposition", label: "반대" },
+  { value: "condition", label: "조건" },
+  { value: "proposal", label: "제안" },
+] as const;
+
+const HISTORY_LABELS: Record<string, string> = {
+  created: "결정을 만들었어요",
+  confirmed: "확정했어요",
+  reconsidered: "재검토로 돌렸어요",
+  reconsider: "재검토로 돌렸어요",
+  evidence_added: "근거를 연결했어요",
+  status_changed: "상태가 바뀌었어요",
+};
+
+function isObjection(evidence: DecisionEvidenceView) {
+  return evidence.evidenceType.toLowerCase() === "opposition";
+}
+
+function summaryOf(result: Record<string, unknown>) {
+  return typeof result.summary === "string" && result.summary.trim() ? result.summary : null;
+}
 
 export function DecisionBoard({ meetingId }: { meetingId: string }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const actorQuery = useCurrentActor();
   const meetingQuery = useQuery({
     queryKey: ["meeting", meetingId],
@@ -32,31 +71,12 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
     queryKey: ["meeting-decisions", meetingId],
     queryFn: () => apiClient.listDecisions(meetingId),
   });
-  const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
-  const [createForm, setCreateForm] = useState({
-    threadId: "",
-    decisionType: "CONSENSUS",
-    title: "",
-    proposedResultText: DEFAULT_PROPOSED_RESULT,
-  });
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    if (!selectedDecisionId && decisionsQuery.data && decisionsQuery.data.length > 0) {
-      setSelectedDecisionId(decisionsQuery.data[0].id);
-    }
-  }, [decisionsQuery.data, selectedDecisionId]);
-
-  useEffect(() => {
-    if (!createForm.threadId && meetingQuery.data?.threads.length) {
-      setCreateForm((current) => ({ ...current, threadId: meetingQuery.data!.threads[0].id }));
-    }
-  }, [createForm.threadId, meetingQuery.data]);
-
-  const selectedDecision = useMemo(
-    () => decisionsQuery.data?.find((item) => item.id === selectedDecisionId) ?? null,
-    [decisionsQuery.data, selectedDecisionId],
-  );
+  const requestedId = searchParams?.get("decision") ?? null;
+  const decisions = decisionsQuery.data ?? [];
+  const selectedDecisionId =
+    (requestedId && decisions.some((decision) => decision.id === requestedId) ? requestedId : decisions[0]?.id) ?? null;
 
   const detailQuery = useQuery({
     queryKey: ["decision-detail", selectedDecisionId],
@@ -64,241 +84,129 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
     enabled: Boolean(selectedDecisionId),
   });
 
-  const createDecisionMutation = useMutation({
-    mutationFn: (body: CreateDecisionRequest) => apiClient.createDecision(meetingId, body),
-    onSuccess: async (created) => {
-      setCreateError(null);
-      setCreateForm((current) => ({
-        ...current,
-        title: "",
-        proposedResultText: DEFAULT_PROPOSED_RESULT,
-      }));
-      setSelectedDecisionId(created.id);
-      await invalidateDecisionQueries(queryClient, meetingId, created.id);
-    },
-    onError: (error: Error) => {
-      setCreateError(
-        getApiErrorMessage(error, {
-          resourceName: "결정 생성",
-          conflictMessage: "현재 회의 또는 스레드 상태에서는 결정을 생성할 수 없습니다.",
-        }),
-      );
-    },
-  });
+  function selectDecision(decisionId: string) {
+    setCreating(false);
+    router.replace(`${pathname}?decision=${decisionId}` as Route, { scroll: false });
+  }
 
   if (meetingQuery.isLoading || decisionsQuery.isLoading) {
-    return <div className="panel px-6 py-6 text-sm text-ink/60">결정 보드를 불러오는 중입니다.</div>;
+    return <div className="panel px-6 py-6 text-sm text-muted">결정 보드를 불러오는 중이에요…</div>;
   }
 
   if (meetingQuery.error || decisionsQuery.error || !meetingQuery.data) {
     return <ApiErrorPanel error={meetingQuery.error ?? decisionsQuery.error} resourceName="결정 보드" />;
   }
 
-  function handleCreateDecisionSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setCreateError(null);
-
-    let proposedResult: Record<string, unknown>;
-    try {
-      proposedResult = parseJsonObject(createForm.proposedResultText);
-    } catch (error) {
-      setCreateError(error instanceof Error ? error.message : "제안 결과 JSON 형식이 올바르지 않습니다.");
-      return;
-    }
-
-    createDecisionMutation.mutate({
-      threadId: createForm.threadId,
-      decisionType: createForm.decisionType,
-      title: createForm.title.trim(),
-      proposedResult,
-    });
-  }
-
-  const isHost = actorQuery.data?.userId === meetingQuery.data.ownerUserId;
+  const meeting = meetingQuery.data;
+  const isHost = actorQuery.data?.userId === meeting.ownerUserId;
+  const selected = decisions.find((decision) => decision.id === selectedDecisionId) ?? null;
 
   return (
-    <div className="space-y-5">
-      <section className="panel px-6 py-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="info-chip">Decision studio</div>
-            <h2 className="mt-4 font-display text-4xl leading-[0.96]">
-              새 결정 초안 생성
-            </h2>
-            <p className="section-copy mt-3 max-w-2xl">
-              스레드 단위로 결정을 생성하고, 제안 결과를 JSON으로 남길 수 있습니다. 확정과 재검토는
-              아래 상세 패널에서 이어서 처리합니다.
-            </p>
-          </div>
-          <div className="info-chip normal-case tracking-[0.02em]">스레드 {meetingQuery.data.threads.length}개</div>
-        </div>
+    <>
+      <nav aria-label="현재 위치" className="flex flex-wrap items-center gap-2 text-sm">
+        <Link href={`/meetings/${meetingId}` as Route} className="inline-flex min-h-[44px] items-center text-muted hover:text-ink">
+          {meeting.title}
+        </Link>
+        <span aria-hidden="true" className="text-muted/60">
+          /
+        </span>
+        <span className={selected ? "text-muted" : "font-bold"}>결정 보드</span>
+        {selected ? (
+          <>
+            <span aria-hidden="true" className="text-muted/60">
+              /
+            </span>
+            <b aria-current="page">{decisionTypeLabel(selected.decisionType)}</b>
+          </>
+        ) : null}
+        <Link href={`/meetings/${meetingId}` as Route} className="link-accent ml-auto inline-flex min-h-[44px] items-center text-sm">
+          ← 대시보드
+        </Link>
+      </nav>
 
-        {isHost ? (
-          <form className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]" onSubmit={handleCreateDecisionSubmit}>
-            <div className="space-y-4">
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                  Thread
-                </span>
-                <select
-                  value={createForm.threadId}
-                  onChange={(event) =>
-                    setCreateForm((current) => ({ ...current, threadId: event.target.value }))
-                  }
-                  className="field mt-2"
-                >
-                  {meetingQuery.data.threads.map((thread) => (
-                    <option key={thread.id} value={thread.id}>
-                      {thread.title} ({thread.category})
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="grid gap-4 md:grid-cols-[0.7fr_1.3fr]">
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                    Type
-                  </span>
-                  <input
-                    value={createForm.decisionType}
-                    onChange={(event) =>
-                      setCreateForm((current) => ({ ...current, decisionType: event.target.value }))
-                    }
-                    className="field mt-2"
-                    placeholder="CONSENSUS"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                    Title
-                  </span>
-                  <input
-                    value={createForm.title}
-                    onChange={(event) =>
-                      setCreateForm((current) => ({ ...current, title: event.target.value }))
-                    }
-                    className="field mt-2"
-                    placeholder="예: 1차 출시 범위 확정"
-                    required
-                  />
-                </label>
-              </div>
-            </div>
-
-            <label className="block">
-              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                Proposed result JSON
-              </span>
-              <textarea
-                value={createForm.proposedResultText}
-                onChange={(event) =>
-                  setCreateForm((current) => ({ ...current, proposedResultText: event.target.value }))
-                }
-                className="mono-panel mt-2 min-h-[220px] w-full border border-line"
-                spellCheck={false}
-              />
-            </label>
-
-            <div className="soft-card lg:col-span-2 flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm text-ink/62">
-                {createError ? <span className="text-ember">{createError}</span> : "결정 생성 시 목록과 상세 패널이 즉시 갱신됩니다."}
-              </div>
-              <button
-                type="submit"
-                disabled={createDecisionMutation.isPending || meetingQuery.data.threads.length === 0}
-                className="action-primary disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {createDecisionMutation.isPending ? "생성 중..." : "결정 생성"}
+      <div className="flex flex-wrap items-start gap-5">
+        <aside aria-label="결정 목록" className="panel flex max-w-full flex-[1_1_240px] flex-col gap-0.5 p-2.5 lg:max-w-[300px]">
+          <div className="flex items-center justify-between px-3.5 pb-1 pt-2">
+            <span className="mono-label">결정 {decisions.length}건</span>
+            {isHost ? (
+              <button type="button" onClick={() => setCreating(true)} className="link-accent text-xs">
+                + 새 결정
               </button>
-            </div>
-          </form>
-        ) : (
-          <div className="mt-5">
-            <HostOnlyNotice message="현재 프론트엔드에서는 회의 소유자에게만 결정 생성과 상태 전이 액션을 노출합니다." />
+            ) : null}
           </div>
-        )}
-      </section>
-
-      <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-        <section className="panel px-6 py-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="info-chip">Decision board</div>
-              <h2 className="mt-3 font-display text-3xl">
-                회의 결정 목록
-              </h2>
-            </div>
-            <div className="info-chip normal-case tracking-[0.02em]">총 {decisionsQuery.data?.length ?? 0}건</div>
-          </div>
-
-          <div className="mt-5 space-y-3">
-            {decisionsQuery.data?.length ? (
-              decisionsQuery.data.map((decision) => (
-                <button
-                  key={decision.id}
-                  type="button"
-                  onClick={() => setSelectedDecisionId(decision.id)}
-                  className={[
-                    "w-full rounded-[1.5rem] border px-4 py-4 text-left transition",
-                    decision.id === selectedDecisionId
-                      ? "border-pine bg-pine/10"
-                      : "border-line bg-surface hover:bg-surface",
-                  ].join(" ")}
+          {decisions.map((decision) => {
+            const active = decision.id === selectedDecisionId && !creating;
+            const status = normalizeDecisionStatus(decision.status);
+            return (
+              <button
+                key={decision.id}
+                type="button"
+                aria-current={active ? "true" : undefined}
+                onClick={() => selectDecision(decision.id)}
+                className={`flex flex-col gap-1 rounded-[14px] px-3.5 py-3 text-left transition ${
+                  active ? "bg-accent-soft" : "hover:bg-surface-2"
+                } ${status === "on_hold" ? "text-muted" : "text-ink"}`}
+              >
+                <span
+                  className={`text-[11px] font-semibold ${
+                    active ? "text-accent-soft-ink" : status === "needs_reconsideration" ? "text-risk-ink" : "text-muted"
+                  }`}
                 >
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                      {decision.decisionType}
-                    </span>
-                    <StatusBadge status={decision.status} />
-                  </div>
-                  <div className="mt-2 font-display text-xl">
-                    {decision.title}
-                  </div>
-                  <div className="mt-3 text-sm text-ink/65">
-                    Thread {decision.threadId.slice(0, 8)} ·{" "}
-                    {decision.decidedAt ? formatDateTime(decision.decidedAt) : "미확정"}
-                  </div>
-                </button>
-              ))
+                  {decisionTypeLabel(decision.decisionType)} · {decisionStatusLabel(decision.status)}
+                </span>
+                <b className="text-sm">{decision.title}</b>
+              </button>
+            );
+          })}
+          {decisions.length === 0 ? (
+            <p className="section-copy px-3.5 py-3">아직 결정이 없어요.</p>
+          ) : null}
+        </aside>
+
+        {creating || !selected ? (
+          <div className="flex min-w-0 flex-[999_1_520px] flex-col gap-4">
+            {isHost ? (
+              <CreateDecisionPanel
+                meeting={meeting}
+                onCancel={decisions.length ? () => setCreating(false) : undefined}
+                onCreated={async (decisionId) => {
+                  await invalidateDecisionQueries(queryClient, meetingId, decisionId);
+                  selectDecision(decisionId);
+                }}
+              />
             ) : (
-              <div className="empty-state">아직 생성된 결정이 없습니다. 상단 생성 폼에서 첫 결정을 등록해 주세요.</div>
+              <div className="panel p-7">
+                <HostOnlyNotice message="아직 결정이 없어요. 결정은 호스트가 만들거나 대화 가져오기로 찾을 수 있어요." />
+              </div>
             )}
           </div>
-        </section>
-
-        <section className="panel px-6 py-6">
-          <div className="info-chip">Decision detail</div>
-          {selectedDecision ? (
-            detailQuery.isLoading ? (
-              <div className="mt-4 text-sm text-ink/60">선택한 결정을 불러오는 중입니다.</div>
-            ) : detailQuery.error || !detailQuery.data ? (
-              <ApiErrorPanel error={detailQuery.error} resourceName="결정 상세" />
-            ) : (
-              <DecisionDetailPanel
-                meetingId={meetingId}
-                decision={detailQuery.data}
-                canManage={isHost}
-                onMutated={(decisionId) => invalidateDecisionQueries(queryClient, meetingId, decisionId)}
-              />
-            )
-          ) : (
-            <div className="mt-4 text-sm text-ink/60">왼쪽 목록에서 확인할 결정을 선택해 주세요.</div>
-          )}
-        </section>
+        ) : detailQuery.isLoading ? (
+          <div className="panel flex-[999_1_520px] p-7 text-sm text-muted">결정을 불러오는 중이에요…</div>
+        ) : detailQuery.error || !detailQuery.data ? (
+          <div className="min-w-0 flex-[999_1_520px]">
+            <ApiErrorPanel error={detailQuery.error} resourceName="결정 상세" />
+          </div>
+        ) : (
+          <DecisionWorkspace
+            key={detailQuery.data.id}
+            meeting={meeting}
+            decision={detailQuery.data}
+            canManage={isHost}
+            onMutated={(decisionId) => invalidateDecisionQueries(queryClient, meetingId, decisionId)}
+          />
+        )}
       </div>
-    </div>
+    </>
   );
 }
 
-function DecisionDetailPanel({
-  meetingId,
+function DecisionWorkspace({
+  meeting,
   decision,
   canManage,
   onMutated,
 }: {
-  meetingId: string;
+  meeting: MeetingDetailResponse;
   decision: DecisionDetailResponse;
   canManage: boolean;
   onMutated: (decisionId: string) => Promise<void>;
@@ -307,483 +215,561 @@ function DecisionDetailPanel({
     queryKey: ["decision-thread-messages", decision.threadId],
     queryFn: () => apiClient.listMessages(decision.threadId, undefined, 50),
   });
-  const [confirmReason, setConfirmReason] = useState("");
-  const [confirmResultText, setConfirmResultText] = useState(
-    formatStateText(decision.confirmedResult, DEFAULT_CONFIRMED_RESULT),
+  const supports = decision.evidence.filter((item) => !isObjection(item));
+  const objections = decision.evidence.filter(isObjection);
+  const [focusedMessageId, setFocusedMessageId] = useState<string | null>(supports[0]?.messageId ?? null);
+  const messagesById = useMemo(
+    () => new Map((threadMessagesQuery.data ?? []).map((message) => [message.id, message])),
+    [threadMessagesQuery.data],
   );
-  const [reconsiderReason, setReconsiderReason] = useState("");
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [evidenceForm, setEvidenceForm] = useState({
-    messageId: "",
-    evidenceType: "MESSAGE_QUOTE",
-    quoteSnapshot: "",
-    confidence: "0.8",
-  });
+  const thread = meeting.threads.find((item) => item.id === decision.threadId);
+  const status = normalizeDecisionStatus(decision.status);
+  const confirmed = status === "confirmed";
+  const summary = summaryOf(confirmed ? decision.confirmedResult : decision.proposedResult);
+
+  return (
+    <>
+      <section
+        className={`panel flex min-w-0 flex-[999_1_520px] flex-col gap-[22px] p-7 ring-2 ${confirmed ? "ring-ink" : status === "proposed" ? "ring-accent" : "ring-transparent"}`}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2.5">
+          <div className="flex flex-col gap-1.5">
+            <span className="num text-xs font-semibold text-muted">
+              {decisionTypeLabel(decision.decisionType)}
+              {thread ? ` · # ${thread.title}` : ""}
+              {decision.decidedAt ? ` · ${formatShortDateTime(decision.decidedAt)} 확정` : ""}
+            </span>
+            <h1 className="font-display m-0 text-[clamp(1.7rem,2.6vw,2.2rem)] leading-[1.2]">{decision.title}</h1>
+          </div>
+          <span className={`${decisionStatusChip(decision.status)} !px-2.5 !py-1.5 !text-xs`}>
+            {decisionStatusLabel(decision.status)}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-2.5">
+          <div className="rounded-[14px] bg-surface-2 px-3.5 py-3">
+            <span className="text-[11px] font-semibold text-muted">근거</span>
+            <b className="num block text-xl">{supports.length}개</b>
+          </div>
+          <div className="rounded-[14px] bg-risk-soft px-3.5 py-3 text-risk-ink">
+            <span className="text-[11px] font-semibold">반대</span>
+            <b className="num block text-xl">{objections.length}개</b>
+          </div>
+          {summary ? (
+            <div className="rounded-[14px] bg-surface-2 px-3.5 py-3 sm:col-span-1">
+              <span className="text-[11px] font-semibold text-muted">{confirmed ? "확정 내용" : "제안 내용"}</span>
+              <b className="block text-sm leading-snug">{summary}</b>
+            </div>
+          ) : null}
+        </div>
+
+        <section aria-label="근거 메시지" className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="m-0 text-[15px] font-bold">근거 메시지 {supports.length}</h2>
+            {decision.evidence.length ? (
+              <span className="text-xs text-muted">누르면 오른쪽 원문에서 위치를 보여줘요</span>
+            ) : null}
+          </div>
+          {supports.map((item) => {
+            const pressed = focusedMessageId === item.messageId;
+            const source = messagesById.get(item.messageId);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                aria-pressed={pressed}
+                onClick={() => setFocusedMessageId(item.messageId)}
+                className={`flex w-full items-start gap-2.5 rounded-[14px] border px-3.5 py-3 text-left text-ink transition ${
+                  pressed ? "border-accent/50 bg-accent-soft" : "border-transparent bg-surface-2 hover:border-line"
+                }`}
+              >
+                <span className="num w-11 flex-none text-xs text-muted">{timeOf(source?.createdAt ?? item.createdAt)}</span>
+                <span className="min-w-0 flex-1 text-sm leading-normal">
+                  {source ? <b>{source.speaker.displayName} </b> : null}
+                  {item.quoteSnapshot}
+                </span>
+                <span className="flex-none text-xs font-bold text-accent-text">원문 →</span>
+              </button>
+            );
+          })}
+          {objections.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              aria-pressed={focusedMessageId === item.messageId}
+              onClick={() => setFocusedMessageId(item.messageId)}
+              className="flex gap-2.5 rounded-[14px] border border-risk-ink/25 bg-risk-soft px-3.5 py-3 text-left text-sm leading-normal text-risk-ink"
+            >
+              <span className="num flex-none pt-0.5 text-xs font-semibold">반대</span>
+              <span>
+                {messagesById.get(item.messageId) ? <b>{messagesById.get(item.messageId)!.speaker.displayName} </b> : null}
+                {item.quoteSnapshot}
+              </span>
+            </button>
+          ))}
+          {decision.evidence.length === 0 ? (
+            <div className="empty-state">아직 연결된 근거가 없어요.</div>
+          ) : null}
+        </section>
+
+        {canManage ? (
+          <DecisionActions decision={decision} messages={threadMessagesQuery.data ?? []} onMutated={onMutated} />
+        ) : (
+          <p className="m-0 text-xs text-muted">확정과 재검토는 호스트·공동 호스트만 할 수 있어요.</p>
+        )}
+
+        <section aria-label="변경 이력" className="border-t border-line pt-3.5">
+          <h2 className="m-0 mb-1 text-[15px] font-bold">변경 이력</h2>
+          {decision.history.length ? (
+            decision.history.map((entry) => <HistoryRow key={entry.id} entry={entry} />)
+          ) : (
+            <p className="section-copy m-0">기록된 이력이 없어요.</p>
+          )}
+        </section>
+      </section>
+
+      <SourceThread
+        title={thread?.title ?? "원래 대화"}
+        meetingId={meeting.id}
+        threadId={decision.threadId}
+        query={threadMessagesQuery}
+        evidence={decision.evidence}
+        focusedMessageId={focusedMessageId}
+      />
+    </>
+  );
+}
+
+function SourceThread({
+  title,
+  meetingId,
+  threadId,
+  query,
+  evidence,
+  focusedMessageId,
+}: {
+  title: string;
+  meetingId: string;
+  threadId: string;
+  query: { data?: MessageView[]; isLoading: boolean; error: unknown };
+  evidence: DecisionEvidenceView[];
+  focusedMessageId: string | null;
+}) {
+  const refs = useRef(new Map<string, HTMLDivElement>());
+  const evidenceByMessage = useMemo(() => new Map(evidence.map((item) => [item.messageId, item])), [evidence]);
+  const messages = query.data ?? [];
 
   useEffect(() => {
-    setConfirmResultText(formatStateText(decision.confirmedResult, DEFAULT_CONFIRMED_RESULT));
-    setConfirmReason("");
-    setReconsiderReason("");
-    setActionError(null);
-  }, [decision.id, decision.confirmedResult]);
-
-  useEffect(() => {
-    const firstMessage = threadMessagesQuery.data?.[0];
-    if (firstMessage) {
-      setEvidenceForm({
-        messageId: firstMessage.id,
-        evidenceType: "MESSAGE_QUOTE",
-        quoteSnapshot: firstMessage.body,
-        confidence: "0.8",
-      });
+    if (focusedMessageId) {
+      refs.current.get(focusedMessageId)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
-  }, [decision.id, threadMessagesQuery.data]);
+  }, [focusedMessageId, messages.length]);
+
+  return (
+    <aside aria-label="원래 대화" className="panel flex max-h-[calc(100vh-140px)] max-w-full flex-[1_1_320px] flex-col gap-1.5 overflow-y-auto p-[18px] lg:sticky lg:top-6 lg:max-w-[420px]">
+      <div className="flex items-baseline justify-between px-1 pb-2">
+        <h2 className="m-0 text-[15px] font-bold"># {title} · 원래 대화</h2>
+        <Link href={`/meetings/${meetingId}/threads/${threadId}` as Route} className="link-accent text-xs">
+          토픽 열기
+        </Link>
+      </div>
+      {query.isLoading ? <p className="section-copy px-1">대화를 불러오는 중이에요…</p> : null}
+      {query.error ? <p className="px-1 text-sm text-danger">대화를 불러오지 못했어요.</p> : null}
+      {messages.map((message) => {
+        const linked = evidenceByMessage.get(message.id);
+        const focused = focusedMessageId === message.id;
+        const tone = focused
+          ? "bg-accent-soft shadow-[inset_0_0_0_2px_rgb(var(--accent))]"
+          : linked
+            ? isObjection(linked)
+              ? "bg-risk-soft"
+              : "bg-surface-2"
+            : "";
+        const tag = message.origin === "imported" ? "· 단톡방" : linked ? (isObjection(linked) ? "· 반대" : "· 근거") : "";
+        return (
+          <div
+            key={message.id}
+            ref={(node) => {
+              if (node) refs.current.set(message.id, node);
+              else refs.current.delete(message.id);
+            }}
+            className={`flex gap-2.5 rounded-xl px-2.5 py-2 ${tone}`}
+          >
+            <span
+              className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full text-xs font-bold text-[#15171C]"
+              style={{ background: avatarColor(message.speaker.displayName) }}
+            >
+              {initialOf(message.speaker.displayName)}
+            </span>
+            <span className="min-w-0 flex-1 text-[13px] leading-normal">
+              <span className="block text-[11px] font-bold text-muted">
+                {message.speaker.displayName} · {timeOf(message.createdAt)} {tag}
+              </span>
+              {message.body}
+            </span>
+          </div>
+        );
+      })}
+      {!query.isLoading && !query.error && messages.length === 0 ? (
+        <p className="section-copy px-1">이 토픽에는 아직 메시지가 없어요.</p>
+      ) : null}
+    </aside>
+  );
+}
+
+type ActionMode = "confirm" | "reconsider" | "evidence" | null;
+
+function DecisionActions({
+  decision,
+  messages,
+  onMutated,
+}: {
+  decision: DecisionDetailResponse;
+  messages: MessageView[];
+  onMutated: (decisionId: string) => Promise<void>;
+}) {
+  const status = normalizeDecisionStatus(decision.status);
+  const [mode, setMode] = useState<ActionMode>(null);
+  const [reason, setReason] = useState("");
+  const [resultText, setResultText] = useState(() =>
+    JSON.stringify(Object.keys(decision.proposedResult).length ? decision.proposedResult : { summary: decision.title }, null, 2),
+  );
+  const [evidenceForm, setEvidenceForm] = useState({ messageId: "", evidenceType: "support" });
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const handleError = (resourceName: string, conflictMessage: string) => (error: unknown) =>
+    setActionError(getApiErrorMessage(error, { resourceName, conflictMessage }));
+  const handleSuccess = async () => {
+    setActionError(null);
+    setMode(null);
+    setReason("");
+    await onMutated(decision.id);
+  };
 
   const confirmMutation = useMutation({
     mutationFn: (body: ConfirmDecisionRequest) => apiClient.confirmDecision(decision.id, body),
-    onSuccess: async () => {
-      setActionError(null);
-      await onMutated(decision.id);
-    },
-    onError: (error: unknown) => {
-      setActionError(
-        getApiErrorMessage(error, {
-          resourceName: "결정 확정",
-          conflictMessage: "현재 결정 상태에서는 확정을 진행할 수 없습니다.",
-        }),
-      );
-    },
+    onSuccess: handleSuccess,
+    onError: handleError("결정 확정", "현재 결정 상태에서는 확정을 진행할 수 없습니다."),
   });
-
-  const addEvidenceMutation = useMutation({
-    mutationFn: (body: AddDecisionEvidenceRequest) => apiClient.addDecisionEvidence(decision.id, body),
-    onSuccess: async () => {
-      setActionError(null);
-      await onMutated(decision.id);
-    },
-    onError: (error: unknown) => {
-      setActionError(
-        getApiErrorMessage(error, {
-          resourceName: "Evidence 추가",
-          conflictMessage: "현재 결정 상태에서는 evidence를 추가할 수 없습니다.",
-        }),
-      );
-    },
-  });
-
   const reconsiderMutation = useMutation({
     mutationFn: (body: ReconsiderDecisionRequest) => apiClient.reconsiderDecision(decision.id, body),
-    onSuccess: async () => {
-      setActionError(null);
-      await onMutated(decision.id);
-    },
-    onError: (error: unknown) => {
-      setActionError(
-        getApiErrorMessage(error, {
-          resourceName: "재검토 요청",
-          conflictMessage: "현재 결정 상태에서는 재검토 요청을 보낼 수 없습니다.",
-        }),
-      );
-    },
+    onSuccess: handleSuccess,
+    onError: handleError("재검토 요청", "현재 결정 상태에서는 재검토 요청을 보낼 수 없습니다."),
+  });
+  const evidenceMutation = useMutation({
+    mutationFn: (body: AddDecisionEvidenceRequest) => apiClient.addDecisionEvidence(decision.id, body),
+    onSuccess: handleSuccess,
+    onError: handleError("근거 추가", "현재 결정 상태에서는 근거를 추가할 수 없습니다."),
   });
 
-  function handleConfirmSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function submitConfirm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setActionError(null);
-
     let confirmedResult: Record<string, unknown>;
     try {
-      confirmedResult = parseJsonObject(confirmResultText);
+      confirmedResult = parseJsonObject(resultText);
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "확정 결과 JSON 형식이 올바르지 않습니다.");
+      setActionError(error instanceof Error ? error.message : "확정 내용 JSON 형식이 올바르지 않습니다.");
       return;
     }
+    confirmMutation.mutate({ confirmedResult, reason: reason.trim() || undefined });
+  }
 
-    confirmMutation.mutate({
-      confirmedResult,
-      reason: confirmReason.trim() || undefined,
+  function submitReconsider(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    reconsiderMutation.mutate({ reason: reason.trim() });
+  }
+
+  function submitEvidence(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const message = messages.find((item) => item.id === evidenceForm.messageId);
+    if (!message) {
+      setActionError("근거로 연결할 메시지를 골라 주세요.");
+      return;
+    }
+    evidenceMutation.mutate({
+      messageId: message.id,
+      evidenceType: evidenceForm.evidenceType,
+      quoteSnapshot: message.body,
     });
   }
 
-  function handleReconsiderSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function open(next: ActionMode) {
     setActionError(null);
-    reconsiderMutation.mutate({
-      reason: reconsiderReason.trim(),
-    });
-  }
-
-  function handleAddEvidenceSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setActionError(null);
-
-    const confidence = evidenceForm.confidence.trim()
-      ? Number.parseFloat(evidenceForm.confidence)
-      : undefined;
-
-    if (confidence !== undefined && Number.isNaN(confidence)) {
-      setActionError("신뢰도는 숫자로 입력해 주세요.");
-      return;
-    }
-
-    addEvidenceMutation.mutate({
-      messageId: evidenceForm.messageId,
-      evidenceType: evidenceForm.evidenceType.trim(),
-      quoteSnapshot: evidenceForm.quoteSnapshot.trim() || undefined,
-      confidence,
-    });
+    setReason("");
+    setMode((current) => (current === next ? null : next));
   }
 
   return (
-    <div className="mt-3 space-y-6">
-      <div>
-        <div className="flex items-center justify-between gap-4">
-          <h3 className="font-display text-3xl">
-            {decision.title}
-          </h3>
-          <StatusBadge status={decision.status} />
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2 text-sm text-ink/62">
-          <span className="rounded-full border border-line px-3 py-1">
-            Type {decision.decisionType}
+    <div className="flex flex-col gap-3">
+      {status === "confirmed" ? (
+        <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-[14px] bg-surface-2 px-3.5 py-3 text-sm">
+          <span>
+            확정된 결정이에요. 근거 {decision.evidence.filter((item) => !isObjection(item)).length}개와 반대{" "}
+            {decision.evidence.filter(isObjection).length}개가 함께 기록됐어요.
           </span>
-          <Link
-            href={`/meetings/${meetingId}/threads/${decision.threadId}`}
-            className="rounded-full border border-line px-3 py-1 transition hover:bg-surface"
-          >
-            Open thread
-          </Link>
+          <button type="button" onClick={() => open("reconsider")} className="link-accent min-h-[44px] px-2">
+            다시 정하기
+          </button>
         </div>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <StateCard title="Proposed result" state={decision.proposedResult} />
-        <StateCard title="Confirmed result" state={decision.confirmedResult} />
-      </div>
-
-      <section className="rounded-[1.75rem] border border-line bg-surface p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h4 className="font-display text-2xl">
-              Status actions
-            </h4>
-            <p className="mt-2 text-sm leading-6 text-ink/64">
-              제안 결과를 확정하거나, 사유를 남기고 재검토 상태로 전환할 수 있습니다.
-            </p>
-          </div>
-          <span className="rounded-full border border-line px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-ink/52">
-            {decision.status}
-          </span>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => open("confirm")} className="action-primary min-h-[48px] px-[22px] text-[15px]">
+            확정하기
+          </button>
+          <button type="button" onClick={() => open("evidence")} className="action-secondary">
+            근거 추가
+          </button>
+          <button type="button" onClick={() => open("reconsider")} className="action-secondary">
+            재검토 요청
+          </button>
         </div>
+      )}
 
-        {canManage ? (
-          <div className="mt-5 grid gap-4 xl:grid-cols-2">
-            <form
-              className="rounded-[1.5rem] border border-line bg-surface p-4"
-              onSubmit={handleConfirmSubmit}
-            >
-              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                Confirm decision
-              </div>
-              <textarea
-                value={confirmResultText}
-                onChange={(event) => setConfirmResultText(event.target.value)}
-                className="mt-3 min-h-[180px] w-full rounded-[1.2rem] border border-line bg-ink px-4 py-4 font-mono text-xs leading-6 text-mist outline-none transition focus:border-pine"
-                spellCheck={false}
-              />
-              <input
-                value={confirmReason}
-                onChange={(event) => setConfirmReason(event.target.value)}
-                className="mt-3 w-full rounded-[1.2rem] border border-line bg-surface px-4 py-3 text-sm outline-none transition focus:border-pine"
-                placeholder="확정 사유 또는 비고"
-              />
-              <button
-                type="submit"
-                disabled={confirmMutation.isPending}
-                className="mt-3 rounded-full bg-pine px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink disabled:cursor-not-allowed disabled:bg-pine/40"
-              >
-                {confirmMutation.isPending ? "확정 중..." : "결정 확정"}
-              </button>
-            </form>
-
-            <form
-              className="rounded-[1.5rem] border border-line bg-surface p-4"
-              onSubmit={handleReconsiderSubmit}
-            >
-              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                Reconsider
-              </div>
-              <textarea
-                value={reconsiderReason}
-                onChange={(event) => setReconsiderReason(event.target.value)}
-                className="mt-3 min-h-[180px] w-full rounded-[1.2rem] border border-line bg-surface px-4 py-4 text-sm leading-6 outline-none transition focus:border-ember"
-                placeholder="재검토 사유를 남겨 주세요."
-                required
-              />
-              <button
-                type="submit"
-                disabled={reconsiderMutation.isPending}
-                className="mt-3 rounded-full bg-ember px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink disabled:cursor-not-allowed disabled:bg-ember/40"
-              >
-                {reconsiderMutation.isPending ? "전환 중..." : "재검토 요청"}
-              </button>
-            </form>
-          </div>
-        ) : (
-          <div className="mt-5">
-            <HostOnlyNotice message="현재 프론트엔드에서는 회의 소유자에게만 결정 확정, 재검토, evidence 추가 액션을 노출합니다." />
-          </div>
-        )}
-
-        {actionError ? <div className="mt-4 text-sm text-ember">{actionError}</div> : null}
-      </section>
-
-      <section className="rounded-[1.75rem] border border-line bg-surface p-5">
-        <div className="flex items-center justify-between gap-4">
-          <h4 className="font-display text-2xl">
-            Evidence
-          </h4>
-          <span className="text-sm text-ink/55">{decision.evidence.length}건</span>
-        </div>
-        {canManage ? (
-          <form
-            className="mt-4 rounded-[1.5rem] border border-line bg-surface p-4"
-            onSubmit={handleAddEvidenceSubmit}
-          >
-          <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-            <div className="space-y-4">
-              <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                  Source message
-                </span>
-                <select
-                  value={evidenceForm.messageId}
-                  onChange={(event) => {
-                    const nextMessage = threadMessagesQuery.data?.find(
-                      (message) => message.id === event.target.value,
-                    );
-                    setEvidenceForm((current) => ({
-                      ...current,
-                      messageId: event.target.value,
-                      quoteSnapshot: nextMessage?.body ?? current.quoteSnapshot,
-                    }));
-                  }}
-                  className="mt-2 w-full rounded-[1.2rem] border border-line bg-surface px-4 py-3 text-sm outline-none transition focus:border-pine"
-                  disabled={threadMessagesQuery.isLoading || addEvidenceMutation.isPending}
-                >
-                  {(threadMessagesQuery.data ?? []).map((message) => (
-                    <option key={message.id} value={message.id}>
-                      {formatDateTime(message.createdAt)} · {truncateText(message.body, 72)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="grid gap-4 md:grid-cols-[1fr_0.8fr]">
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                    Evidence type
-                  </span>
-                  <input
-                    value={evidenceForm.evidenceType}
-                    onChange={(event) =>
-                      setEvidenceForm((current) => ({
-                        ...current,
-                        evidenceType: event.target.value,
-                      }))
-                    }
-                    className="mt-2 w-full rounded-[1.2rem] border border-line bg-surface px-4 py-3 text-sm outline-none transition focus:border-pine"
-                    placeholder="MESSAGE_QUOTE"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                    Confidence
-                  </span>
-                  <input
-                    value={evidenceForm.confidence}
-                    onChange={(event) =>
-                      setEvidenceForm((current) => ({
-                        ...current,
-                        confidence: event.target.value,
-                      }))
-                    }
-                    className="mt-2 w-full rounded-[1.2rem] border border-line bg-surface px-4 py-3 text-sm outline-none transition focus:border-pine"
-                    placeholder="0.8"
-                  />
-                </label>
-              </div>
-            </div>
-
-            <label className="block">
-              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                Quote snapshot
-              </span>
-              <textarea
-                value={evidenceForm.quoteSnapshot}
-                onChange={(event) =>
-                  setEvidenceForm((current) => ({
-                    ...current,
-                    quoteSnapshot: event.target.value,
-                  }))
-                }
-                className="mt-2 min-h-[170px] w-full rounded-[1.2rem] border border-line bg-surface px-4 py-4 text-sm leading-6 outline-none transition focus:border-pine"
-                placeholder="결정의 근거가 되는 메시지 요약 또는 인용문"
-              />
-            </label>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-ink/60">
-              {threadMessagesQuery.isLoading
-                ? "메시지 후보를 불러오는 중입니다."
-                : threadMessagesQuery.data?.length
-                  ? "선택한 메시지 본문을 기본 인용문으로 불러옵니다."
-                  : "현재 스레드에 연결할 메시지가 없습니다."}
-            </div>
-            <button
-              type="submit"
-              disabled={
-                addEvidenceMutation.isPending ||
-                threadMessagesQuery.isLoading ||
-                !threadMessagesQuery.data?.length
-              }
-              className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:bg-ink/40"
-            >
-              {addEvidenceMutation.isPending ? "추가 중..." : "Evidence 추가"}
+      {mode === "confirm" ? (
+        <form onSubmit={submitConfirm} className="inset-card flex flex-col gap-3">
+          <label className="flex flex-col gap-1.5 text-sm font-semibold">
+            확정 메모 (선택)
+            <input
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              className="field"
+              placeholder="예: 7/8 응답 후 조기 마감"
+            />
+          </label>
+          <details>
+            <summary className="cursor-pointer text-xs font-semibold text-muted">확정 내용 직접 편집 (JSON)</summary>
+            <textarea
+              value={resultText}
+              onChange={(event) => setResultText(event.target.value)}
+              className="mono-panel mt-2 min-h-[140px] w-full border border-line"
+              spellCheck={false}
+            />
+          </details>
+          <div className="flex gap-2">
+            <button type="submit" disabled={confirmMutation.isPending} className="action-primary">
+              {confirmMutation.isPending ? "확정 중…" : "이대로 확정"}
+            </button>
+            <button type="button" onClick={() => setMode(null)} className="btn-ghost">
+              취소
             </button>
           </div>
-          </form>
+        </form>
+      ) : null}
+
+      {mode === "reconsider" ? (
+        <form onSubmit={submitReconsider} className="flex flex-col gap-3 rounded-xl bg-risk-soft p-4 text-risk-ink">
+          <label className="flex flex-col gap-1.5 text-sm font-semibold">
+            왜 다시 정해야 하나요?
+            <textarea
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              className="field min-h-[96px]"
+              placeholder="예: 항공편 시간이 바뀌었어요"
+              required
+            />
+          </label>
+          <div className="flex gap-2">
+            <button type="submit" disabled={reconsiderMutation.isPending} className="action-primary">
+              {reconsiderMutation.isPending ? "바꾸는 중…" : "재검토로 돌리기"}
+            </button>
+            <button type="button" onClick={() => setMode(null)} className="btn-ghost">
+              취소
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      {mode === "evidence" ? (
+        <form onSubmit={submitEvidence} className="inset-card flex flex-col gap-3">
+          <label className="flex flex-col gap-1.5 text-sm font-semibold">
+            근거 메시지
+            <select
+              value={evidenceForm.messageId}
+              onChange={(event) => setEvidenceForm((current) => ({ ...current, messageId: event.target.value }))}
+              className="field"
+              required
+            >
+              <option value="">메시지를 골라 주세요</option>
+              {messages.map((message) => (
+                <option key={message.id} value={message.id}>
+                  {timeOf(message.createdAt)} {message.speaker.displayName} · {truncateText(message.body, 60)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <fieldset className="flex flex-wrap gap-2">
+            <legend className="mb-1.5 text-sm font-semibold">종류</legend>
+            {EVIDENCE_TYPES.map((type) => (
+              <label key={type.value} className="chip cursor-pointer has-[:checked]:border-accent has-[:checked]:text-accent-text">
+                <input
+                  type="radio"
+                  name="evidence-type"
+                  value={type.value}
+                  checked={evidenceForm.evidenceType === type.value}
+                  onChange={() => setEvidenceForm((current) => ({ ...current, evidenceType: type.value }))}
+                  className="sr-only"
+                />
+                {type.label}
+              </label>
+            ))}
+          </fieldset>
+          <div className="flex gap-2">
+            <button type="submit" disabled={evidenceMutation.isPending || messages.length === 0} className="action-primary">
+              {evidenceMutation.isPending ? "연결 중…" : "근거 연결"}
+            </button>
+            <button type="button" onClick={() => setMode(null)} className="btn-ghost">
+              취소
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      {actionError ? (
+        <p role="alert" className="m-0 text-sm text-danger">
+          {actionError}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function CreateDecisionPanel({
+  meeting,
+  onCancel,
+  onCreated,
+}: {
+  meeting: MeetingDetailResponse;
+  onCancel?: () => void;
+  onCreated: (decisionId: string) => Promise<void>;
+}) {
+  const [form, setForm] = useState({
+    threadId: meeting.threads[0]?.id ?? "",
+    decisionType: "other",
+    title: "",
+    summary: "",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const createMutation = useMutation({
+    mutationFn: (body: CreateDecisionRequest) => apiClient.createDecision(meeting.id, body),
+    onSuccess: async (created) => {
+      setError(null);
+      await onCreated(created.id);
+    },
+    onError: (mutationError: unknown) =>
+      setError(
+        getApiErrorMessage(mutationError, {
+          resourceName: "결정 생성",
+          conflictMessage: "현재 회의 또는 스레드 상태에서는 결정을 생성할 수 없습니다.",
+        }),
+      ),
+  });
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    createMutation.mutate({
+      threadId: form.threadId,
+      decisionType: form.decisionType,
+      title: form.title.trim(),
+      proposedResult: form.summary.trim() ? { summary: form.summary.trim() } : {},
+    });
+  }
+
+  return (
+    <form onSubmit={submit} className="panel flex flex-col gap-4 p-7">
+      <div className="flex items-center gap-2">
+        <LogoMark size={22} />
+        <h1 className="font-display m-0 text-2xl">새 결정 만들기</h1>
+      </div>
+      <p className="section-copy m-0">토픽을 고르고 무엇을 정할지 적어 주세요. 근거는 만든 뒤에 연결할 수 있어요.</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold">
+          토픽
+          <select
+            value={form.threadId}
+            onChange={(event) => setForm((current) => ({ ...current, threadId: event.target.value }))}
+            className="field"
+          >
+            {meeting.threads.map((thread) => (
+              <option key={thread.id} value={thread.id}>
+                # {thread.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-semibold">
+          종류
+          <select
+            value={form.decisionType}
+            onChange={(event) => setForm((current) => ({ ...current, decisionType: event.target.value }))}
+            className="field"
+          >
+            {DECISION_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {decisionTypeLabel(type)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <label className="flex flex-col gap-1.5 text-sm font-semibold">
+        제목
+        <input
+          value={form.title}
+          onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+          className="field"
+          placeholder="예: 애월 독채"
+          required
+        />
+      </label>
+      <label className="flex flex-col gap-1.5 text-sm font-semibold">
+        제안 내용 (선택)
+        <textarea
+          value={form.summary}
+          onChange={(event) => setForm((current) => ({ ...current, summary: event.target.value }))}
+          className="field min-h-[88px]"
+          placeholder="예: 6인실 + 넓은 거실, 1박 1인 6만원대"
+        />
+      </label>
+      {error ? (
+        <p role="alert" className="m-0 text-sm text-danger">
+          {error}
+        </p>
+      ) : null}
+      <div className="flex gap-2">
+        <button type="submit" disabled={createMutation.isPending || meeting.threads.length === 0} className="action-primary">
+          {createMutation.isPending ? "만드는 중…" : "결정 만들기"}
+        </button>
+        {onCancel ? (
+          <button type="button" onClick={onCancel} className="btn-ghost">
+            취소
+          </button>
         ) : null}
-        <div className="mt-4 space-y-3">
-          {decision.evidence.length ? (
-            decision.evidence.map((item) => (
-              <article
-                key={item.id}
-                className="rounded-[1.5rem] border border-line bg-surface p-4"
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                    {item.evidenceType}
-                  </span>
-                  <span className="text-xs text-ink/45">
-                    {item.createdAt ? formatDateTime(item.createdAt) : "시간 미기록"}
-                  </span>
-                </div>
-                <p className="mt-3 text-sm leading-6 text-ink/82">{item.quoteSnapshot}</p>
-              </article>
-            ))
-          ) : (
-            <div className="text-sm text-ink/58">아직 연결된 evidence가 없습니다.</div>
-          )}
-        </div>
-      </section>
+      </div>
+    </form>
+  );
+}
 
-      <section className="rounded-[1.75rem] border border-line bg-surface p-5">
-        <div className="flex items-center justify-between gap-4">
-          <h4 className="font-display text-2xl">
-            History
-          </h4>
-          <span className="text-sm text-ink/55">{decision.history.length}건</span>
-        </div>
-        <div className="mt-4 space-y-4">
-          {decision.history.length ? (
-            decision.history.map((entry) => <HistoryEntry key={entry.id} entry={entry} />)
-          ) : (
-            <div className="text-sm text-ink/58">기록된 상태 이력이 없습니다.</div>
-          )}
-        </div>
-      </section>
+function HistoryRow({ entry }: { entry: DecisionHistoryView }) {
+  return (
+    <div className="flex gap-2.5 py-2 text-[13px] leading-[1.45]">
+      <span className="num w-20 flex-none text-xs text-muted">{formatShortDateTime(entry.createdAt)}</span>
+      <span>
+        {HISTORY_LABELS[entry.action.toLowerCase()] ?? entry.action}
+        {entry.reason ? <span className="block text-muted">{entry.reason}</span> : null}
+      </span>
     </div>
   );
 }
 
-function StateCard({
-  title,
-  state,
-}: {
-  title: string;
-  state: Record<string, unknown>;
-}) {
-  return (
-    <section className="rounded-[1.75rem] border border-line bg-surface p-5">
-      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">{title}</div>
-      <pre className="mt-3 overflow-x-auto rounded-[1.25rem] bg-ink px-4 py-4 text-xs leading-6 text-mist">
-        {JSON.stringify(state, null, 2)}
-      </pre>
-    </section>
-  );
-}
-
-function HistoryEntry({ entry }: { entry: DecisionHistoryView }) {
-  return (
-    <article className="rounded-[1.5rem] border border-line bg-surface p-4">
-      <div className="flex items-center justify-between gap-4">
-        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-          {entry.action}
-        </div>
-        <div className="text-xs text-ink/45">
-          {entry.createdAt ? formatDateTime(entry.createdAt) : "시간 미기록"}
-        </div>
-      </div>
-      {entry.reason ? <p className="mt-3 text-sm text-ink/78">{entry.reason}</p> : null}
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        <MiniState title="Before" state={entry.beforeState} />
-        <MiniState title="After" state={entry.afterState} />
-      </div>
-    </article>
-  );
-}
-
-function MiniState({
-  title,
-  state,
-}: {
-  title: string;
-  state: Record<string, unknown>;
-}) {
-  return (
-    <div className="rounded-[1.25rem] bg-mist/70 p-3">
-      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">{title}</div>
-      <pre className="mt-2 overflow-x-auto text-xs leading-5 text-ink/76">
-        {JSON.stringify(state, null, 2)}
-      </pre>
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const tone =
-    status === "CONFIRMED"
-      ? "bg-pine/12 text-pine border-pine/15"
-      : status === "NEEDS_RECONSIDERATION"
-        ? "bg-ember/12 text-ember border-ember/15"
-        : "bg-sky/18 text-ink border-sky/20";
-
-  return (
-    <span
-      className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] ${tone}`}
-    >
-      {status.replaceAll("_", " ")}
-    </span>
-  );
-}
-
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("ko-KR", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+function timeOf(value?: string | null) {
+  if (!value) {
+    return "";
+  }
+  return new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
 }
 
 function truncateText(value: string, limit: number) {
-  if (value.length <= limit) {
-    return value;
-  }
-  return `${value.slice(0, limit - 1)}…`;
+  return value.length <= limit ? value : `${value.slice(0, limit - 1)}…`;
 }
 
 function parseJsonObject(value: string): Record<string, unknown> {
@@ -792,10 +778,6 @@ function parseJsonObject(value: string): Record<string, unknown> {
     throw new Error("JSON은 객체 형태여야 합니다.");
   }
   return parsed as Record<string, unknown>;
-}
-
-function formatStateText(state: Record<string, unknown>, fallback: string) {
-  return Object.keys(state).length ? JSON.stringify(state, null, 2) : fallback;
 }
 
 async function invalidateDecisionQueries(

@@ -72,6 +72,8 @@ const DECISION_TYPE_LABELS: Record<string, string> = {
   budget: "예산",
   departure: "출발",
   schedule: "일정",
+  task: "할 일",
+  other: "기타",
   general: "일반",
 };
 
