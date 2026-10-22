@@ -1,6 +1,6 @@
 # Web Redesign Plan
 
-Status: In progress (2026-10-21).
+Status: Done (2026-10-22). Units 1–9 landed as separate `web` commits.
 
 Apply the approved web design to `apps/web`. The design lives in the "웹 시안" page of the design canvas (private Claude artifact `3sVk5XAhY2RjnrAjcdoPKa`, boards W-1 to W-6 plus dark variants). The mobile boards on the "화면 흐름" page are the reference for screens the web set does not cover.
 
@@ -37,8 +37,8 @@ Apply the approved web design to `apps/web`. The design lives in the "웹 시안
 
 | Board | Route | Main components |
 | --- | --- | --- |
-| W-1 Landing | `/` | `app/page.tsx`, `marketing-hero.tsx`, `site-header.tsx` |
-| W-2 Meeting dashboard | `/meetings/[meetingId]` | new `meeting-shell.tsx` (top bar + sidebar) in `meetings/[meetingId]/layout.tsx`, `meeting-overview.tsx` |
+| W-1 Landing | `/` | `app/page.tsx`, `landing/landing-page.tsx` |
+| W-2 Meeting dashboard | `/meetings/[meetingId]` | `meeting/meeting-shell.tsx` (top bar + sidebar) in `meetings/[meetingId]/layout.tsx`, `meeting-overview.tsx` |
 | W-3 Decision detail, 3 panes | `/meetings/[meetingId]/decisions` | `decision-board.tsx` |
 | W-4 Shared report | `/meetings/[meetingId]/reports/latest`, `/invite/[token]` preview | `report-workspace.tsx`, `import/invite-preview.tsx` |
 | W-5 Chat import | `/import`, `/meetings/[meetingId]/import` | `import/import-wizard.tsx` |
@@ -71,5 +71,14 @@ Shown only when the API provides the data; otherwise the element is omitted, not
 
 ## Risks
 
-- `apps/web` had 33 uncommitted files when this plan was written. They must be committed, stashed, or discarded by the user before unit 1 so redesign commits do not mix with unrelated changes.
+- `apps/web` had 33 uncommitted files when this plan was written. They were committed on their own (`style(web): refresh cobalt editorial styling across screens`) before unit 1.
 - Copy changes can break text-based test selectors; fix them in the same unit that changes the copy.
+
+## Implementation Notes
+
+- Tokens live in `app/globals.css` as RGB channels and are mapped in `tailwind.config.ts` (`bg`, `surface`, `surface-2`, `ink`, `on-ink`, `muted`, `line`, `accent*`, `warn-*`, `risk-*`, `danger`, `band`). Legacy names (`pine`, `ember`, `mist`, `sand`, `sky`) alias the new tokens.
+- Shared helpers for status labels, chips, decision columns, notification summaries, and avatar colors are in `lib/display.ts`.
+- Frames: `components/meeting/meeting-shell.tsx` for meeting routes (the decision route hides the sidebar for the three-pane view) and `components/standalone-shell.tsx` for everything else. The landing page has its own header.
+- The old `section-shell`, `site-header`, `session-badge`, `marketing-hero`, `status-grid`, and `placeholder-route` components were removed.
+- Fixes found while redesigning: decision and evidence types are now selects of valid backend enum values (`CONSENSUS` / `MESSAGE_QUOTE` were rejected), the vote screen compares status case-insensitively (the API returns lowercase), and the vote host-access hook no longer runs after early returns.
+- Still omitted because the API lacks the data: D-day and trip dates, member avatars and names (tasks show "나 / 멤버 / 담당 없음"), budget on meeting creation, notification read state, and a public share link for the report (the share button creates an invite link).

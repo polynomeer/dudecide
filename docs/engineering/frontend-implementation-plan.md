@@ -16,6 +16,9 @@ This document defines the remaining frontend scope for Dudecide MVP and fixes th
 - core workspace screens now distinguish `401`, `403`, `404`, and `409` responses through shared API error handling
 - shared styling, query provider wiring, and a minimal backend API client exist
 - Playwright E2E smoke coverage now exists for guest-session to meeting-creation and invite-join flows
+- the approved web design (W-1 to W-6, light and dark) is applied across every route; see [`web-redesign-plan.md`](./web-redesign-plan.md) for tokens, shells, and remaining data gaps
+- every route under `/meetings/[meetingId]` renders inside a shared meeting shell (top bar + sidebar); `/start`, `/meetings/new`, `/invite/[token]`, `/import`, and `/votes/[voteId]` use a standalone frame
+- decision detail deep-links with `?decision=<id>` and meeting search with `?q=<keyword>`
 
 Conclusion:
 
