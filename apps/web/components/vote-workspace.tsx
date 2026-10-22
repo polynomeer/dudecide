@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiErrorPanel } from "@/components/api-error-panel";
@@ -8,7 +9,6 @@ import { HostOnlyNotice } from "@/components/host-only-notice";
 import { getApiErrorMessage } from "@/lib/api/error-display";
 import {
   apiClient,
-  type VoteAggregateOptionView,
   type VoteResponseView,
 } from "@/lib/api/client";
 import { MeetingRealtimeBridge } from "@/components/meeting-realtime-bridge";
@@ -102,8 +102,10 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
     [voteQuery.data],
   );
 
+  const access = useMeetingHostAccess(voteQuery.data?.meetingId);
+
   if (voteQuery.isLoading) {
-    return <div className="panel px-6 py-6 text-sm text-ink/60">투표 작업공간을 불러오는 중입니다.</div>;
+    return <div className="panel px-6 py-6 text-sm text-muted">투표를 불러오는 중이에요…</div>;
   }
 
   if (voteQuery.error || !voteQuery.data) {
@@ -111,260 +113,207 @@ export function VoteWorkspace({ voteId }: { voteId: string }) {
   }
 
   const vote = voteQuery.data;
-  const access = useMeetingHostAccess(vote.meetingId);
+  const status = vote.status.toLowerCase();
+  const isOpen = status === "open";
+  const isFinished = status === "closed" || status === "superseded";
+  const aggregates = vote.aggregates;
+  const ranked = [...(aggregates?.options ?? [])].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99));
+  const maxScore = Math.max(1, ...ranked.map((option) => option.rawScore ?? 0));
+  const meetingHref = `/meetings/${vote.meetingId}` as Route;
 
   return (
     <>
       <MeetingRealtimeBridge meetingId={vote.meetingId} voteId={vote.voteId} />
-      <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
-        <section className="panel px-6 py-6">
-          <div className="info-chip">Vote summary</div>
-          <h2 className="mt-4 font-display text-4xl leading-[0.96]">
-            {labelForVoteType(vote.voteType)}
-          </h2>
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <Metric label="Status" value={vote.status} />
-            <Metric label="Options" value={String(vote.options.length)} />
-            <Metric
-              label="Responded"
-              value={`${vote.aggregates?.respondedParticipants ?? 0}/${vote.aggregates?.totalParticipants ?? 0}`}
-            />
-            <Metric label="Deadline" value={vote.deadlineAt ? formatDateTime(vote.deadlineAt) : "미설정"} />
-          </div>
-          <div className="mt-5 flex flex-wrap gap-2 text-sm text-ink/62">
-            {vote.decisionId ? (
-              <Link href={`/meetings/${vote.meetingId}/decisions`} className="action-secondary">
-                Decision board
-              </Link>
-            ) : null}
-            <Link href={`/meetings/${vote.meetingId}/threads/${vote.threadId}`} className="action-secondary">
-              Open thread
-            </Link>
-            <Link href={`/meetings/${vote.meetingId}`} className="action-secondary">
-              Meeting overview
-            </Link>
-          </div>
+      <div className="flex flex-col gap-1.5">
+        <Link href={meetingHref} className="inline-flex min-h-[44px] items-center self-start text-[13px] font-semibold text-muted hover:text-ink">
+          ← {access.meetingQuery.data?.title ?? "모임으로"}
+        </Link>
+        <span className="num text-[11px] font-semibold tracking-[0.06em] text-accent-text">
+          {labelForVoteType(vote.voteType)} · {VOTE_STATUS_LABELS[status] ?? vote.status}
+        </span>
+        <h1 className="font-display m-0 text-[clamp(1.8rem,3.4vw,2.4rem)]">{VOTE_TITLES[vote.voteType] ?? "투표"}</h1>
+        <p className="m-0 text-[13px] text-muted">
+          {aggregates
+            ? `${aggregates.totalParticipants}명 중 ${aggregates.respondedParticipants}명 응답`
+            : "아직 응답이 없어요"}
+          {vote.deadlineAt ? ` · ${formatDateTime(vote.deadlineAt)} 마감` : ""} · 반대가 적은 안을 먼저 추천해요
+        </p>
+      </div>
 
-          <form
-            className="mt-6 rounded-[1.75rem] border border-line bg-surface p-5"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setErrorMessage(null);
-              submitMutation.mutate(vote);
-            }}
-          >
-            <div className="flex items-center justify-between gap-4">
-              <h3 className="font-display text-2xl">
-                내 응답
-              </h3>
-              <span className="text-sm text-ink/55">
-                {hasAllResponses ? "모든 옵션 응답 완료" : "미응답 옵션이 있습니다"}
-              </span>
-            </div>
-
-          <div className="mt-4 space-y-4">
-            {vote.options.map((option) => (
-              <article
-                key={option.id}
-                className="rounded-[1.5rem] border border-line bg-surface p-4"
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="text-lg font-semibold text-ink">{option.label}</div>
-                    <div className="mt-1 text-xs uppercase tracking-[0.16em] text-ink/45">
-                      {option.optionType}
+      <div className="flex flex-wrap items-start gap-5">
+        <section aria-label="추천 순위" className="flex min-w-0 flex-[1_1_360px] flex-col gap-1.5">
+          {ranked.length ? (
+            ranked.map((option, index) => {
+              const top = index === 0 && leadingIds.has(option.optionId);
+              const width = `${Math.round(((option.rawScore ?? 0) / maxScore) * 100)}%`;
+              return (
+                <div
+                  key={option.optionId}
+                  className={`flex items-center gap-3 rounded-[14px] px-3.5 py-3 ${top ? "bg-accent text-on-accent" : "bg-surface text-ink"}`}
+                >
+                  <span className="num w-[22px] text-sm font-semibold">{String(option.rank ?? index + 1).padStart(2, "0")}</span>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="text-[15px] font-bold">{option.label}</span>
+                      <span className="num text-[11px]">
+                        {Object.entries(option.counts)
+                          .map(([key, value]) => `${CHOICE_LABELS[key] ?? key} ${value}`)
+                          .join(" · ")}
+                      </span>
+                    </div>
+                    <div className={`h-1.5 rounded-[3px] ${top ? "bg-white/25" : "bg-line"}`}>
+                      <div className={`h-1.5 rounded-[3px] ${top ? "bg-white" : "bg-ink"}`} style={{ width }} />
                     </div>
                   </div>
-                  {leadingIds.has(option.id) ? (
-                    <span className="rounded-full border border-pine/20 bg-pine/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-pine">
-                      Leading
-                    </span>
-                  ) : null}
                 </div>
-                {Object.keys(option.payload).length ? (
-                  <pre className="mt-3 overflow-x-auto rounded-[1.25rem] bg-mist/90 px-3 py-3 text-xs leading-5 text-ink/75">
-                    {JSON.stringify(option.payload, null, 2)}
-                  </pre>
-                ) : null}
-                <div className="mt-4 flex flex-wrap gap-2">
+              );
+            })
+          ) : (
+            <div className="empty-state">아직 집계할 응답이 없어요.</div>
+          )}
+
+          {aggregates?.canEarlyClose && isOpen ? (
+            <div className="mt-1.5 flex gap-2.5 rounded-[14px] bg-accent-soft px-3.5 py-3 text-[13px] leading-[1.45] text-accent-soft-ink">
+              <span aria-hidden="true">ⓘ</span>
+              <span>
+                남은 {aggregates.unresolvedParticipants}명이 응답해도 1위가 바뀌지 않아요. 지금 마감해도 돼요.
+              </span>
+            </div>
+          ) : null}
+
+          <div className="mt-2 flex flex-wrap gap-2">
+            {access.isHost ? (
+              <button
+                type="button"
+                onClick={() => closeMutation.mutate()}
+                disabled={closeMutation.isPending || isFinished}
+                className="action-primary min-h-[48px] flex-1"
+              >
+                {closeMutation.isPending ? "마감 중…" : isFinished ? "마감된 투표" : "투표 마감"}
+              </button>
+            ) : (
+              <HostOnlyNotice message="투표 마감은 호스트가 해요." />
+            )}
+            {vote.decisionId ? (
+              <Link href={`/meetings/${vote.meetingId}/decisions?decision=${vote.decisionId}` as Route} className="action-secondary min-h-[48px]">
+                결정 보기
+              </Link>
+            ) : null}
+            <Link href={`/meetings/${vote.meetingId}/threads/${vote.threadId}` as Route} className="action-secondary min-h-[48px]">
+              토픽 열기
+            </Link>
+          </div>
+        </section>
+
+        <form
+          aria-label="내 응답"
+          className="panel flex min-w-0 flex-[1_1_420px] flex-col gap-3 p-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setErrorMessage(null);
+            submitMutation.mutate(vote);
+          }}
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="m-0 text-base font-bold">내 응답</h2>
+            <span className={`text-xs font-semibold ${hasAllResponses ? "text-muted" : "text-warn-ink"}`}>
+              {hasAllResponses ? "모두 응답했어요" : "아직 고르지 않은 후보가 있어요"}
+            </span>
+          </div>
+          <ul className="m-0 flex list-none flex-col p-0">
+            {vote.options.map((option) => (
+              <li key={option.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-line py-3 first:border-t-0">
+                <span className="min-w-0">
+                  <b className="text-sm">{option.label}</b>
+                  {leadingIds.has(option.id) ? <span className="chip-voting ml-2">1위</span> : null}
+                </span>
+                <span role="radiogroup" aria-label={`${option.label} 응답`} className="flex gap-1">
                   {allowedChoices.map((choice) => {
                     const selected = draftResponses[option.id] === choice.value;
                     return (
                       <button
                         key={choice.value}
                         type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        disabled={!isOpen}
                         onClick={() =>
                           setDraftResponses((current) => ({
                             ...current,
                             [option.id]: choice.value,
                           }))
                         }
-                        className={[
-                          "rounded-full border px-4 py-2 text-sm font-semibold transition",
-                          selected
-                            ? "border-pine bg-pine text-white"
-                            : "border-line bg-surface text-ink hover:bg-white",
-                        ].join(" ")}
+                        className={`min-h-[40px] rounded-[10px] border px-3 text-[13px] font-bold transition disabled:cursor-not-allowed ${
+                          selected ? CHOICE_SELECTED[choice.value] ?? "border-ink bg-ink text-on-ink" : "border-line bg-surface text-ink hover:bg-surface-2"
+                        }`}
                       >
                         {choice.label}
                       </button>
                     );
                   })}
-                </div>
-              </article>
+                </span>
+              </li>
             ))}
-          </div>
-
-          {errorMessage ? <div className="mt-4 text-sm text-ember">{errorMessage}</div> : null}
-
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-ink/60">
-              응답은 현재 사용자 기준으로 전체 교체 저장됩니다.
-            </div>
-            <button
-              type="submit"
-              disabled={submitMutation.isPending || vote.status !== "OPEN"}
-              className="action-primary disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {submitMutation.isPending ? "저장 중..." : "응답 저장"}
-            </button>
-          </div>
-          </form>
-        </section>
-
-        <section className="panel px-6 py-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="info-chip">Aggregates</div>
-              <h3 className="mt-3 font-display text-3xl">
-                집계 결과
-              </h3>
-            </div>
-            {access.isHost ? (
-              <button
-                type="button"
-                onClick={() => closeMutation.mutate()}
-                disabled={closeMutation.isPending || vote.status === "CLOSED" || vote.status === "SUPERSEDED"}
-                className="inline-flex items-center justify-center rounded-full bg-ember px-5 py-3 text-sm font-semibold text-white transition active:translate-y-px hover:bg-ink disabled:cursor-not-allowed disabled:bg-[rgba(211,85,51,0.4)]"
-              >
-                {closeMutation.isPending ? "마감 중..." : "투표 마감"}
-              </button>
-            ) : null}
-          </div>
-
-          {vote.aggregates ? (
-            <>
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <Metric label="Participants" value={String(vote.aggregates.totalParticipants)} />
-                <Metric label="Responded" value={String(vote.aggregates.respondedParticipants)} />
-                <Metric label="Unresolved" value={String(vote.aggregates.unresolvedParticipants)} />
-              </div>
-
-              <div className="mt-5 space-y-3">
-                {vote.aggregates.options.map((option) => (
-                  <AggregateCard
-                    key={option.optionId}
-                    option={option}
-                    isLeading={leadingIds.has(option.optionId)}
-                  />
-                ))}
-              </div>
-
-              <div className="mt-5 rounded-[1.5rem] border border-line bg-surface p-4 text-sm text-ink/68">
-                조기 마감 가능 여부:{" "}
-                <strong>
-                  {vote.aggregates.canEarlyClose == null
-                    ? "판정 없음"
-                    : vote.aggregates.canEarlyClose
-                      ? "가능"
-                      : "아직 불가"}
-                </strong>
-              </div>
-              {!access.isHost ? (
-                <HostOnlyNotice message="현재 프론트엔드에서는 회의 소유자에게만 투표 마감 액션을 노출합니다." />
-              ) : null}
-            </>
-          ) : (
-            <div className="mt-5 rounded-[1.5rem] border border-dashed border-line bg-surface px-5 py-6 text-sm text-ink/58">
-              집계 정보가 아직 없습니다.
-            </div>
-          )}
-        </section>
+          </ul>
+          {errorMessage ? <p className="m-0 text-sm text-danger">{errorMessage}</p> : null}
+          <button type="submit" disabled={submitMutation.isPending || !isOpen} className="btn-accent min-h-[48px]">
+            {submitMutation.isPending ? "저장 중…" : isOpen ? "응답 저장" : "응답을 받지 않는 투표예요"}
+          </button>
+        </form>
       </div>
     </>
   );
 }
 
-function AggregateCard({
-  option,
-  isLeading,
-}: {
-  option: VoteAggregateOptionView;
-  isLeading: boolean;
-}) {
-  return (
-    <article
-      className={[
-        "rounded-[1.5rem] border p-4",
-        isLeading ? "border-pine bg-pine/10" : "border-line bg-surface",
-      ].join(" ")}
-    >
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="text-lg font-semibold text-ink">{option.label}</div>
-          <div className="mt-1 text-xs uppercase tracking-[0.16em] text-ink/45">
-            Rank {option.rank ?? "-"} · Score {option.rawScore ?? 0}
-          </div>
-        </div>
-        {isLeading ? (
-          <span className="rounded-full border border-pine/20 bg-surface px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-pine">
-            Leading
-          </span>
-        ) : null}
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {Object.entries(option.counts).map(([key, value]) => (
-          <span
-            key={key}
-            className="rounded-full border border-line bg-surface px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink/65"
-          >
-            {key} {value}
-          </span>
-        ))}
-      </div>
-    </article>
-  );
-}
+const VOTE_STATUS_LABELS: Record<string, string> = {
+  draft: "준비 중",
+  open: "투표 중",
+  closed: "마감",
+  superseded: "대체됨",
+};
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[1.5rem] border border-line bg-surface p-4">
-      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">{label}</div>
-      <div className="mt-2 font-display text-2xl">
-        {value}
-      </div>
-    </div>
-  );
-}
+const VOTE_TITLES: Record<string, string> = {
+  date_matrix: "언제 갈까?",
+  package_preference: "어디로 갈까?",
+  binary_confirm: "이대로 정할까?",
+};
+
+const CHOICE_LABELS: Record<string, string> = Object.fromEntries(
+  Object.values(RESPONSE_CHOICES)
+    .flat()
+    .map((choice) => [choice.value, choice.label]),
+);
+
+const CHOICE_SELECTED: Record<string, string> = {
+  available: "border-ink bg-ink text-on-ink",
+  good: "border-ink bg-ink text-on-ink",
+  yes: "border-ink bg-ink text-on-ink",
+  maybe: "border-[#F2B33D] bg-[#F2B33D] text-[#15171C]",
+  okay: "border-[#F2B33D] bg-[#F2B33D] text-[#15171C]",
+  unavailable: "border-risk-ink/40 bg-risk-soft text-risk-ink",
+  dislike: "border-risk-ink/40 bg-risk-soft text-risk-ink",
+  no: "border-risk-ink/40 bg-risk-soft text-risk-ink",
+};
 
 function labelForVoteType(voteType: string) {
   if (voteType === "date_matrix") {
-    return "날짜 매트릭스 투표";
+    return "날짜";
   }
   if (voteType === "package_preference") {
-    return "패키지 선호 투표";
+    return "장소";
   }
   if (voteType === "binary_confirm") {
-    return "이진 확정 투표";
+    return "확정 여부";
   }
   return voteType;
 }
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("ko-KR", {
-    month: "short",
+    month: "numeric",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   }).format(new Date(value));
 }
