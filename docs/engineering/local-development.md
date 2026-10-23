@@ -124,10 +124,11 @@ Run frontend checks:
 cd apps/web
 npm run typecheck
 npm run test
+npm run lint
 npm run test:e2e
 ```
 
-Playwright browser binaries are required for `npm run test:e2e`.
+Playwright browser binaries are required for `npm run test:e2e`. It starts (or reuses) a dev server on port 3000; if another app already holds that port, set `PLAYWRIGHT_PORT`, for example `PLAYWRIGHT_PORT=3017 npm run test:e2e`.
 
 Optional API base URL:
 
