@@ -15,6 +15,7 @@ type NavItem = {
   href: string;
   label: string;
   icon: React.ReactNode;
+  mobileLabel?: string;
   badge?: number;
   exact?: boolean;
 };
@@ -92,7 +93,7 @@ export function MeetingShell({ meetingId, children }: { meetingId: string; child
   const reviewCount = decisions?.filter((decision) => normalizeDecisionStatus(decision.status) === "proposed").length ?? 0;
   const navItems: NavItem[] = [
     { href: base, label: "홈", icon: icons.home, exact: true },
-    { href: `${base}/decisions`, label: "결정 보드", icon: icons.decisions, badge: reviewCount || undefined },
+    { href: `${base}/decisions`, label: "결정 보드", mobileLabel: "결정", icon: icons.decisions, badge: reviewCount || undefined },
     { href: `${base}/reports/latest`, label: "리포트", icon: icons.report },
     { href: `${base}/tasks`, label: "할 일", icon: icons.tasks },
   ];
@@ -107,18 +108,18 @@ export function MeetingShell({ meetingId, children }: { meetingId: string; child
   return (
     <div className="min-h-screen bg-bg text-ink">
       <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-4 px-4 py-2.5 sm:px-6">
+        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 sm:px-6 lg:gap-4">
           <Link href="/" aria-label="dudecide 첫 화면" className="flex min-h-[44px] items-center gap-2">
             <LogoMark size={28} />
             <span className="font-display hidden text-[19px] sm:inline">dudecide</span>
           </Link>
           <Link
             href={base as Route}
-            className="flex min-h-[40px] max-w-[16rem] items-center truncate rounded-[10px] border border-line bg-surface-2 px-3 text-sm font-bold"
+            className="flex min-h-[40px] min-w-0 max-w-[16rem] flex-1 items-center truncate rounded-[10px] border border-line bg-surface-2 px-3 text-sm font-bold lg:flex-none"
           >
             <span className="truncate">{meeting?.title ?? "모임"}</span>
           </Link>
-          <form role="search" onSubmit={submitSearch} className="relative max-w-[460px] flex-[1_1_240px]">
+          <form role="search" onSubmit={submitSearch} className="relative order-last w-full lg:order-none lg:w-auto lg:max-w-[460px] lg:flex-[1_1_240px]">
             <label htmlFor="meeting-search" className="sr-only">
               모임에서 검색
             </label>
@@ -131,19 +132,19 @@ export function MeetingShell({ meetingId, children }: { meetingId: string; child
             />
             <span className="pointer-events-none absolute left-[13px] top-[13px] text-muted">{icons.search}</span>
           </form>
-          <div className="ml-auto flex items-center gap-2">
-            <ThemeToggle className="!h-11 !w-11" />
+          <div className="ml-auto flex items-center gap-1.5 lg:gap-2">
+            <ThemeToggle className="lg:!h-11 lg:!w-11" />
             <Link
               href={`${base}/notifications` as Route}
               aria-label="알림"
-              className="relative flex h-11 w-11 items-center justify-center rounded-xl border border-line bg-surface text-ink"
+              className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface text-ink lg:h-11 lg:w-11"
             >
               {icons.bell}
             </Link>
             <span
               title={actor?.displayName ?? undefined}
               aria-label={actor ? `내 계정 · ${actor.displayName}` : "내 계정"}
-              className="flex h-11 w-11 items-center justify-center rounded-full text-sm font-bold text-[#15171C]"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-[#15171C] lg:h-11 lg:w-11"
               style={{ background: avatarColor(actor?.displayName ?? "?") }}
             >
               {initialOf(actor?.displayName)}
@@ -152,9 +153,36 @@ export function MeetingShell({ meetingId, children }: { meetingId: string; child
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-[1440px] flex-wrap items-start gap-6 px-4 py-6 sm:px-6">
+      {focus ? null : (
+        <nav aria-label="토픽" className="flex gap-1.5 overflow-x-auto border-b border-line bg-surface px-4 py-2 [scrollbar-width:none] lg:hidden [&::-webkit-scrollbar]:hidden">
+          {meeting?.threads.map((thread) => {
+            const href = `${base}/threads/${thread.id}`;
+            const active = pathname === href;
+            return (
+              <Link
+                key={thread.id}
+                href={href as Route}
+                aria-current={active ? "page" : undefined}
+                className={`inline-flex h-9 flex-none items-center whitespace-nowrap rounded-full border px-3 text-[13px] font-semibold ${
+                  active ? "border-ink bg-ink text-on-ink" : "border-line bg-surface text-ink"
+                }`}
+              >
+                # {thread.title}
+              </Link>
+            );
+          })}
+          <Link
+            href={`${base}/import` as Route}
+            className="inline-flex h-9 flex-none items-center whitespace-nowrap rounded-full border border-dashed border-accent/50 px-3 text-[13px] font-semibold text-accent-text"
+          >
+            대화 가져오기
+          </Link>
+        </nav>
+      )}
+
+      <div className="mx-auto flex max-w-[1440px] flex-wrap items-start gap-6 px-4 pb-28 pt-5 sm:px-6 lg:pb-6 lg:pt-6">
         {focus ? null : (
-          <aside aria-label="모임 메뉴" className="flex max-w-full flex-[1_1_210px] flex-col gap-[18px] lg:max-w-[260px]">
+          <aside aria-label="모임 메뉴" className="hidden max-w-[260px] flex-[1_1_210px] flex-col gap-[18px] lg:flex">
             <nav className="flex flex-col gap-0.5">
               {navItems.map((item) => {
                 const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
@@ -207,6 +235,33 @@ export function MeetingShell({ meetingId, children }: { meetingId: string; child
 
         <main className="flex min-w-0 flex-[999_1_640px] flex-col gap-5">{children}</main>
       </div>
+
+      <nav
+        aria-label="모임 메뉴"
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-line bg-surface px-2 pb-[max(10px,env(safe-area-inset-bottom))] lg:hidden"
+      >
+        {navItems.map((item) => {
+          const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href as Route}
+              aria-current={active ? "page" : undefined}
+              className={`relative flex min-h-[60px] flex-col items-center justify-center gap-1 text-[11px] ${
+                active ? "font-bold text-ink shadow-[inset_0_2px_0_rgb(var(--ink))]" : "font-semibold text-muted"
+              }`}
+            >
+              <span className={active ? "text-accent" : ""}>{item.icon}</span>
+              {item.mobileLabel ?? item.label}
+              {item.badge ? (
+                <span className="num absolute right-[calc(50%-22px)] top-2 rounded-full bg-accent px-1.5 text-[10px] font-semibold text-on-accent">
+                  {item.badge}
+                </span>
+              ) : null}
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }

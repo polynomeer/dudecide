@@ -125,7 +125,7 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
       </nav>
 
       <div className="flex flex-wrap items-start gap-5">
-        <aside aria-label="결정 목록" className="panel flex max-w-full flex-[1_1_240px] flex-col gap-0.5 p-2.5 lg:max-w-[300px]">
+        <aside aria-label="결정 목록" className="panel flex w-full min-w-0 flex-col gap-0.5 p-2.5 lg:w-auto lg:max-w-[300px] lg:flex-[1_1_240px]">
           <div className="flex items-center justify-between px-3.5 pb-1 pt-2">
             <span className="mono-label">결정 {decisions.length}건</span>
             {isHost ? (
@@ -134,6 +134,7 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
               </button>
             ) : null}
           </div>
+          <div className="flex gap-1 overflow-x-auto [scrollbar-width:none] lg:flex-col lg:gap-0.5 lg:overflow-visible [&::-webkit-scrollbar]:hidden">
           {decisions.map((decision) => {
             const active = decision.id === selectedDecisionId && !creating;
             const status = normalizeDecisionStatus(decision.status);
@@ -143,7 +144,7 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
                 type="button"
                 aria-current={active ? "true" : undefined}
                 onClick={() => selectDecision(decision.id)}
-                className={`flex flex-col gap-1 rounded-[14px] px-3.5 py-3 text-left transition ${
+                className={`flex w-[168px] flex-none flex-col gap-1 rounded-[14px] px-3.5 py-3 text-left transition lg:w-auto ${
                   active ? "bg-accent-soft" : "hover:bg-surface-2"
                 } ${status === "on_hold" ? "text-muted" : "text-ink"}`}
               >
@@ -158,6 +159,7 @@ export function DecisionBoard({ meetingId }: { meetingId: string }) {
               </button>
             );
           })}
+          </div>
           {decisions.length === 0 ? (
             <p className="section-copy px-3.5 py-3">아직 결정이 없어요.</p>
           ) : null}
@@ -267,7 +269,7 @@ function DecisionWorkspace({
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="m-0 text-[15px] font-bold">근거 메시지 {supports.length}</h2>
             {decision.evidence.length ? (
-              <span className="text-xs text-muted">누르면 오른쪽 원문에서 위치를 보여줘요</span>
+              <span className="text-xs text-muted">누르면 원래 대화에서 위치를 보여줘요</span>
             ) : null}
           </div>
           {supports.map((item) => {

@@ -130,7 +130,7 @@ export function MeetingRealtimeBridge({
   return (
     <div
       role="status"
-      className="num fixed bottom-4 right-4 z-50 inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-muted"
+      className="num fixed bottom-[84px] right-4 z-50 lg:bottom-4 inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-muted"
     >
       <span
         aria-hidden="true"
