@@ -5,13 +5,15 @@ import { useState } from "react";
 import { ApiErrorPanel } from "@/components/api-error-panel";
 import { HostOnlyNotice } from "@/components/host-only-notice";
 import { getApiErrorMessage } from "@/lib/api/error-display";
-import { apiClient } from "@/lib/api/client";
+import { apiClient, type UpdateTaskRequest } from "@/lib/api/client";
+import { memberName, useMeetingMembers } from "@/lib/members";
 import { useMeetingHostAccess } from "@/lib/session";
 
-const TASK_STATUSES = ["todo", "doing", "done"] as const;
+// Matches the backend task_status enum; "cancelled" exists but is not offered here.
+const TASK_STATUSES = ["todo", "in_progress", "done"] as const;
 const TASK_STATUS_LABELS: Record<(typeof TASK_STATUSES)[number], string> = {
   todo: "할 일",
-  doing: "하는 중",
+  in_progress: "하는 중",
   done: "완료",
 };
 
@@ -22,9 +24,12 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
     queryKey: ["meeting-tasks", meetingId],
     queryFn: () => apiClient.listTasks(meetingId),
   });
+  const membersQuery = useMeetingMembers(meetingId);
+  const members = membersQuery.data ?? [];
   const [form, setForm] = useState({
     title: "",
     dueAt: "",
+    ownerUserId: "",
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -32,10 +37,11 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
     mutationFn: () =>
       apiClient.createTask(meetingId, {
         title: form.title.trim(),
-        dueAt: form.dueAt || undefined,
+        dueAt: form.dueAt ? new Date(form.dueAt).toISOString() : undefined,
+        ownerUserId: form.ownerUserId || undefined,
       }),
     onSuccess: async () => {
-      setForm({ title: "", dueAt: "" });
+      setForm({ title: "", dueAt: "", ownerUserId: "" });
       setErrorMessage(null);
       await queryClient.invalidateQueries({ queryKey: ["meeting-tasks", meetingId] });
       await queryClient.invalidateQueries({ queryKey: ["meeting-search", meetingId] });
@@ -51,8 +57,7 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
   });
 
   const updateTaskMutation = useMutation({
-    mutationFn: ({ taskId, status }: { taskId: string; status: string }) =>
-      apiClient.updateTask(taskId, { status }),
+    mutationFn: ({ taskId, ...body }: UpdateTaskRequest & { taskId: string }) => apiClient.updateTask(taskId, body),
     onSuccess: async () => {
       setErrorMessage(null);
       await queryClient.invalidateQueries({ queryKey: ["meeting-tasks", meetingId] });
@@ -77,7 +82,7 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
   }
 
   const tasks = tasksQuery.data;
-  const remaining = tasks.filter((task) => task.status !== "done").length;
+  const remaining = tasks.filter((task) => task.status !== "done" && task.status !== "cancelled").length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -100,6 +105,21 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
               placeholder="예: 항공권 가격 비교해서 공유"
               required
             />
+          </label>
+          <label className="flex flex-[0_1_180px] flex-col gap-1.5 text-xs font-bold">
+            담당 (선택)
+            <select
+              value={form.ownerUserId}
+              onChange={(event) => setForm((current) => ({ ...current, ownerUserId: event.target.value }))}
+              className="field h-11 text-sm font-normal"
+            >
+              <option value="">정하지 않음</option>
+              {members.map((member) => (
+                <option key={member.userId} value={member.userId}>
+                  {member.displayName}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="flex flex-[0_1_220px] flex-col gap-1.5 text-xs font-bold">
             기한 (선택)
@@ -141,9 +161,34 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
                     <div className={`text-[15px] ${done ? "text-muted line-through" : "font-bold"}`}>{task.title}</div>
                     <div className="num mt-0.5 text-xs text-muted">
                       {task.dueAt ? `기한 ${formatDateTime(task.dueAt)}` : "기한 없음"}
-                      {task.ownerUserId ? "" : " · 담당 없음"}
                     </div>
                   </div>
+                  {access.isHost ? (
+                    <select
+                      aria-label={`${task.title} 담당`}
+                      value={task.ownerUserId ?? ""}
+                      disabled={updateTaskMutation.isPending}
+                      onChange={(event) => {
+                        if (event.target.value) {
+                          updateTaskMutation.mutate({ taskId: task.id, ownerUserId: event.target.value });
+                        }
+                      }}
+                      className={`field h-[38px] w-auto py-0 text-xs font-semibold ${task.ownerUserId ? "" : "text-risk-ink"}`}
+                    >
+                      <option value="" disabled>
+                        담당 정하기
+                      </option>
+                      {members.map((member) => (
+                        <option key={member.userId} value={member.userId}>
+                          {member.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className={`text-xs font-semibold ${task.ownerUserId ? "text-muted" : "text-risk-ink"}`}>
+                      {memberName(members, task.ownerUserId) ?? (task.ownerUserId ? "멤버" : "담당 없음")}
+                    </span>
+                  )}
                   <div role="radiogroup" aria-label={`${task.title} 상태`} className="flex gap-0.5 rounded-[10px] bg-surface-2 p-[3px]">
                     {TASK_STATUSES.map((status) => {
                       const checked = task.status === status;

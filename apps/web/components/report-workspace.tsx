@@ -14,6 +14,7 @@ import {
   decisionTypeLabel,
   formatShortDateTime,
 } from "@/lib/display";
+import { memberName, useMeetingMembers } from "@/lib/members";
 import { useCurrentActor, useMeetingHostAccess } from "@/lib/session";
 
 type SnapshotDecision = {
@@ -48,6 +49,7 @@ function readSnapshot(snapshot: Record<string, unknown>) {
 }
 
 const DONE_TASK_STATUSES = ["done", "completed"];
+const HIDDEN_TASK_STATUSES = ["cancelled"];
 
 export function ReportWorkspace({ meetingId }: { meetingId: string }) {
   const queryClient = useQueryClient();
@@ -172,7 +174,11 @@ export function ReportWorkspace({ meetingId }: { meetingId: string }) {
         )}
       </ReportSection>
 
-      <TasksTable tasks={tasksQuery.data ?? []} loading={tasksQuery.isLoading} />
+      <TasksTable
+        meetingId={meetingId}
+        tasks={(tasksQuery.data ?? []).filter((task) => !HIDDEN_TASK_STATUSES.includes(task.status.toLowerCase()))}
+        loading={tasksQuery.isLoading}
+      />
 
       <p className="m-0 mt-2 text-center text-xs text-muted">
         이 리포트는 dudecide에서 대화와 투표를 바탕으로 만들었어요 · AI가 제안하고 호스트가 확정했어요
@@ -238,8 +244,9 @@ function EmptyRow({ children }: { children: React.ReactNode }) {
   return <p className="section-copy m-0 border-t border-line py-4">{children}</p>;
 }
 
-function TasksTable({ tasks, loading }: { tasks: TaskView[]; loading: boolean }) {
+function TasksTable({ meetingId, tasks, loading }: { meetingId: string; tasks: TaskView[]; loading: boolean }) {
   const { data: actor } = useCurrentActor();
+  const { data: members } = useMeetingMembers(meetingId);
   return (
     <section aria-label="할 일" className="rounded-[22px] bg-surface px-6 pb-4 pt-2">
       <div className="pb-2 pt-4">
@@ -266,7 +273,11 @@ function TasksTable({ tasks, loading }: { tasks: TaskView[]; loading: boolean })
                   <tr key={task.id}>
                     <td className={`border-b border-line px-2 py-3 align-top ${done ? "text-muted line-through" : "font-bold"}`}>{task.title}</td>
                     <td className={`border-b border-line px-2 py-3 align-top ${task.ownerUserId ? "" : "text-risk-ink"}`}>
-                      {task.ownerUserId ? (task.ownerUserId === actor?.userId ? "나" : "멤버") : "담당 없음"}
+                      {task.ownerUserId
+                        ? task.ownerUserId === actor?.userId
+                          ? `${memberName(members, task.ownerUserId) ?? "나"} (나)`
+                          : (memberName(members, task.ownerUserId) ?? "멤버")
+                        : "담당 없음"}
                     </td>
                     <td className="num border-b border-line px-2 py-3 align-top">
                       {task.dueAt ? new Intl.DateTimeFormat("ko-KR", { month: "2-digit", day: "2-digit" }).format(new Date(task.dueAt)) : "—"}
@@ -288,5 +299,6 @@ function TasksTable({ tasks, loading }: { tasks: TaskView[]; loading: boolean })
 function TaskStatusChip({ task, done }: { task: TaskView; done: boolean }) {
   if (done) return <span className="chip-confirmed">완료</span>;
   if (!task.ownerUserId) return <span className="chip-discussion">맡을 사람 필요</span>;
+  if (task.status.toLowerCase() === "todo") return <span className="chip">할 일</span>;
   return <span className="chip-voting">진행 중</span>;
 }

@@ -81,7 +81,10 @@ export function decisionTypeLabel(type: string): string {
   return DECISION_TYPE_LABELS[type.toLowerCase()] ?? type;
 }
 
-export function notificationSummary(notification: NotificationView): string {
+export function notificationSummary(
+  notification: NotificationView,
+  nameOf: (userId: string) => string | null = () => null,
+): string {
   const payload = notification.payload ?? {};
   switch (notification.type) {
     case "decision_confirmed":
@@ -92,8 +95,10 @@ export function notificationSummary(notification: NotificationView): string {
       return typeof payload.version === "number" ? `리포트 v${payload.version}이 준비됐어요` : "리포트가 준비됐어요";
     case "invite_created":
       return "초대 링크를 만들었어요";
-    case "invite_joined":
-      return "새 멤버가 참여했어요";
+    case "invite_joined": {
+      const name = typeof payload.userId === "string" ? nameOf(payload.userId) : null;
+      return name ? `${name}님이 참여했어요` : "새 멤버가 참여했어요";
+    }
     default:
       return notification.type.replace(/_/g, " ");
   }

@@ -9,6 +9,7 @@ import { LogoMark } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { apiClient } from "@/lib/api/client";
 import { avatarColor, initialOf, normalizeDecisionStatus } from "@/lib/display";
+import { useMeetingMembers } from "@/lib/members";
 import { useCurrentActor } from "@/lib/session";
 
 type NavItem = {
@@ -85,6 +86,7 @@ export function MeetingShell({ meetingId, children }: { meetingId: string; child
     queryKey: ["meeting", meetingId],
     queryFn: () => apiClient.getMeeting(meetingId),
   });
+  const { data: members } = useMeetingMembers(meetingId);
   const { data: decisions } = useQuery({
     queryKey: ["meeting-decisions", meetingId],
     queryFn: () => apiClient.listDecisions(meetingId),
@@ -228,6 +230,32 @@ export function MeetingShell({ meetingId, children }: { meetingId: string; child
                   멤버 {meeting.memberCount}
                   {meeting.expectedHeadcount ? ` / ${meeting.expectedHeadcount}` : ""}
                 </span>
+                {members?.length ? (
+                  <ul aria-label="참여한 멤버" className="m-0 flex list-none flex-wrap gap-1 p-0">
+                    {members.slice(0, 11).map((member) => (
+                      <li
+                        key={member.id}
+                        title={member.displayName}
+                        aria-label={member.displayName}
+                        className="flex h-[30px] w-[30px] items-center justify-center rounded-full text-xs font-bold text-[#15171C]"
+                        style={{ background: avatarColor(member.displayName) }}
+                      >
+                        {initialOf(member.displayName)}
+                      </li>
+                    ))}
+                    {members.length > 11 ? (
+                      <li className="num flex h-[30px] items-center px-1 text-[11px] text-muted">+{members.length - 11}</li>
+                    ) : null}
+                    {meeting.expectedHeadcount && meeting.expectedHeadcount > members.length ? (
+                      <li
+                        aria-label={`아직 ${meeting.expectedHeadcount - members.length}명 남았어요`}
+                        className="num flex h-[30px] min-w-[30px] items-center justify-center rounded-full border-[1.5px] border-dashed border-muted/60 px-1 text-[11px] text-muted"
+                      >
+                        +{meeting.expectedHeadcount - members.length}
+                      </li>
+                    ) : null}
+                  </ul>
+                ) : null}
               </div>
             ) : null}
           </aside>

@@ -8,6 +8,7 @@ import { InviteLinkButton } from "@/components/meeting/invite-link-button";
 import { EventDatesEditor } from "@/components/meeting/event-dates-editor";
 import { MeetingPageHeader } from "@/components/meeting/meeting-page-header";
 import { VoteStudio } from "@/components/vote-studio";
+import { memberName, useMeetingMembers } from "@/lib/members";
 import { apiClient, type DecisionResponse } from "@/lib/api/client";
 import {
   budgetLabel,
@@ -27,6 +28,7 @@ import { useMeetingHostAccess } from "@/lib/session";
 
 export function MeetingOverview({ meetingId }: { meetingId: string }) {
   const { isHost } = useMeetingHostAccess(meetingId);
+  const { data: members } = useMeetingMembers(meetingId);
   const { data: meeting, isLoading, error } = useQuery({
     queryKey: ["meeting", meetingId],
     queryFn: () => apiClient.getMeeting(meetingId),
@@ -162,7 +164,7 @@ export function MeetingOverview({ meetingId }: { meetingId: string }) {
                 {notification.type.startsWith("invite") ? "+" : "✓"}
               </span>
               <span>
-                {notificationSummary(notification)}
+                {notificationSummary(notification, (userId) => memberName(members, userId))}
                 <span className="num block text-[11px] text-muted">{formatShortDateTime(notification.createdAt)}</span>
               </span>
             </div>

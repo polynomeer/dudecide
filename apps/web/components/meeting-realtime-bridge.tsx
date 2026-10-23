@@ -50,6 +50,7 @@ export function MeetingRealtimeBridge({
     const invalidateMeetingQueries = async (eventType: string) => {
       const invalidations = [
         queryClient.invalidateQueries({ queryKey: ["meeting", meetingId] }),
+        queryClient.invalidateQueries({ queryKey: ["meeting-members", meetingId] }),
         queryClient.invalidateQueries({ queryKey: ["meeting-decisions", meetingId] }),
         queryClient.invalidateQueries({ queryKey: ["meeting-search", meetingId] }),
         queryClient.invalidateQueries({ queryKey: ["meeting-report", meetingId] }),

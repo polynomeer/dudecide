@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { useQuery } from "@tanstack/react-query";
 import { ApiErrorPanel } from "@/components/api-error-panel";
+import { memberName, useMeetingMembers } from "@/lib/members";
 import { apiClient, type NotificationView } from "@/lib/api/client";
 import { formatShortDateTime, notificationSummary } from "@/lib/display";
 
@@ -38,6 +39,7 @@ function isToday(value: string) {
 }
 
 export function NotificationsWorkspace({ meetingId }: { meetingId: string }) {
+  const { data: members } = useMeetingMembers(meetingId);
   const notificationsQuery = useQuery({
     queryKey: ["meeting-notifications", meetingId],
     queryFn: () => apiClient.listNotifications(meetingId),
@@ -80,7 +82,7 @@ export function NotificationsWorkspace({ meetingId }: { meetingId: string }) {
                 >
                   {kind.icon}
                 </span>
-                <span className="min-w-0 flex-1 text-sm font-semibold leading-[1.45]">{notificationSummary(notification)}</span>
+                <span className="min-w-0 flex-1 text-sm font-semibold leading-[1.45]">{notificationSummary(notification, (userId) => memberName(members, userId))}</span>
                 <span className="num flex-none text-[11px] text-muted">{formatShortDateTime(notification.createdAt)}</span>
               </Link>
             );

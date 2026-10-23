@@ -15,6 +15,7 @@ vi.mock("@/lib/api/client", async () => {
       getLatestReport: vi.fn(),
       refreshReport: vi.fn(),
       listTasks: vi.fn(),
+      listMembers: vi.fn(),
       createInviteLink: vi.fn(),
     },
   };
@@ -51,7 +52,20 @@ describe("ReportWorkspace", () => {
       generatedAt: "2026-08-12T10:00:00Z",
     });
     vi.mocked(apiClient.listTasks).mockResolvedValue([
-      { id: "t-1", meetingId: "meeting-1", ownerUserId: null, title: "렌트카 알아보기", status: "open", createdAt: "2026-08-11T10:00:00Z" },
+      { id: "t-1", meetingId: "meeting-1", ownerUserId: null, title: "렌트카 알아보기", status: "todo", createdAt: "2026-08-11T10:00:00Z" },
+      { id: "t-2", meetingId: "meeting-1", ownerUserId: "user-2", title: "항공권 비교", status: "in_progress", createdAt: "2026-08-11T10:00:00Z" },
+      { id: "t-3", meetingId: "meeting-1", ownerUserId: "user-2", title: "취소된 일", status: "cancelled", createdAt: "2026-08-11T10:00:00Z" },
+    ]);
+    vi.mocked(apiClient.listMembers).mockResolvedValue([
+      {
+        id: "m-2",
+        meetingId: "meeting-1",
+        userId: "user-2",
+        displayName: "서연",
+        role: "participant",
+        attendanceStatus: "accepted",
+        joinedAt: "2026-08-10T10:00:00Z",
+      },
     ]);
     vi.mocked(apiClient.refreshReport).mockResolvedValue({
       id: "report-2",
@@ -72,6 +86,8 @@ describe("ReportWorkspace", () => {
     expect(remaining).toHaveTextContent("애월 독채");
     expect(remaining).toHaveTextContent("보류");
     expect(await screen.findByText("맡을 사람 필요")).toBeInTheDocument();
+    expect(await screen.findByText("서연")).toBeInTheDocument();
+    expect(screen.queryByText("취소된 일")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "리포트 새로고침" }));
 
