@@ -63,9 +63,10 @@ Each unit is one commit (Conventional Commits, `web` scope) and must pass `npm r
 
 Shown only when the API provides the data; otherwise the element is omitted, not faked.
 
-- D-day countdown and trip dates: `MeetingDetailResponse` has no event date.
+- D-day countdown and trip dates: resolved; `MeetingDetailResponse` now carries `startsAt` / `endsAt`.
 - Recent activity feed: no activity endpoint; build from decision history and notifications where possible.
-- Member avatars: `memberCount` only, no member list in the meeting response.
+- Member avatars: resolved through `GET /meetings/{meetingId}/members`.
+- Notification read state: resolved through `readAt` and the read / read-all endpoints.
 - Support/objection counts on a decision: derive from evidence types when present.
 - Natural-language search hint in the top bar routes to the existing keyword search.
 
@@ -81,4 +82,5 @@ Shown only when the API provides the data; otherwise the element is omitted, not
 - Frames: `components/meeting/meeting-shell.tsx` for meeting routes (the decision route hides the sidebar for the three-pane view) and `components/standalone-shell.tsx` for everything else. The landing page has its own header.
 - The old `section-shell`, `site-header`, `session-badge`, `marketing-hero`, `status-grid`, and `placeholder-route` components were removed.
 - Fixes found while redesigning: decision and evidence types are now selects of valid backend enum values (`CONSENSUS` / `MESSAGE_QUOTE` were rejected), the vote screen compares status case-insensitively (the API returns lowercase), and the vote host-access hook no longer runs after early returns.
-- Still omitted because the API lacks the data: D-day and trip dates, member avatars and names (tasks show "나 / 멤버 / 담당 없음"), budget on meeting creation, notification read state, and a public share link for the report (the share button creates an invite link).
+- Follow-up (2026-10-23): the API now returns event dates, the member list, and notification read state, so the web shows D-day and dates, budget, member avatars and owner names, task owner assignment, and unread notifications.
+- Still omitted: a public share link for the report (the share button creates an invite link), AI decision-candidate cards inside a topic conversation, and suggestions to move a message to another topic.
