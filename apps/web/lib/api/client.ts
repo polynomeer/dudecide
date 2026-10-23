@@ -9,11 +9,24 @@ export type CreateGuestSessionRequest = {
   displayName: string;
 };
 
+export type BudgetRange = {
+  min?: number | null;
+  max?: number | null;
+};
+
 export type CreateMeetingRequest = {
   title: string;
   meetingType: string;
   expectedHeadcount?: number;
   originRegion?: string;
+  budget?: BudgetRange;
+  startsAt?: string;
+  endsAt?: string;
+};
+
+/** Omitted fields keep their current value. */
+export type UpdateMeetingRequest = Partial<CreateMeetingRequest> & {
+  status?: string;
 };
 
 export type CreateMeetingResponse = {
@@ -57,6 +70,9 @@ export type MeetingDetailResponse = {
   status: string;
   originRegion?: string | null;
   expectedHeadcount?: number | null;
+  budget?: BudgetRange | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
   ownerUserId: string;
   memberCount: number;
   decisionCount: number;
@@ -277,7 +293,12 @@ export type NotificationView = {
   type: string;
   payload: Record<string, unknown>;
   sentAt?: string | null;
+  readAt?: string | null;
   createdAt: string;
+};
+
+export type MarkNotificationsReadResponse = {
+  updatedCount: number;
 };
 
 export type ChatImportSourceType = "kakao_export" | "paste";
@@ -466,6 +487,12 @@ export const apiClient = {
       body: JSON.stringify(body),
     }),
   getMeeting: (meetingId: string) => request<MeetingDetailResponse>(`/api/v1/meetings/${meetingId}`),
+  updateMeeting: (meetingId: string, body: UpdateMeetingRequest) =>
+    request<MeetingDetailResponse>(`/api/v1/meetings/${meetingId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  listMembers: (meetingId: string) => request<MembershipResponse[]>(`/api/v1/meetings/${meetingId}/members`),
   listMessages: (threadId: string, before?: string, limit = 50) => {
     const query = new URLSearchParams();
     if (before) {
@@ -597,4 +624,12 @@ export const apiClient = {
     }),
   listNotifications: (meetingId: string) =>
     request<NotificationView[]>(`/api/v1/meetings/${meetingId}/notifications`),
+  markNotificationRead: (meetingId: string, notificationId: string) =>
+    request<NotificationView>(`/api/v1/meetings/${meetingId}/notifications/${notificationId}/read`, {
+      method: "POST",
+    }),
+  markAllNotificationsRead: (meetingId: string) =>
+    request<MarkNotificationsReadResponse>(`/api/v1/meetings/${meetingId}/notifications/read-all`, {
+      method: "POST",
+    }),
 };

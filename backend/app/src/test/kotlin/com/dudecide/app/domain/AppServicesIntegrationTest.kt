@@ -515,6 +515,90 @@ class AppServicesIntegrationTest {
     }
 
     @Test
+    fun `meeting service stores event dates on create and rejects reversed ranges`() {
+        testContext().use { context ->
+            val startsAt = OffsetDateTime.parse("2026-11-14T09:00:00+09:00")
+            val endsAt = OffsetDateTime.parse("2026-11-16T21:00:00+09:00")
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(
+                    title = "Dated Trip",
+                    meetingType = "trip",
+                    budget = BudgetRangeDto(min = 300000.0, max = 500000.0),
+                    startsAt = startsAt,
+                    endsAt = endsAt,
+                ),
+            )
+
+            val detail = context.meetingService.getMeeting(meeting.id)
+            assertEquals(startsAt.toInstant(), detail.startsAt?.toInstant())
+            assertEquals(endsAt.toInstant(), detail.endsAt?.toInstant())
+            assertEquals(300000.0, detail.budget?.min)
+
+            val error = assertThrows(ResponseStatusException::class.java) {
+                context.meetingService.createMeeting(
+                    CreateMeetingRequest(title = "Backwards", meetingType = "trip", startsAt = endsAt, endsAt = startsAt),
+                )
+            }
+            assertEquals(400, error.statusCode.value())
+        }
+    }
+
+    @Test
+    fun `meeting members are listed with display names for every member`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(title = "Member List", meetingType = "trip"),
+            )
+            val invite = context.meetingService.createInviteLink(meeting.id, CreateInviteLinkRequest())
+            val joined = context.meetingService.joinWithInvite(invite.token, JoinInviteRequest(displayName = "Guest Member"))
+
+            val members = withActor(joined.userId, "Guest Member") {
+                context.meetingService.listMembers(meeting.id)
+            }
+
+            assertEquals(2, members.size)
+            assertEquals("host", members.first().role)
+            assertEquals(listOf("Guest Member"), members.filter { it.userId == joined.userId }.map { it.displayName })
+        }
+    }
+
+    @Test
+    fun `notifications can be marked read one at a time or all at once`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(title = "Read State", meetingType = "trip"),
+            )
+            repeat(3) {
+                context.notificationService.createNotification(
+                    meeting.id,
+                    com.dudecide.app.jooq.enums.NotificationType.discussion_stalled,
+                    payload = mapOf("index" to it),
+                )
+            }
+            val initial = context.notificationService.listNotifications(meeting.id)
+            assertTrue(initial.all { it.readAt == null })
+
+            val first = context.notificationService.markRead(meeting.id, initial.first().id)
+            assertNotNull(first.readAt)
+            val again = context.notificationService.markRead(meeting.id, initial.first().id)
+            assertEquals(first.readAt?.toInstant(), again.readAt?.toInstant())
+
+            assertEquals(2, context.notificationService.markAllRead(meeting.id).updatedCount)
+            assertTrue(context.notificationService.listNotifications(meeting.id).all { it.readAt != null })
+            assertEquals(0, context.notificationService.markAllRead(meeting.id).updatedCount)
+
+            val invite = context.meetingService.createInviteLink(meeting.id, CreateInviteLinkRequest())
+            val joined = context.meetingService.joinWithInvite(invite.token, JoinInviteRequest(displayName = "Other Member"))
+            val error = withActor(joined.userId, "Other Member") {
+                assertThrows(ResponseStatusException::class.java) {
+                    context.notificationService.markRead(meeting.id, initial.first().id)
+                }
+            }
+            assertEquals(404, error.statusCode.value())
+        }
+    }
+
+    @Test
     fun `participant cannot execute host only meeting mutations`() {
         testContext().use { context ->
             val meeting = context.meetingService.createMeeting(
@@ -1467,6 +1551,7 @@ class AppServicesIntegrationTest {
                 type VARCHAR(64) NOT NULL,
                 payload JSON NOT NULL DEFAULT JSON '{}',
                 sent_at TIMESTAMP WITH TIME ZONE,
+                read_at TIMESTAMP WITH TIME ZONE,
                 created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 CONSTRAINT notification_meeting_fk FOREIGN KEY (meeting_id) REFERENCES meeting(id) ON DELETE CASCADE,
                 CONSTRAINT notification_recipient_fk FOREIGN KEY (recipient_user_id) REFERENCES app_user(id) ON DELETE CASCADE

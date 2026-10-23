@@ -45,6 +45,7 @@ class MeetingService(
 
     @Transactional
     fun createMeeting(request: CreateMeetingRequest): MeetingResponse {
+        validateMeetingFields(request.expectedHeadcount, request.budget, request.startsAt, request.endsAt)
         val ownerId = localActorProvider.currentUserId()
         val meetingId = UUID.randomUUID()
 
@@ -58,6 +59,8 @@ class MeetingService(
             .set(MEETING.EXPECTED_HEADCOUNT, request.expectedHeadcount)
             .set(MEETING.BUDGET_MIN, request.budget?.min?.toBigDecimal())
             .set(MEETING.BUDGET_MAX, request.budget?.max?.toBigDecimal())
+            .set(MEETING.STARTS_AT, request.startsAt)
+            .set(MEETING.ENDS_AT, request.endsAt)
             .execute()
 
         dsl.insertInto(MEMBERSHIP)
@@ -137,6 +140,8 @@ class MeetingService(
                     max = record.budgetMax?.toDouble(),
                 )
             } else null,
+            startsAt = record.startsAt,
+            endsAt = record.endsAt,
             ownerUserId = requireNotNull(record.ownerUserId),
             memberCount = memberCount,
             decisionCount = decisionCount,
@@ -312,6 +317,29 @@ class MeetingService(
         )
     }
 
+    @Transactional(readOnly = true)
+    fun listMembers(meetingId: UUID): List<MembershipResponse> {
+        meetingAccessService.requireMeetingMember(meetingId)
+        requireMeeting(meetingId)
+        return dsl.select(MEMBERSHIP.asterisk(), APP_USER.DISPLAY_NAME)
+            .from(MEMBERSHIP)
+            .join(APP_USER).on(APP_USER.ID.eq(MEMBERSHIP.USER_ID))
+            .where(MEMBERSHIP.MEETING_ID.eq(meetingId))
+            .orderBy(MEMBERSHIP.JOINED_AT.asc(), MEMBERSHIP.ID.asc())
+            .fetch()
+            .map { row ->
+                MembershipResponse(
+                    id = requireNotNull(row.get(MEMBERSHIP.ID)),
+                    meetingId = requireNotNull(row.get(MEMBERSHIP.MEETING_ID)),
+                    userId = requireNotNull(row.get(MEMBERSHIP.USER_ID)),
+                    displayName = requireNotNull(row.get(APP_USER.DISPLAY_NAME)),
+                    role = requireNotNull(row.get(MEMBERSHIP.ROLE)).literal,
+                    attendanceStatus = requireNotNull(row.get(MEMBERSHIP.ATTENDANCE_STATUS)).literal,
+                    joinedAt = requireNotNull(row.get(MEMBERSHIP.JOINED_AT)),
+                )
+            }
+    }
+
     @Transactional
     fun updateMembership(meetingId: UUID, memberId: UUID, request: UpdateMembershipRequest): MembershipResponse {
         meetingAccessService.requireMeetingHostOrCoHost(meetingId)
@@ -403,16 +431,24 @@ class MeetingService(
         runCatching { MeetingStatus.valueOf(raw.lowercase()) }
             .getOrElse { throw ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid meeting status: $raw") }
 
-    private fun validateMeetingUpdate(request: UpdateMeetingRequest) {
-        if (request.expectedHeadcount != null && request.expectedHeadcount <= 0) {
+    private fun validateMeetingUpdate(request: UpdateMeetingRequest) =
+        validateMeetingFields(request.expectedHeadcount, request.budget, request.startsAt, request.endsAt)
+
+    private fun validateMeetingFields(
+        expectedHeadcount: Int?,
+        budget: com.dudecide.app.api.dto.BudgetRangeDto?,
+        startsAt: OffsetDateTime?,
+        endsAt: OffsetDateTime?,
+    ) {
+        if (expectedHeadcount != null && expectedHeadcount <= 0) {
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "expectedHeadcount must be positive")
         }
-        val minBudget = request.budget?.min
-        val maxBudget = request.budget?.max
+        val minBudget = budget?.min
+        val maxBudget = budget?.max
         if (minBudget != null && maxBudget != null && minBudget > maxBudget) {
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "budget.min must be less than or equal to budget.max")
         }
-        if (request.startsAt != null && request.endsAt != null && request.startsAt.isAfter(request.endsAt)) {
+        if (startsAt != null && endsAt != null && startsAt.isAfter(endsAt)) {
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "startsAt must be before or equal to endsAt")
         }
     }

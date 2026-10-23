@@ -60,11 +60,13 @@ This document defines the MVP external API surface and internal async events.
 `POST /api/v1/meetings`
 
 - create meeting
+- optional `startsAt` / `endsAt` (event dates, used for the D-day countdown) and per-person `budget` range; `startsAt` must not be after `endsAt`
 
 `GET /api/v1/meetings/{meetingId}`
 
 - get meeting summary and progress
 - returns thread-level counts so the client can render planning progress without separate summary calls
+- includes `startsAt`, `endsAt`, and `budget` when set
 - requires meeting membership
 
 `PATCH /api/v1/meetings/{meetingId}`
@@ -88,6 +90,11 @@ This document defines the MVP external API surface and internal async events.
 - meeting title, member count, decision titles and statuses, and counts of pending decisions, confirmed decisions, open tasks, and open questions from imports
 - no quotes and no speaker names; public with a valid token
 - `404` unknown token, `410` expired or inactive link
+
+`GET /api/v1/meetings/{meetingId}/members`
+
+- members ordered by join time with display name, role, and attendance
+- requires meeting membership
 
 `PATCH /api/v1/meetings/{meetingId}/members/{memberId}`
 
@@ -285,6 +292,16 @@ Limits (both create endpoints): `429` after 3 imports per person or 10 per meeti
 `GET /api/v1/meetings/{meetingId}/notifications`
 
 - list notifications for the current local actor
+- each item carries `readAt` (null while unread)
+
+`POST /api/v1/meetings/{meetingId}/notifications/{notificationId}/read`
+
+- mark one of the current actor's notifications as read; repeat calls keep the first read time
+- `404` when the notification belongs to someone else or another meeting
+
+`POST /api/v1/meetings/{meetingId}/notifications/read-all`
+
+- mark every unread notification of the current actor in the meeting as read; returns `updatedCount`
 - requires meeting membership
 
 `GET /api/v1/meetings/{meetingId}/reports/latest`

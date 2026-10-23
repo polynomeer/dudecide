@@ -36,6 +36,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MeetingDetailResponse'
+    patch:
+      operationId: updateMeeting
+      summary: Update meeting metadata (host or co-host)
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMeetingRequest'
+      responses:
+        '200':
+          description: Updated meeting detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeetingDetailResponse'
   /meetings/{meetingId}/invite-links:
     post:
       operationId: createInviteLink
@@ -100,6 +118,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MembershipResponse'
+  /meetings/{meetingId}/members:
+    get:
+      operationId: listMembers
+      summary: List meeting members with display names
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '200':
+          description: Members ordered by join time
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MembershipResponse'
   /meetings/{meetingId}/members/{memberId}:
     patch:
       operationId: updateMembership
@@ -372,6 +405,40 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/NotificationView'
+  /meetings/{meetingId}/notifications/{notificationId}/read:
+    post:
+      operationId: markNotificationRead
+      summary: Mark one notification as read (keeps the first read time)
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Notification after the update
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationView'
+        '404':
+          description: Not a notification of the current user in this meeting
+  /meetings/{meetingId}/notifications/read-all:
+    post:
+      operationId: markAllNotificationsRead
+      summary: Mark every unread notification of the current user as read
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '200':
+          description: Number of notifications updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkNotificationsReadResponse'
   /meetings/{meetingId}/events:
     get:
       operationId: streamMeetingEvents
@@ -793,6 +860,35 @@ components:
           type: string
         budget:
           $ref: '#/components/schemas/BudgetRange'
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+    UpdateMeetingRequest:
+      type: object
+      description: Omitted fields keep their current value.
+      properties:
+        title:
+          type: string
+        meetingType:
+          type: string
+        status:
+          type: string
+        originRegion:
+          type: string
+        expectedHeadcount:
+          type: integer
+          minimum: 1
+        budget:
+          $ref: '#/components/schemas/BudgetRange'
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
     BudgetRange:
       type: object
       properties:
@@ -845,6 +941,12 @@ components:
           type: integer
         budget:
           $ref: '#/components/schemas/BudgetRange'
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
         ownerUserId:
           type: string
           format: uuid
@@ -1385,9 +1487,19 @@ components:
         sentAt:
           type: string
           format: date-time
+        readAt:
+          type: string
+          format: date-time
         createdAt:
           type: string
           format: date-time
+    MarkNotificationsReadResponse:
+      type: object
+      required:
+        - updatedCount
+      properties:
+        updatedCount:
+          type: integer
     ConfirmDecisionRequest:
       type: object
       required:

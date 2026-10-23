@@ -74,5 +74,10 @@ data class NotificationView(
     val type: String,
     val payload: Map<String, Any?> = emptyMap(),
     val sentAt: OffsetDateTime? = null,
+    val readAt: OffsetDateTime? = null,
     val createdAt: OffsetDateTime,
+)
+
+data class MarkNotificationsReadResponse(
+    val updatedCount: Int,
 )

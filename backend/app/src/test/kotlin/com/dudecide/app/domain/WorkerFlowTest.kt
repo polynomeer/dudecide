@@ -93,6 +93,7 @@ class WorkerFlowTest {
                         type VARCHAR(64) NOT NULL,
                         payload JSON NOT NULL DEFAULT JSON '{}',
                         sent_at TIMESTAMP WITH TIME ZONE,
+                        read_at TIMESTAMP WITH TIME ZONE,
                         created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         CONSTRAINT notification_meeting_fk FOREIGN KEY (meeting_id) REFERENCES meeting(id) ON DELETE CASCADE,
                         CONSTRAINT notification_recipient_fk FOREIGN KEY (recipient_user_id) REFERENCES app_user(id) ON DELETE CASCADE

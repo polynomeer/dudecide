@@ -1,13 +1,16 @@
 package com.dudecide.app.domain
 
+import com.dudecide.app.api.dto.MarkNotificationsReadResponse
 import com.dudecide.app.api.dto.NotificationView
 import com.dudecide.app.jooq.enums.NotificationType
 import com.dudecide.app.jooq.tables.Notification.Companion.NOTIFICATION
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.jooq.DSLContext
 import org.jooq.JSON
+import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.server.ResponseStatusException
 import java.time.OffsetDateTime
 import java.util.UUID
 
@@ -36,9 +39,46 @@ class NotificationService(
                     type = requireNotNull(record.type).literal,
                     payload = jsonToMap(record.payload),
                     sentAt = record.sentAt,
+                    readAt = record.readAt,
                     createdAt = requireNotNull(record.createdAt),
                 )
             }
+    }
+
+    /** Marks one of the current user's notifications as read. Already-read notifications keep their first read time. */
+    @Transactional
+    fun markRead(meetingId: UUID, notificationId: UUID): NotificationView {
+        val recipientUserId = meetingAccessService.requireMeetingMember(meetingId)
+        val updated = dsl.update(NOTIFICATION)
+            .set(NOTIFICATION.READ_AT, OffsetDateTime.now())
+            .where(NOTIFICATION.ID.eq(notificationId))
+            .and(NOTIFICATION.MEETING_ID.eq(meetingId))
+            .and(NOTIFICATION.RECIPIENT_USER_ID.eq(recipientUserId))
+            .and(NOTIFICATION.READ_AT.isNull)
+            .execute()
+        if (updated == 0 && !dsl.fetchExists(
+                NOTIFICATION,
+                NOTIFICATION.ID.eq(notificationId)
+                    .and(NOTIFICATION.MEETING_ID.eq(meetingId))
+                    .and(NOTIFICATION.RECIPIENT_USER_ID.eq(recipientUserId)),
+            )
+        ) {
+            throw ResponseStatusException(HttpStatus.NOT_FOUND, "notification not found")
+        }
+        return listNotifications(meetingId).first { it.id == notificationId }
+    }
+
+    /** Marks every unread notification of the current user in this meeting as read. */
+    @Transactional
+    fun markAllRead(meetingId: UUID): MarkNotificationsReadResponse {
+        val recipientUserId = meetingAccessService.requireMeetingMember(meetingId)
+        val updated = dsl.update(NOTIFICATION)
+            .set(NOTIFICATION.READ_AT, OffsetDateTime.now())
+            .where(NOTIFICATION.MEETING_ID.eq(meetingId))
+            .and(NOTIFICATION.RECIPIENT_USER_ID.eq(recipientUserId))
+            .and(NOTIFICATION.READ_AT.isNull)
+            .execute()
+        return MarkNotificationsReadResponse(updatedCount = updated)
     }
 
     @Transactional

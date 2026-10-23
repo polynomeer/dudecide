@@ -70,6 +70,11 @@ class MeetingController(
     ): ResponseEntity<MeetingDetailResponse> =
         ResponseEntity.ok(meetingService.updateMeeting(meetingId, request))
 
+    @GetMapping("/{meetingId}/members")
+    @Operation(summary = "List meeting members with display names")
+    fun listMembers(@PathVariable meetingId: UUID): ResponseEntity<List<MembershipResponse>> =
+        ResponseEntity.ok(meetingService.listMembers(meetingId))
+
     @PatchMapping("/{meetingId}/members/{memberId}")
     @Operation(summary = "Update meeting member role or attendance")
     fun updateMembership(
