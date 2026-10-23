@@ -15,7 +15,7 @@ export function MeetingPageHeader({
       <div className="min-w-0">
         {kicker ? <span className="num text-xs font-semibold text-muted">{kicker}</span> : null}
         <h1 className="font-display m-0 mt-1 text-[clamp(1.8rem,3vw,2.4rem)] leading-tight">{title}</h1>
-        {description ? <p className="section-copy mt-2 max-w-2xl">{description}</p> : null}
+        {description ? <div className="section-copy mt-2 max-w-2xl">{description}</div> : null}
       </div>
       {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
     </div>

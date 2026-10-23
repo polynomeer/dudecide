@@ -139,3 +139,70 @@ export const MEETING_TYPES = [
 export function meetingTypeLabel(type: string): string {
   return MEETING_TYPES.find((item) => item.value === type.toLowerCase())?.label ?? type;
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function startOfDay(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+}
+
+/** "D-27" before the event, "D-DAY" on the first day, "진행 중" during, "끝남" after. Null without a start date. */
+export function dDayLabel(startsAt?: string | null, endsAt?: string | null, now = new Date()): string | null {
+  if (!startsAt) {
+    return null;
+  }
+  const today = startOfDay(now);
+  const start = startOfDay(new Date(startsAt));
+  const end = endsAt ? startOfDay(new Date(endsAt)) : start;
+  if (today < start) {
+    return `D-${Math.round((start - today) / DAY_MS)}`;
+  }
+  if (today === start) {
+    return "D-DAY";
+  }
+  return today <= end ? "진행 중" : "끝남";
+}
+
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+function shortDate(value: Date, withMonth = true) {
+  const day = `${value.getDate()} ${WEEKDAYS[value.getDay()]}`;
+  return withMonth ? `${value.getMonth() + 1}.${String(value.getDate()).padStart(2, "0")} ${WEEKDAYS[value.getDay()]}` : day;
+}
+
+/** "11.14 금 – 16 일", or a single day when start and end match. */
+export function formatDateRange(startsAt?: string | null, endsAt?: string | null): string | null {
+  if (!startsAt) {
+    return null;
+  }
+  const start = new Date(startsAt);
+  if (!endsAt || startOfDay(new Date(endsAt)) === startOfDay(start)) {
+    return shortDate(start);
+  }
+  const end = new Date(endsAt);
+  return `${shortDate(start)} – ${shortDate(end, end.getMonth() !== start.getMonth())}`;
+}
+
+export const BUDGET_OPTIONS = [
+  { id: "under-10", label: "10만원 이하", min: null, max: 100000 },
+  { id: "10-30", label: "10–30만원", min: 100000, max: 300000 },
+  { id: "30-50", label: "30–50만원", min: 300000, max: 500000 },
+  { id: "over-50", label: "50만원 이상", min: 500000, max: null },
+] as const;
+
+function manWon(value: number) {
+  return `${Math.round(value / 10000).toLocaleString()}`;
+}
+
+/** Per-person budget as "1인 30–50만원". Null when no bound is set. */
+export function budgetLabel(budget?: { min?: number | null; max?: number | null } | null): string | null {
+  const min = budget?.min ?? null;
+  const max = budget?.max ?? null;
+  if (min === null && max === null) {
+    return null;
+  }
+  if (min !== null && max !== null) {
+    return `1인 ${manWon(min)}–${manWon(max)}만원`;
+  }
+  return min !== null ? `1인 ${manWon(min)}만원 이상` : `1인 ${manWon(max!)}만원 이하`;
+}

@@ -5,15 +5,19 @@ import type { Route } from "next";
 import { useQuery } from "@tanstack/react-query";
 import { ApiErrorPanel } from "@/components/api-error-panel";
 import { InviteLinkButton } from "@/components/meeting/invite-link-button";
+import { EventDatesEditor } from "@/components/meeting/event-dates-editor";
 import { MeetingPageHeader } from "@/components/meeting/meeting-page-header";
 import { VoteStudio } from "@/components/vote-studio";
 import { apiClient, type DecisionResponse } from "@/lib/api/client";
 import {
+  budgetLabel,
+  dDayLabel,
   DECISION_COLUMNS,
   decisionColumn,
   decisionProgressColor,
   decisionStatusLabel,
   decisionTypeLabel,
+  formatDateRange,
   formatShortDateTime,
   meetingTypeLabel,
   normalizeDecisionStatus,
@@ -55,12 +59,23 @@ export function MeetingOverview({ meetingId }: { meetingId: string }) {
   const discussing = decisions.filter((decision) => normalizeDecisionStatus(decision.status) === "in_discussion");
   const percent = decisions.length ? Math.round((confirmed.length / decisions.length) * 100) : 0;
   const typeLabel = meetingTypeLabel(meeting.meetingType);
-  const kicker = [typeLabel, meeting.originRegion, `멤버 ${meeting.memberCount}명`].filter(Boolean).join(" · ");
+  const dDay = dDayLabel(meeting.startsAt, meeting.endsAt);
+  const kicker = [
+    dDay,
+    formatDateRange(meeting.startsAt, meeting.endsAt),
+    typeLabel,
+    meeting.originRegion,
+    `멤버 ${meeting.memberCount}명`,
+    budgetLabel(meeting.budget),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <>
       <MeetingPageHeader
         kicker={kicker}
+        description={isHost ? <EventDatesEditor key={meeting.startsAt ?? "none"} meeting={meeting} /> : undefined}
         title={meeting.title}
         actions={
           <>
