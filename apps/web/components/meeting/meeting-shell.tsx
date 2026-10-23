@@ -87,6 +87,11 @@ export function MeetingShell({ meetingId, children }: { meetingId: string; child
     queryFn: () => apiClient.getMeeting(meetingId),
   });
   const { data: members } = useMeetingMembers(meetingId);
+  const { data: notifications } = useQuery({
+    queryKey: ["meeting-notifications", meetingId],
+    queryFn: () => apiClient.listNotifications(meetingId),
+  });
+  const unreadCount = notifications?.filter((item) => !item.readAt).length ?? 0;
   const { data: decisions } = useQuery({
     queryKey: ["meeting-decisions", meetingId],
     queryFn: () => apiClient.listDecisions(meetingId),
@@ -138,10 +143,16 @@ export function MeetingShell({ meetingId, children }: { meetingId: string; child
             <ThemeToggle className="lg:!h-11 lg:!w-11" />
             <Link
               href={`${base}/notifications` as Route}
-              aria-label="알림"
+              aria-label={unreadCount ? `알림 · 안 읽음 ${unreadCount}개` : "알림"}
               className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface text-ink lg:h-11 lg:w-11"
             >
               {icons.bell}
+              {unreadCount ? (
+                <span
+                  aria-hidden="true"
+                  className="absolute right-[9px] top-[9px] h-2 w-2 rounded-full bg-accent shadow-[0_0_0_2px_rgb(var(--surface))]"
+                />
+              ) : null}
             </Link>
             <span
               title={actor?.displayName ?? undefined}
