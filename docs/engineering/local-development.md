@@ -73,6 +73,8 @@ GRADLE_OPTS='-Djava.io.tmpdir=/private/tmp/dudecide-gradle-tmp' \
 /opt/homebrew/bin/gradle --no-daemon :backend:app:flywayMigrate
 ```
 
+It targets `jdbc:postgresql://localhost:5432/dudecide` (user and password `dudecide`) by default. Point it elsewhere with Flyway's own properties, for example `-Pflyway.url=jdbc:postgresql://localhost:55433/dudecide`; other `flyway.*` property names are rejected by the plugin. Create `/private/tmp/dudecide-gradle-tmp` first if it was cleared.
+
 ## jOOQ
 
 Generate jOOQ classes from Flyway SQL without requiring a running database:

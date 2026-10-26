@@ -67,9 +67,11 @@ jooq {
 }
 
 flyway {
-    url = providers.gradleProperty("flyway.jdbc.url").orNull ?: "jdbc:postgresql://localhost:5432/dudecide"
-    user = providers.gradleProperty("flyway.jdbc.user").orNull ?: "dudecide"
-    password = providers.gradleProperty("flyway.jdbc.password").orNull ?: "dudecide"
+    // Local defaults. Override with Flyway's own -Pflyway.url / -Pflyway.user / -Pflyway.password;
+    // the plugin rejects any other flyway.* property name.
+    url = "jdbc:postgresql://localhost:5432/dudecide"
+    user = "dudecide"
+    password = "dudecide"
     locations = arrayOf("filesystem:${projectDir}/src/main/resources/db/migration")
 }
 
