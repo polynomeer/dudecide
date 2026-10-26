@@ -222,8 +222,9 @@ class VoteService(
                 "status" to "closed",
             ),
         )
-        notificationService.createNotification(
+        notificationService.notifyMembers(
             meetingId = requireNotNull(closedVote.meetingId),
+            excludeUserId = actorId,
             type = NotificationType.vote_closed,
             payload = mapOf(
                 "voteId" to voteId,

@@ -2,7 +2,9 @@ package com.dudecide.app.domain
 
 import com.dudecide.app.api.dto.MarkNotificationsReadResponse
 import com.dudecide.app.api.dto.NotificationView
+import com.dudecide.app.jooq.enums.MeetingRole
 import com.dudecide.app.jooq.enums.NotificationType
+import com.dudecide.app.jooq.tables.Membership.Companion.MEMBERSHIP
 import com.dudecide.app.jooq.tables.Notification.Companion.NOTIFICATION
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.jooq.DSLContext
@@ -108,6 +110,36 @@ class NotificationService(
                 "type" to type.literal,
             ),
         )
+    }
+
+    /**
+     * Sends one notification to each member of the meeting, optionally only to the given roles,
+     * and skips [excludeUserId] (usually the actor, who already knows what they did).
+     */
+    @Transactional
+    fun notifyMembers(
+        meetingId: UUID,
+        type: NotificationType,
+        payload: Map<String, Any?>,
+        excludeUserId: UUID? = null,
+        roles: Set<MeetingRole>? = null,
+    ): Int {
+        var condition = MEMBERSHIP.MEETING_ID.eq(meetingId)
+        if (roles != null) {
+            condition = condition.and(MEMBERSHIP.ROLE.`in`(roles))
+        }
+        if (excludeUserId != null) {
+            condition = condition.and(MEMBERSHIP.USER_ID.ne(excludeUserId))
+        }
+        val recipients = dsl.select(MEMBERSHIP.USER_ID)
+            .from(MEMBERSHIP)
+            .where(condition)
+            .fetch(MEMBERSHIP.USER_ID)
+            .filterNotNull()
+        recipients.forEach { recipient ->
+            createNotification(meetingId, type, payload, recipientUserId = recipient)
+        }
+        return recipients.size
     }
 
     @Transactional(readOnly = true)

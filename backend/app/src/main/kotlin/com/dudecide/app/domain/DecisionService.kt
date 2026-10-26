@@ -156,8 +156,9 @@ class DecisionService(
                 "status" to "confirmed",
             ),
         )
-        notificationService.createNotification(
+        notificationService.notifyMembers(
             meetingId = requireNotNull(record.meetingId),
+            excludeUserId = actorId,
             type = NotificationType.decision_confirmed,
             payload = mapOf(
                 "decisionId" to decisionId,

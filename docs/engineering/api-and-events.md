@@ -293,6 +293,10 @@ Limits (both create endpoints): `429` after 3 imports per person or 10 per meeti
 
 - list notifications for the current local actor
 - each item carries `readAt` (null while unread)
+- recipients by type:
+  - `invite_joined`: every host and co-host (not the joiner)
+  - `decision_confirmed`, `vote_closed`, `report_ready`: every member except the actor who triggered it
+  - `invite_created`: the host who created the link
 
 `POST /api/v1/meetings/{meetingId}/notifications/{notificationId}/read`
 

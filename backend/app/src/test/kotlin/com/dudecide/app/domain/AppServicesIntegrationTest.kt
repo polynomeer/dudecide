@@ -571,6 +571,32 @@ class AppServicesIntegrationTest {
     }
 
     @Test
+    fun `meeting-wide notifications reach other members but not the actor`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(
+                CreateMeetingRequest(title = "Fan Out", meetingType = "trip"),
+            )
+            val invite = context.meetingService.createInviteLink(meeting.id, CreateInviteLinkRequest())
+            val guest = context.meetingService.joinWithInvite(invite.token, JoinInviteRequest(displayName = "Guest Reader"))
+            val threadId = context.findThreadId(meeting.id, ThreadCategory.location)
+            val decision = context.decisionService.createDecision(
+                meeting.id,
+                CreateDecisionRequest(threadId = threadId, decisionType = "location", title = "Final area"),
+            )
+
+            context.decisionService.confirmDecision(decision.id, ConfirmDecisionRequest(confirmedResult = mapOf("summary" to "Aewol")))
+            context.reportService.refreshReport(meeting.id)
+
+            val hostTypes = context.notificationService.listNotifications(meeting.id).map { it.type }.toSet()
+            val guestTypes = withActor(guest.userId, "Guest Reader") {
+                context.notificationService.listNotifications(meeting.id).map { it.type }
+            }
+            assertTrue("decision_confirmed" !in hostTypes && "report_ready" !in hostTypes)
+            assertEquals(listOf("decision_confirmed", "report_ready"), guestTypes.filter { it != "invite_joined" }.sorted())
+        }
+    }
+
+    @Test
     fun `notifications can be marked read one at a time or all at once`() {
         testContext().use { context ->
             val meeting = context.meetingService.createMeeting(
