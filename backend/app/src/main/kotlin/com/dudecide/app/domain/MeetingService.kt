@@ -291,11 +291,21 @@ class MeetingService(
                 "userId" to userId,
             ),
         )
-        notificationService.createNotification(
-            meetingId = meetingId,
-            type = NotificationType.invite_joined,
-            payload = mapOf("membershipId" to membershipId, "userId" to userId),
-        )
+        // The people who run the meeting need to know someone joined; the joiner already knows.
+        dsl.select(MEMBERSHIP.USER_ID)
+            .from(MEMBERSHIP)
+            .where(MEMBERSHIP.MEETING_ID.eq(meetingId))
+            .and(MEMBERSHIP.ROLE.`in`(MeetingRole.host, MeetingRole.co_host))
+            .fetch(MEMBERSHIP.USER_ID)
+            .filterNotNull()
+            .forEach { hostUserId ->
+                notificationService.createNotification(
+                    meetingId = meetingId,
+                    type = NotificationType.invite_joined,
+                    payload = mapOf("membershipId" to membershipId, "userId" to userId),
+                    recipientUserId = hostUserId,
+                )
+            }
         eventStreamService.publish(
             meetingId = meetingId,
             eventType = "meeting.updated",

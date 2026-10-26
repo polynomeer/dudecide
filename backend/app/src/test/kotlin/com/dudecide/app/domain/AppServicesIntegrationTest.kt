@@ -559,6 +559,14 @@ class AppServicesIntegrationTest {
             assertEquals(2, members.size)
             assertEquals("host", members.first().role)
             assertEquals(listOf("Guest Member"), members.filter { it.userId == joined.userId }.map { it.displayName })
+
+            val hostJoinNotices = context.notificationService.listNotifications(meeting.id).filter { it.type == "invite_joined" }
+            assertEquals(1, hostJoinNotices.size)
+            assertEquals(joined.userId.toString(), hostJoinNotices.single().payload["userId"].toString())
+            val guestJoinNotices = withActor(joined.userId, "Guest Member") {
+                context.notificationService.listNotifications(meeting.id).filter { it.type == "invite_joined" }
+            }
+            assertTrue(guestJoinNotices.isEmpty())
         }
     }
 
