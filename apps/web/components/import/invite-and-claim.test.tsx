@@ -48,6 +48,10 @@ describe("InvitePreview", () => {
       confirmedDecisionCount: 0,
       openTaskCount: 1,
       openQuestionCount: 1,
+      tasks: [
+        { title: "렌트카 알아보기", status: "todo", hasOwner: false },
+        { title: "항공권 비교", status: "in_progress", hasOwner: true },
+      ],
     });
 
     renderWithQueryClient(<InvitePreview token="token-1" />);
@@ -57,6 +61,9 @@ describe("InvitePreview", () => {
     expect(preview).toHaveTextContent("2개 항목이 의견을 기다리고 있어요.");
     expect(preview).toHaveTextContent("Date");
     expect(preview).toHaveTextContent("확인 필요");
+    expect(preview).toHaveTextContent("맡을 사람 필요");
+    expect(preview).toHaveTextContent("담당 있음");
+    expect(screen.getByRole("link", { name: "참여하고 투표하기 →" })).toHaveAttribute("href", "#join");
   });
 
   it("explains an expired link", async () => {

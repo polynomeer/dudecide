@@ -5,7 +5,15 @@ import { useMutation } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 
 /** Creates an invite link on first click and copies it to the clipboard. */
-export function InviteLinkButton({ meetingId, className = "action-secondary" }: { meetingId: string; className?: string }) {
+export function InviteLinkButton({
+  meetingId,
+  className = "action-secondary",
+  label = "초대 링크 복사",
+}: {
+  meetingId: string;
+  className?: string;
+  label?: string;
+}) {
   const [copied, setCopied] = useState(false);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const inviteMutation = useMutation({
@@ -33,7 +41,7 @@ export function InviteLinkButton({ meetingId, className = "action-secondary" }: 
         disabled={inviteMutation.isPending}
         className={className}
       >
-        {copied ? "복사됨 ✓" : inviteMutation.isError ? "다시 시도" : "초대 링크 복사"}
+        {copied ? "복사됨 ✓" : inviteMutation.isError ? "다시 시도" : label}
       </button>
       {failedUrl ? (
         <input readOnly value={failedUrl} aria-label="초대 링크" className="field num text-xs" />

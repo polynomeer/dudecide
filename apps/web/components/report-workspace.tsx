@@ -112,6 +112,7 @@ export function ReportWorkspace({ meetingId }: { meetingId: string }) {
             <>
               <InviteLinkButton
                 meetingId={meetingId}
+                label="단톡방에 리포트 링크 공유"
                 className="inline-flex min-h-[48px] items-center rounded-xl bg-white px-5 text-[15px] font-bold text-[#15171C] disabled:opacity-60"
               />
               <button
@@ -187,7 +188,7 @@ export function ReportWorkspace({ meetingId }: { meetingId: string }) {
   );
 }
 
-function SummaryTile({ value, label, className }: { value: number; label: string; className: string }) {
+export function SummaryTile({ value, label, className }: { value: number; label: string; className: string }) {
   return (
     <div className={`rounded-2xl px-[18px] py-4 ${className}`}>
       <div className="font-display text-[34px]">{value}</div>
@@ -196,7 +197,7 @@ function SummaryTile({ value, label, className }: { value: number; label: string
   );
 }
 
-function ReportSection({
+export function ReportSection({
   label,
   title,
   count,
@@ -220,7 +221,7 @@ function ReportSection({
   );
 }
 
-function ReportItem({
+export function ReportItem({
   kind,
   risk = false,
   aside,
@@ -240,7 +241,7 @@ function ReportItem({
   );
 }
 
-function EmptyRow({ children }: { children: React.ReactNode }) {
+export function EmptyRow({ children }: { children: React.ReactNode }) {
   return <p className="section-copy m-0 border-t border-line py-4">{children}</p>;
 }
 

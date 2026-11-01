@@ -33,6 +33,7 @@ export function JoinInviteForm({ token }: { token: string }) {
 
   return (
     <form
+      id="join"
       aria-label="모임 참여"
       className="flex flex-col gap-4 rounded-[22px] bg-surface p-6"
       onSubmit={form.handleSubmit((values) => {
