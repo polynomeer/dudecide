@@ -288,7 +288,7 @@ function DecisionWorkspace({
                 <span className="num w-11 flex-none text-xs text-muted">{timeOf(source?.createdAt ?? item.createdAt)}</span>
                 <span className="min-w-0 flex-1 text-sm leading-normal">
                   {source ? <b>{source.speaker.displayName} </b> : null}
-                  {item.quoteSnapshot}
+                  {quoteBody(item.quoteSnapshot, source?.speaker.displayName)}
                 </span>
                 <span className="flex-none text-xs font-bold text-accent-text">원문 →</span>
               </button>
@@ -305,7 +305,7 @@ function DecisionWorkspace({
               <span className="num flex-none pt-0.5 text-xs font-semibold">반대</span>
               <span>
                 {messagesById.get(item.messageId) ? <b>{messagesById.get(item.messageId)!.speaker.displayName} </b> : null}
-                {item.quoteSnapshot}
+                {quoteBody(item.quoteSnapshot, messagesById.get(item.messageId)?.speaker.displayName)}
               </span>
             </button>
           ))}
@@ -761,6 +761,11 @@ function HistoryRow({ entry }: { entry: DecisionHistoryView }) {
       </span>
     </div>
   );
+}
+
+// Imported and suggested evidence snapshots read "Name: body"; drop the name when it is already shown.
+function quoteBody(snapshot: string, speaker?: string) {
+  return speaker && snapshot.startsWith(`${speaker}: `) ? snapshot.slice(speaker.length + 2) : snapshot;
 }
 
 function timeOf(value?: string | null) {
