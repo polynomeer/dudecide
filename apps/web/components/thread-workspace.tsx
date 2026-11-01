@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiErrorPanel } from "@/components/api-error-panel";
 import { useForm } from "react-hook-form";
@@ -10,7 +10,8 @@ import { MeetingPageHeader } from "@/components/meeting/meeting-page-header";
 import { getApiErrorMessage } from "@/lib/api/error-display";
 import { apiClient } from "@/lib/api/client";
 import { avatarColor, initialOf } from "@/lib/display";
-import { useCurrentActor } from "@/lib/session";
+import { DecisionSuggestionCard } from "@/components/thread/decision-suggestion-card";
+import { useCurrentActor, useMeetingHostAccess } from "@/lib/session";
 
 type ThreadWorkspaceProps = {
   meetingId: string;
@@ -27,6 +28,11 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
   const meetingQuery = useQuery({
     queryKey: ["meeting", meetingId],
     queryFn: () => apiClient.getMeeting(meetingId),
+  });
+  const { isHost } = useMeetingHostAccess(meetingId);
+  const suggestionsQuery = useQuery({
+    queryKey: ["decision-suggestions", threadId],
+    queryFn: () => apiClient.listDecisionSuggestions(threadId),
   });
   const messagesQuery = useQuery({
     queryKey: ["thread-messages", threadId],
@@ -71,6 +77,21 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
   );
 
   const messages = [...olderMessages, ...(messagesQuery.data ?? [])];
+  // Each suggestion sits under its latest evidence message, like the Discussion design; unmatched ones go last.
+  const suggestionsAfter = new Map<string, NonNullable<typeof suggestionsQuery.data>>();
+  const trailingSuggestions: NonNullable<typeof suggestionsQuery.data> = [];
+  const positions = new Map(messages.map((message, index) => [message.id, index]));
+  for (const suggestion of suggestionsQuery.data ?? []) {
+    const anchor = suggestion.evidence
+      .map((item) => item.messageId)
+      .filter((id) => positions.has(id))
+      .sort((a, b) => positions.get(b)! - positions.get(a)!)[0];
+    if (anchor) {
+      suggestionsAfter.set(anchor, [...(suggestionsAfter.get(anchor) ?? []), suggestion]);
+    } else {
+      trailingSuggestions.push(suggestion);
+    }
+  }
 
   async function loadOlderMessages() {
     if (loadingOlder || messages.length === 0) {
@@ -154,36 +175,44 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
             messages.map((message) => {
               const isOwnMessage = message.senderUserId !== null && actorQuery.data?.userId === message.senderUserId;
               return (
-                <article key={message.id} className={`flex gap-2 ${isOwnMessage ? "flex-row-reverse" : ""}`}>
-                  {isOwnMessage ? null : (
-                    <span
-                      aria-hidden="true"
-                      className="flex h-8 w-8 flex-none items-center justify-center rounded-full text-xs font-bold text-[#15171C]"
-                      style={{ background: avatarColor(message.speaker.displayName) }}
-                    >
-                      {initialOf(message.speaker.displayName)}
-                    </span>
-                  )}
-                  <div className={`flex max-w-[min(34rem,80%)] flex-col ${isOwnMessage ? "items-end" : ""}`}>
-                    <div className="mb-1 text-[11px] font-semibold text-muted">
-                      {isOwnMessage ? "나" : message.speaker.displayName} · {formatDateTime(message.createdAt)}
-                      {message.origin === "imported" ? " · 단톡방" : ""}
-                      {message.editedAt ? " · 수정됨" : ""}
+                <Fragment key={message.id}>
+                  <article className={`flex gap-2 ${isOwnMessage ? "flex-row-reverse" : ""}`}>
+                    {isOwnMessage ? null : (
+                      <span
+                        aria-hidden="true"
+                        className="flex h-8 w-8 flex-none items-center justify-center rounded-full text-xs font-bold text-[#15171C]"
+                        style={{ background: avatarColor(message.speaker.displayName) }}
+                      >
+                        {initialOf(message.speaker.displayName)}
+                      </span>
+                    )}
+                    <div className={`flex max-w-[min(34rem,80%)] flex-col ${isOwnMessage ? "items-end" : ""}`}>
+                      <div className="mb-1 text-[11px] font-semibold text-muted">
+                        {isOwnMessage ? "나" : message.speaker.displayName} · {formatDateTime(message.createdAt)}
+                        {message.origin === "imported" ? " · 단톡방" : ""}
+                        {message.editedAt ? " · 수정됨" : ""}
+                      </div>
+                      <p
+                        className={`m-0 whitespace-pre-wrap px-3 py-2.5 text-sm leading-[1.45] ${
+                          isOwnMessage
+                            ? "rounded-[16px_4px_16px_16px] bg-accent-soft text-ink"
+                            : "rounded-[4px_16px_16px_16px] bg-surface-2 text-ink"
+                        }`}
+                      >
+                        {message.body}
+                      </p>
                     </div>
-                    <p
-                      className={`m-0 whitespace-pre-wrap px-3 py-2.5 text-sm leading-[1.45] ${
-                        isOwnMessage
-                          ? "rounded-[16px_4px_16px_16px] bg-accent-soft text-ink"
-                          : "rounded-[4px_16px_16px_16px] bg-surface-2 text-ink"
-                      }`}
-                    >
-                      {message.body}
-                    </p>
-                  </div>
-                </article>
+                  </article>
+                  {(suggestionsAfter.get(message.id) ?? []).map((suggestion) => (
+                    <DecisionSuggestionCard key={suggestion.id} meetingId={meetingId} suggestion={suggestion} canManage={isHost} />
+                  ))}
+                </Fragment>
               );
             })
           )}
+          {trailingSuggestions.map((suggestion) => (
+            <DecisionSuggestionCard key={suggestion.id} meetingId={meetingId} suggestion={suggestion} canManage={isHost} />
+          ))}
         </div>
 
         <form

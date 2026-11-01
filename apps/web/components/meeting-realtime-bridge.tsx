@@ -70,6 +70,7 @@ export function MeetingRealtimeBridge({
         eventType === "thread.updated"
       ) {
         await queryClient.invalidateQueries({ queryKey: ["thread-messages"] });
+        await queryClient.invalidateQueries({ queryKey: ["decision-suggestions"] });
       }
 
       if (eventType === "decision.updated") {
