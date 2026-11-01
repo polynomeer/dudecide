@@ -87,8 +87,9 @@ This document defines the MVP external API surface and internal async events.
 
 `GET /api/v1/invite-links/{token}/preview`
 
-- meeting title, member count, decision titles and statuses, and counts of pending decisions, confirmed decisions, open tasks, and open questions from imports
-- no quotes and no speaker names; public with a valid token
+- meeting title, type, event dates, member count, decision titles, statuses, and confirmation times, task titles and statuses with only a `hasOwner` flag, and counts of pending decisions, confirmed decisions, open tasks, and open questions from imports
+- no quotes, no member or speaker names, no user ids; public with a valid token
+- the invite link doubles as the public report link: the web renders this as the pre-join report (W-4) above the join form
 - `404` unknown token, `410` expired or inactive link
 
 `GET /api/v1/meetings/{meetingId}/members`

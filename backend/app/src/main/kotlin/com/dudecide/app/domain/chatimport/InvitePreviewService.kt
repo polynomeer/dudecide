@@ -2,6 +2,7 @@ package com.dudecide.app.domain.chatimport
 
 import com.dudecide.app.api.dto.InvitePreviewDecision
 import com.dudecide.app.api.dto.InvitePreviewResponse
+import com.dudecide.app.api.dto.InvitePreviewTask
 import com.dudecide.app.jooq.enums.ChatImportStatus
 import com.dudecide.app.jooq.enums.DecisionStatus
 import com.dudecide.app.jooq.enums.TaskStatus
@@ -21,8 +22,9 @@ import java.time.OffsetDateTime
 import java.util.UUID
 
 /**
- * What a not-yet-member sees behind a shared invite link: titles, statuses, and counts only.
- * No quotes and no speaker names leave the meeting before joining (product decision on shared links).
+ * What a not-yet-member sees behind a shared invite link, which doubles as the public report link:
+ * titles, statuses, dates, and counts only. No quotes and no member names leave the meeting before
+ * joining (product decision on shared links); tasks only say whether someone has taken them.
  */
 @Service
 class InvitePreviewService(
@@ -42,7 +44,7 @@ class InvitePreviewService(
         val meeting = dsl.selectFrom(MEETING).where(MEETING.ID.eq(meetingId)).fetchOne()
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "meeting not found")
 
-        val decisions = dsl.select(DECISION.TITLE, DECISION.DECISION_TYPE, DECISION.STATUS)
+        val decisions = dsl.select(DECISION.TITLE, DECISION.DECISION_TYPE, DECISION.STATUS, DECISION.DECIDED_AT)
             .from(DECISION)
             .where(DECISION.MEETING_ID.eq(meetingId))
             .orderBy(DECISION.CREATED_AT.asc())
@@ -51,6 +53,20 @@ class InvitePreviewService(
                     title = requireNotNull(record.get(DECISION.TITLE)),
                     decisionType = requireNotNull(record.get(DECISION.DECISION_TYPE)).literal,
                     status = requireNotNull(record.get(DECISION.STATUS)).literal,
+                    decidedAt = record.get(DECISION.DECIDED_AT),
+                )
+            }
+        val tasks = dsl.select(TASK_ITEM.TITLE, TASK_ITEM.STATUS, TASK_ITEM.OWNER_USER_ID, TASK_ITEM.DUE_AT)
+            .from(TASK_ITEM)
+            .where(TASK_ITEM.MEETING_ID.eq(meetingId))
+            .and(TASK_ITEM.STATUS.ne(TaskStatus.cancelled))
+            .orderBy(TASK_ITEM.CREATED_AT.asc())
+            .fetch { record ->
+                InvitePreviewTask(
+                    title = requireNotNull(record.get(TASK_ITEM.TITLE)),
+                    status = requireNotNull(record.get(TASK_ITEM.STATUS)).literal,
+                    hasOwner = record.get(TASK_ITEM.OWNER_USER_ID) != null,
+                    dueAt = record.get(TASK_ITEM.DUE_AT),
                 )
             }
 
@@ -66,6 +82,10 @@ class InvitePreviewService(
                 TASK_ITEM.MEETING_ID.eq(meetingId).and(TASK_ITEM.STATUS.notIn(TaskStatus.done, TaskStatus.cancelled)),
             ),
             openQuestionCount = openQuestionCount(meetingId),
+            meetingType = meeting.meetingType,
+            startsAt = meeting.startsAt,
+            endsAt = meeting.endsAt,
+            tasks = tasks,
         )
     }
 

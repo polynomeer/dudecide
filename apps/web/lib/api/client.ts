@@ -401,15 +401,27 @@ export type ImportSpeakerView = {
   mine: boolean;
 };
 
+export type InvitePreviewTask = {
+  title: string;
+  status: string;
+  hasOwner: boolean;
+  dueAt?: string | null;
+};
+
+/** What the shared link shows before joining: no quotes and no member names. */
 export type InvitePreviewResponse = {
   meetingTitle: string;
   meetingStatus: string;
   memberCount: number;
-  decisions: Array<{ title: string; decisionType: string; status: string }>;
+  decisions: Array<{ title: string; decisionType: string; status: string; decidedAt?: string | null }>;
   pendingDecisionCount: number;
   confirmedDecisionCount: number;
   openTaskCount: number;
   openQuestionCount: number;
+  meetingType?: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  tasks?: InvitePreviewTask[];
 };
 
 export type InviteLinkResponse = {

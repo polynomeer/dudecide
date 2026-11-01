@@ -148,12 +148,25 @@ data class InvitePreviewResponse(
     val confirmedDecisionCount: Int,
     val openTaskCount: Int,
     val openQuestionCount: Int,
+    val meetingType: String? = null,
+    val startsAt: OffsetDateTime? = null,
+    val endsAt: OffsetDateTime? = null,
+    val tasks: List<InvitePreviewTask> = emptyList(),
 )
 
 data class InvitePreviewDecision(
     val title: String,
     val decisionType: String,
     val status: String,
+    val decidedAt: OffsetDateTime? = null,
+)
+
+/** A task as shown before joining: no owner name, only whether someone has taken it. */
+data class InvitePreviewTask(
+    val title: String,
+    val status: String,
+    val hasOwner: Boolean,
+    val dueAt: OffsetDateTime? = null,
 )
 
 data class ParseTelemetryRequest(

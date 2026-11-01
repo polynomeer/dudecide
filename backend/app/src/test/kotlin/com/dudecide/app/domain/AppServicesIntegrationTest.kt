@@ -1131,8 +1131,19 @@ class AppServicesIntegrationTest {
             assertEquals(0, preview.confirmedDecisionCount)
             assertEquals(1, preview.openTaskCount)
             assertEquals(1, preview.openQuestionCount)
-            val json = context.objectMapper.writeValueAsString(preview)
-            listOf("Minji", "Junho", "Seoyeon", "Participant", "어때", "숙소는").forEach {
+            assertEquals("outing", preview.meetingType)
+            assertEquals(1, preview.tasks.size)
+            assertEquals(preview.openTaskCount, preview.tasks.count { it.status != "done" })
+
+            val joined = context.meetingService.joinWithInvite(invite.token, JoinInviteRequest(displayName = "Owner Hidden"))
+            val taskId = context.dsl.select(TASK_ITEM.ID).from(TASK_ITEM)
+                .where(TASK_ITEM.MEETING_ID.eq(created.meetingId)).fetchOne(TASK_ITEM.ID)!!
+            context.taskService.updateTask(taskId, UpdateTaskRequest(ownerUserId = joined.userId))
+            val withOwner = context.invitePreviewService.preview(invite.token)
+            assertTrue(withOwner.tasks.single().hasOwner)
+
+            val json = context.objectMapper.writeValueAsString(withOwner)
+            listOf("Minji", "Junho", "Seoyeon", "Participant", "어때", "숙소는", "Owner Hidden", joined.userId.toString()).forEach {
                 assertTrue(it !in json, "preview leaked: $it")
             }
 

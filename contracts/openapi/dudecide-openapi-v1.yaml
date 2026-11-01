@@ -2089,6 +2089,9 @@ components:
                 type: string
               status:
                 type: string
+              decidedAt:
+                type: string
+                format: date-time
         pendingDecisionCount:
           type: integer
         confirmedDecisionCount:
@@ -2097,6 +2100,33 @@ components:
           type: integer
         openQuestionCount:
           type: integer
+        meetingType:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        tasks:
+          type: array
+          description: Tasks without owner names; `hasOwner` only says whether someone took it. Cancelled tasks are left out.
+          items:
+            type: object
+            required:
+              - title
+              - status
+              - hasOwner
+            properties:
+              title:
+                type: string
+              status:
+                type: string
+              hasOwner:
+                type: boolean
+              dueAt:
+                type: string
+                format: date-time
     UpdateImportSpeakerRequest:
       type: object
       properties:
