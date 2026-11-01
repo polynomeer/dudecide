@@ -142,6 +142,20 @@ export type DecisionDetailResponse = DecisionResponse & {
   history: DecisionHistoryView[];
 };
 
+export type DecisionSuggestionView = {
+  id: string;
+  meetingId: string;
+  threadId: string;
+  status: "pending" | "accepted" | "dismissed";
+  analysisStatus: "likely_decided" | "contested";
+  decisionType: string;
+  title: string;
+  proposedResult: Record<string, unknown>;
+  evidence: Array<{ messageId: string; role: string }>;
+  decisionId?: string | null;
+  createdAt: string;
+};
+
 export type CreateDecisionRequest = {
   threadId: string;
   decisionType: string;
@@ -574,6 +588,12 @@ export const apiClient = {
     }),
   listDecisions: (meetingId: string) =>
     request<DecisionResponse[]>(`/api/v1/meetings/${meetingId}/decisions`),
+  listDecisionSuggestions: (threadId: string) =>
+    request<DecisionSuggestionView[]>(`/api/v1/threads/${threadId}/decision-suggestions`),
+  acceptDecisionSuggestion: (suggestionId: string) =>
+    request<DecisionResponse>(`/api/v1/decision-suggestions/${suggestionId}/accept`, { method: "POST" }),
+  dismissDecisionSuggestion: (suggestionId: string) =>
+    request<DecisionSuggestionView>(`/api/v1/decision-suggestions/${suggestionId}/dismiss`, { method: "POST" }),
   getDecision: (decisionId: string) =>
     request<DecisionDetailResponse>(`/api/v1/decisions/${decisionId}`),
   createDecision: (meetingId: string, body: CreateDecisionRequest) =>

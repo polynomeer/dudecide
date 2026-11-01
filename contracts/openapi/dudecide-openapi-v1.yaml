@@ -448,6 +448,57 @@ paths:
       responses:
         '200':
           description: SSE stream opened
+  /threads/{threadId}/decision-suggestions:
+    get:
+      operationId: listDecisionSuggestions
+      summary: List pending AI decision suggestions for a topic thread
+      description: Suggestions come from the live analysis worker; see docs/engineering/decision-suggestions.md.
+      parameters:
+        - name: threadId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Pending suggestions, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DecisionSuggestionView'
+  /decision-suggestions/{suggestionId}/accept:
+    post:
+      operationId: acceptDecisionSuggestion
+      summary: Turn a suggestion into a decision draft with its evidence (host or co-host)
+      parameters:
+        - $ref: '#/components/parameters/SuggestionId'
+      responses:
+        '201':
+          description: Decision created (proposed when likely decided, in_discussion when contested)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResponse'
+        '409':
+          description: Suggestion was already accepted or dismissed
+  /decision-suggestions/{suggestionId}/dismiss:
+    post:
+      operationId: dismissDecisionSuggestion
+      summary: Dismiss a suggestion so the same subject is not suggested again (host or co-host)
+      parameters:
+        - $ref: '#/components/parameters/SuggestionId'
+      responses:
+        '200':
+          description: Dismissed suggestion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionSuggestionView'
+        '409':
+          description: Suggestion was already accepted or dismissed
   /threads/{threadId}/messages:
     get:
       operationId: listMessages
@@ -801,6 +852,13 @@ paths:
                 $ref: '#/components/schemas/ImportSpeakerView'
 components:
   parameters:
+    SuggestionId:
+      name: suggestionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     ImportId:
       name: importId
       in: path
@@ -1058,6 +1116,61 @@ components:
           type: string
         attendanceStatus:
           type: string
+    DecisionSuggestionView:
+      type: object
+      required:
+        - id
+        - meetingId
+        - threadId
+        - status
+        - analysisStatus
+        - decisionType
+        - title
+        - proposedResult
+        - evidence
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        meetingId:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, accepted, dismissed]
+        analysisStatus:
+          type: string
+          enum: [likely_decided, contested]
+        decisionType:
+          type: string
+        title:
+          type: string
+        proposedResult:
+          type: object
+          additionalProperties: true
+        evidence:
+          type: array
+          items:
+            type: object
+            required:
+              - messageId
+              - role
+            properties:
+              messageId:
+                type: string
+                format: uuid
+              role:
+                type: string
+        decisionId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
     DecisionResponse:
       type: object
       required:

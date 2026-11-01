@@ -31,6 +31,9 @@ import com.dudecide.app.api.dto.VoteSubmissionItem
 import com.dudecide.app.api.dto.VoteSubmissionRequest
 import com.dudecide.app.config.ChatImportAiProperties
 import com.dudecide.app.config.ChatImportLimitProperties
+import com.dudecide.app.config.DecisionSuggestionProperties
+import com.dudecide.app.domain.suggestion.DecisionSuggestionAnalyzer
+import com.dudecide.app.domain.suggestion.DecisionSuggestionService
 import com.dudecide.app.domain.chatimport.ChatImportAnalysisWorker
 import com.dudecide.app.domain.chatimport.ChatImportAnalyzer
 import com.dudecide.app.domain.chatimport.ChatImportApplyService
@@ -593,6 +596,80 @@ class AppServicesIntegrationTest {
             }
             assertTrue("decision_confirmed" !in hostTypes && "report_ready" !in hostTypes)
             assertEquals(listOf("decision_confirmed", "report_ready"), guestTypes.filter { it != "invite_joined" }.sorted())
+        }
+    }
+
+    @Test
+    fun `quiet topic conversations produce decision suggestions a host can accept or dismiss`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(CreateMeetingRequest(title = "Live Suggest", meetingType = "trip"))
+            val threadId = context.findThreadId(meeting.id, ThreadCategory.lodging)
+            listOf(
+                "숙소 애월 독채 어때?",
+                "좋아 숙소 거기 괜찮다",
+                "ㅇㅋ 숙소 찬성",
+                "그럼 숙소 애월 독채로 확정",
+            ).forEach { context.messageService.postMessage(threadId, CreateMessageRequest(body = it)) }
+            val analyzer = context.suggestionAnalyzer()
+
+            assertEquals(null, analyzer.claimNext(), "conversation is not quiet yet")
+            val later = OffsetDateTime.now().plusMinutes(5)
+            assertEquals(threadId, analyzer.claimNext(later))
+            assertEquals(1, analyzer.analyze(threadId))
+            assertEquals(null, analyzer.claimNext(later.plusMinutes(5)), "no new messages since the last analysis")
+
+            val pending = context.decisionSuggestionService.listPending(threadId)
+            assertEquals(1, pending.size)
+            assertEquals("lodging", pending.single().decisionType)
+            assertEquals("likely_decided", pending.single().analysisStatus)
+            assertTrue(pending.single().evidence.isNotEmpty())
+            assertTrue(context.notificationService.listNotifications(meeting.id).any { it.type == "decision_suggested" })
+
+            val invite = context.meetingService.createInviteLink(meeting.id, CreateInviteLinkRequest())
+            val guest = context.meetingService.joinWithInvite(invite.token, JoinInviteRequest(displayName = "Guest Viewer"))
+            val forbidden = withActor(guest.userId, "Guest Viewer") {
+                assertEquals(1, context.decisionSuggestionService.listPending(threadId).size)
+                assertThrows(ResponseStatusException::class.java) { context.decisionSuggestionService.accept(pending.single().id) }
+            }
+            assertEquals(403, forbidden.statusCode.value())
+
+            val decision = context.decisionSuggestionService.accept(pending.single().id)
+            assertEquals(threadId, decision.threadId)
+            assertEquals(com.dudecide.shared.decision.DecisionStatus.PROPOSED, decision.status)
+            assertTrue(context.dsl.fetchCount(DECISION_EVIDENCE, DECISION_EVIDENCE.DECISION_ID.eq(decision.id)) > 0)
+            assertTrue(context.decisionSuggestionService.listPending(threadId).isEmpty())
+            val again = assertThrows(ResponseStatusException::class.java) { context.decisionSuggestionService.accept(pending.single().id) }
+            assertEquals(409, again.statusCode.value())
+
+            listOf("숙소 다시 보자 애월 독채 어때?", "숙소 좋아", "숙소 ㅇㅋ", "숙소 확정").forEach {
+                context.messageService.postMessage(threadId, CreateMessageRequest(body = it))
+            }
+            val next = OffsetDateTime.now().plusMinutes(10)
+            assertEquals(threadId, analyzer.claimNext(next))
+            assertEquals(0, analyzer.analyze(threadId), "the decided subject is not suggested again")
+        }
+    }
+
+    @Test
+    fun `decision suggestions respect the per-meeting daily cap and can be dismissed`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(CreateMeetingRequest(title = "Capped", meetingType = "trip"))
+            val threadId = context.findThreadId(meeting.id, ThreadCategory.transport)
+            listOf("렌트 할까?", "렌트 좋아", "렌트 ㅇㅋ", "렌트로 확정").forEach {
+                context.messageService.postMessage(threadId, CreateMessageRequest(body = it))
+            }
+            val later = OffsetDateTime.now().plusMinutes(5)
+            assertEquals(null, context.suggestionAnalyzer(DecisionSuggestionProperties(dailyPerMeeting = 0)).claimNext(later))
+            assertEquals(null, context.suggestionAnalyzer(DecisionSuggestionProperties(enabled = true, minNewMessages = 10)).claimNext(later))
+
+            val analyzer = context.suggestionAnalyzer()
+            assertEquals(threadId, analyzer.claimNext(later))
+            assertEquals(1, analyzer.analyze(threadId))
+            val suggestion = context.decisionSuggestionService.listPending(threadId).single()
+
+            val dismissed = context.decisionSuggestionService.dismiss(suggestion.id)
+            assertEquals("dismissed", dismissed.status)
+            assertTrue(context.decisionSuggestionService.listPending(threadId).isEmpty())
         }
     }
 
@@ -1318,6 +1395,7 @@ class AppServicesIntegrationTest {
             ),
             importSpeakerService = ImportSpeakerService(dsl, meetingAccessService, outboxService, eventStreamService),
             invitePreviewService = InvitePreviewService(dsl, objectMapper),
+            decisionSuggestionService = DecisionSuggestionService(dsl, objectMapper, meetingAccessService, outboxService, eventStreamService),
             meterRegistry = meterRegistry,
             chatImportServiceFactory = chatImportServiceFactory,
         )
@@ -1400,6 +1478,7 @@ class AppServicesIntegrationTest {
                 last_activity_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 read_only BOOLEAN NOT NULL DEFAULT FALSE,
+                suggestions_analyzed_at TIMESTAMP WITH TIME ZONE,
                 CONSTRAINT topic_thread_meeting_fk FOREIGN KEY (meeting_id) REFERENCES meeting(id) ON DELETE CASCADE
             );
 
@@ -1602,6 +1681,34 @@ class AppServicesIntegrationTest {
                 CONSTRAINT notification_recipient_fk FOREIGN KEY (recipient_user_id) REFERENCES app_user(id) ON DELETE CASCADE
             );
 
+            CREATE TABLE decision_suggestion (
+                id UUID DEFAULT random_uuid() PRIMARY KEY,
+                meeting_id UUID NOT NULL,
+                thread_id UUID NOT NULL,
+                status VARCHAR(16) NOT NULL DEFAULT 'pending',
+                analysis_status VARCHAR(32) NOT NULL,
+                decision_type VARCHAR(64) NOT NULL,
+                title VARCHAR(200) NOT NULL,
+                proposed_result JSON NOT NULL DEFAULT JSON '{}',
+                evidence JSON NOT NULL DEFAULT JSON '[]',
+                decision_id UUID,
+                resolved_by_user_id UUID,
+                resolved_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT decision_suggestion_meeting_fk FOREIGN KEY (meeting_id) REFERENCES meeting(id) ON DELETE CASCADE,
+                CONSTRAINT decision_suggestion_thread_fk FOREIGN KEY (thread_id) REFERENCES topic_thread(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE decision_suggestion_run (
+                id UUID DEFAULT random_uuid() PRIMARY KEY,
+                meeting_id UUID NOT NULL,
+                thread_id UUID NOT NULL,
+                message_count INTEGER NOT NULL,
+                suggestion_count INTEGER NOT NULL DEFAULT 0,
+                failure_reason TEXT,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE TABLE outbox_event (
                 id UUID DEFAULT random_uuid() PRIMARY KEY,
                 aggregate_type VARCHAR(64) NOT NULL,
@@ -1638,6 +1745,7 @@ class AppServicesIntegrationTest {
         val chatImportApplyService: ChatImportApplyService,
         val importSpeakerService: ImportSpeakerService,
         val invitePreviewService: InvitePreviewService,
+        val decisionSuggestionService: DecisionSuggestionService,
         val meterRegistry: SimpleMeterRegistry,
         val chatImportServiceFactory: (ChatImportLimitProperties) -> ChatImportService,
     ) : AutoCloseable {
@@ -1647,6 +1755,21 @@ class AppServicesIntegrationTest {
             ChatImportAnalyzer(dsl, objectMapper, llmClient, eventStreamService, ChatImportAiProperties(), meterRegistry)
 
         fun maintenanceWorker(): ChatImportMaintenanceWorker = ChatImportMaintenanceWorker(dsl, meterRegistry)
+
+        fun suggestionAnalyzer(
+            properties: DecisionSuggestionProperties = DecisionSuggestionProperties(),
+            llmClient: LlmClient = FakeLlmClient(),
+        ): DecisionSuggestionAnalyzer =
+            DecisionSuggestionAnalyzer(
+                dsl,
+                objectMapper,
+                llmClient,
+                ChatImportAiProperties(),
+                meterRegistry,
+                properties,
+                notificationService,
+                eventStreamService,
+            )
 
         fun analysisWorker(llmClient: LlmClient = FakeLlmClient()): ChatImportAnalysisWorker =
             ChatImportAnalysisWorker(analyzer(llmClient))

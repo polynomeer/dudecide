@@ -19,6 +19,8 @@ It must not:
 - hide meaningful dissent
 - invent evidence or rationale
 
+Implementation status: chat import runs the batch pipeline; live topic threads run the decision suggestion stage on quiet conversations ([`decision-suggestions.md`](./decision-suggestions.md)). Per-message topic classification is not implemented yet.
+
 ## Pipeline Overview
 
 ```mermaid

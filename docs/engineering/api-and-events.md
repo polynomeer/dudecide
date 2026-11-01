@@ -102,6 +102,25 @@ This document defines the MVP external API surface and internal async events.
 - update role or attendance state
 - requires `host` or `co_host`
 
+### Decision Suggestions
+
+`GET /api/v1/threads/{threadId}/decision-suggestions`
+
+- pending AI suggestions for the thread, produced by the live analysis worker ([`decision-suggestions.md`](./decision-suggestions.md))
+- requires meeting membership
+
+`POST /api/v1/decision-suggestions/{suggestionId}/accept`
+
+- creates a decision in the same thread (`proposed` when likely decided, `in_discussion` when contested) with the suggestion's evidence
+- requires `host` or `co_host`; `409` once accepted or dismissed
+
+`POST /api/v1/decision-suggestions/{suggestionId}/dismiss`
+
+- hides the suggestion; the same subject is not suggested again in that thread
+- requires `host` or `co_host`; `409` once accepted or dismissed
+
+New suggestions publish `thread.updated` (`kind: suggestion.created`) and notify hosts and co-hosts with `decision_suggested`.
+
 ### Threads And Messages
 
 `GET /api/v1/meetings/{meetingId}/threads`
@@ -298,6 +317,7 @@ Limits (both create endpoints): `429` after 3 imports per person or 10 per meeti
   - `invite_joined`: every host and co-host (not the joiner)
   - `decision_confirmed`, `vote_closed`, `report_ready`: every member except the actor who triggered it
   - `invite_created`: the host who created the link
+  - `decision_suggested`: every host and co-host (sent by the live suggestion worker)
 
 `POST /api/v1/meetings/{meetingId}/notifications/{notificationId}/read`
 
