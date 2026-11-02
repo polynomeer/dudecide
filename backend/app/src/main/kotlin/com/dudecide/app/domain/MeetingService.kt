@@ -400,11 +400,11 @@ class MeetingService(
 
     private fun createDefaultThreads(meetingId: UUID) {
         val defaults = listOf(
-            ThreadSeed(ThreadCategory.date, "Date"),
-            ThreadSeed(ThreadCategory.location, "Location"),
-            ThreadSeed(ThreadCategory.lodging, "Lodging"),
-            ThreadSeed(ThreadCategory.transport, "Transport"),
-            ThreadSeed(ThreadCategory.free_chat, "Free Chat"),
+            ThreadSeed(ThreadCategory.date, "날짜"),
+            ThreadSeed(ThreadCategory.location, "장소"),
+            ThreadSeed(ThreadCategory.lodging, "숙소"),
+            ThreadSeed(ThreadCategory.transport, "교통"),
+            ThreadSeed(ThreadCategory.free_chat, "자유수다"),
         )
 
         defaults.forEachIndexed { index, seed ->

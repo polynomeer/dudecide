@@ -316,7 +316,7 @@ class ChatImportService(
             .set(TOPIC_THREAD.ID, threadId)
             .set(TOPIC_THREAD.MEETING_ID, meetingId)
             .set(TOPIC_THREAD.CATEGORY, ThreadCategory.free_chat)
-            .set(TOPIC_THREAD.TITLE, "Imported: ${roomName ?: "chat"}".take(200))
+            .set(TOPIC_THREAD.TITLE, "가져온 대화: ${roomName ?: "단톡방"}".take(200))
             .set(TOPIC_THREAD.SORT_ORDER, nextSortOrder)
             .set(TOPIC_THREAD.READ_ONLY, true)
             .execute()

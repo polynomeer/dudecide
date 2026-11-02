@@ -235,7 +235,7 @@ Recommended answers to the earlier open questions, accepted for Phase 0 and Phas
 
 ### Imported messages in the UI
 
-- Imported messages live in one read-only thread per source room ("Imported: <room name>"), collapsed by default.
+- Imported messages live in one read-only thread per source room ("가져온 대화: <room name>"), collapsed by default.
 - Their main surface is evidence behind decisions, open items, and tasks. Imported messages cannot be edited or replied to.
 
 ### Usage caps (free tier)

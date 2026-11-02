@@ -861,7 +861,7 @@ class AppServicesIntegrationTest {
 
             val thread = context.dsl.selectFrom(TOPIC_THREAD).where(TOPIC_THREAD.ID.eq(created.threadId)).fetchOne()!!
             assertEquals(true, thread.readOnly)
-            assertEquals("Imported: Jeju trip", thread.title)
+            assertEquals("가져온 대화: Jeju trip", thread.title)
             assertEquals(5, thread.sortOrder)
 
             val speakers = context.dsl.selectFrom(IMPORT_SPEAKER)
