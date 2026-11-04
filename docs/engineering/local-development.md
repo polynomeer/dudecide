@@ -179,6 +179,8 @@ Behavior:
 - `POST /api/v1/auth/guest-sessions` creates a guest-backed local session for browser-style flows
 - invite-link joins also bind the joined user into the current HTTP session
 - requests without a session get `401` by default
+- production needs `DUDECIDE_SESSION_COOKIE_SECURE=true` (HTTPS) and, behind a trusted proxy, `DUDECIDE_FORWARD_HEADERS=native` so rate limits see the real client address instead of the proxy's
+- rate limits apply locally too; raise them with `DUDECIDE_RATE_LIMITS_*`, for example `DUDECIDE_RATE_LIMITS_GUEST_SESSIONS_PER_HOUR=1000`
 - for curl or seed-data work only, start the backend with `DUDECIDE_AUTH_DEV_ACTORS_ENABLED=true`: `X-Actor-Id: <user-uuid>` and optional `X-Actor-Name: <display-name>` then simulate callers, and requests with neither a session nor a header act as the shared `Local Host` user. Never set this outside local development; anyone could act as anyone
 - meeting membership is required for read access and `host` or `co_host` is required for protected mutations
 

@@ -6,6 +6,38 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /auth/guest-sessions:
+    post:
+      operationId: createGuestSession
+      summary: Start a guest session, or return the current user when the browser already has one
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGuestSessionRequest'
+      responses:
+        '201':
+          description: The session's user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentActorResponse'
+        '429':
+          description: Rate limited; see the Retry-After header
+  /auth/me:
+    get:
+      operationId: getCurrentActor
+      summary: Get the user of the current session
+      responses:
+        '200':
+          description: The session's user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentActorResponse'
+        '401':
+          description: No session
   /meetings:
     post:
       operationId: createMeeting
@@ -112,6 +144,8 @@ paths:
             schema:
               $ref: '#/components/schemas/JoinInviteRequest'
       responses:
+        '429':
+          description: Rate limited; see the Retry-After header
         '201':
           description: Membership created
           content:
@@ -526,6 +560,8 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateMessageRequest'
       responses:
+        '429':
+          description: Rate limited; see the Retry-After header
         '201':
           description: Message created
           content:
@@ -709,6 +745,8 @@ paths:
             schema:
               $ref: '#/components/schemas/ParseTelemetryRequest'
       responses:
+        '429':
+          description: Rate limited; see the Retry-After header
         '204':
           description: Recorded
   /imports/{importId}:
@@ -901,6 +939,30 @@ components:
         type: string
         format: uuid
   schemas:
+    CreateGuestSessionRequest:
+      type: object
+      required:
+        - displayName
+      properties:
+        displayName:
+          type: string
+    CurrentActorResponse:
+      type: object
+      required:
+        - userId
+        - displayName
+        - authSource
+      properties:
+        userId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        authSource:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
     CreateMeetingRequest:
       type: object
       required:

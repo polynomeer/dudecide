@@ -24,7 +24,10 @@ This document defines the MVP external API surface and internal async events.
 - local development only, with `dudecide.auth.dev-actors-enabled=true` (off by default): `X-Actor-Id` selects the caller and auto-provisions the user row, `X-Actor-Name` seeds the display name, and calls with neither fall back to the shared `Local Host` user
 - invite token join creates guest membership records and also binds the joined user into the current HTTP session
 - meeting-scope authorization is enforced through membership role checks
-- signed production-grade sessions and external identity proof remain follow-up work
+- sessions live in PostgreSQL (Spring Session JDBC, V8) and survive restarts; they expire after 90 idle days, and the `SESSION` cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` when `DUDECIDE_SESSION_COOKIE_SECURE=true`
+- a browser with a session keeps its identity: `POST /auth/guest-sessions` returns the current user, and invite joins add that user to the meeting (joining twice returns the same membership)
+- external identity proof and a way back in from another device remain follow-up work
+- rate limits answer `429` with `Retry-After`: guest sessions and invite joins per client address per hour, parse telemetry per address per hour, and messages per user per minute (`dudecide.rate-limits.*`; counted per app instance)
 
 ## Core Resources
 
