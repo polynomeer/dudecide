@@ -20,8 +20,8 @@ This document defines the MVP external API surface and internal async events.
 - `POST /api/v1/auth/guest-sessions` creates a local guest-backed session
 - `GET /api/v1/auth/me` returns the currently resolved actor
 - `DELETE /api/v1/auth/session` clears the current local session
-- `X-Actor-Id` selects the caller user identity and auto-provisions the user row if needed
-- `X-Actor-Name` updates or seeds the caller display name for local development
+- requests without a session get `401`; only guest session creation, invite preview and join, and parse telemetry are public
+- local development only, with `dudecide.auth.dev-actors-enabled=true` (off by default): `X-Actor-Id` selects the caller and auto-provisions the user row, `X-Actor-Name` seeds the display name, and calls with neither fall back to the shared `Local Host` user
 - invite token join creates guest membership records and also binds the joined user into the current HTTP session
 - meeting-scope authorization is enforced through membership role checks
 - signed production-grade sessions and external identity proof remain follow-up work

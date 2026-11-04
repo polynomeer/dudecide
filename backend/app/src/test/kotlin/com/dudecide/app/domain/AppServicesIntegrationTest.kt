@@ -1345,7 +1345,7 @@ class AppServicesIntegrationTest {
                 .withRenderNameCase(RenderNameCase.LOWER),
         )
         val eventStreamService = EventStreamService(objectMapper)
-        val localActorProvider = LocalActorProvider(dsl)
+        val localActorProvider = LocalActorProvider(dsl, devActorsEnabled = true)
         val meetingAccessService = MeetingAccessService(dsl, localActorProvider)
         val outboxService = OutboxService(dsl, objectMapper)
         val notificationService = NotificationService(dsl, objectMapper, localActorProvider, meetingAccessService, eventStreamService)

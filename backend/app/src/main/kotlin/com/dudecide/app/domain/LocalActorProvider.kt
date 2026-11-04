@@ -2,6 +2,8 @@ package com.dudecide.app.domain
 
 import com.dudecide.app.jooq.tables.AppUser.Companion.APP_USER
 import org.jooq.DSLContext
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Propagation
@@ -19,6 +21,9 @@ import java.util.UUID
 @Component
 class LocalActorProvider(
     private val dsl: DSLContext,
+    // Development only: trusts X-Actor-Id and falls back to the shared Local Host user. Anyone could act as anyone,
+    // so it stays off unless a developer turns it on for curl and seed-data work.
+    @Value("\${dudecide.auth.dev-actors-enabled:false}") private val devActorsEnabled: Boolean = false,
 ) {
     companion object {
         const val SESSION_ACTOR_ID_KEY = "actorUserId"
@@ -26,6 +31,12 @@ class LocalActorProvider(
     }
 
     private val localHostId: UUID = UUID.fromString("00000000-0000-0000-0000-000000000001")
+
+    init {
+        if (devActorsEnabled) {
+            LoggerFactory.getLogger(javaClass).warn("dudecide.auth.dev-actors-enabled is on: callers are not authenticated")
+        }
+    }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun ensureHostUser(): UUID {
@@ -45,6 +56,9 @@ class LocalActorProvider(
         val sessionActorName = request?.getSession(false)?.getAttribute(SESSION_ACTOR_NAME_KEY)?.toString()?.trim().orEmpty().ifBlank { null }
         if (sessionActorId.isNotBlank()) {
             return buildActor(sessionActorId, sessionActorName, "session")
+        }
+        if (!devActorsEnabled) {
+            throw ResponseStatusException(HttpStatus.UNAUTHORIZED, "session required")
         }
 
         val actorIdHeader = request?.getHeader("X-Actor-Id")?.trim().orEmpty()

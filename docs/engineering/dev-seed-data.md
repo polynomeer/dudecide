@@ -47,6 +47,7 @@ psql postgresql://dudecide:dudecide@localhost:5432/dudecide \
 
 ## Operating Notes
 
+- The seeded meeting belongs to `Local Host`. To reach it, run the backend with `DUDECIDE_AUTH_DEV_ACTORS_ENABLED=true`; sessions created through the web are different users.
 - The SQL is idempotent for the seeded primary keys.
 - The seed is for local development only and should not be used in production-like environments.
 - When a new persistent demo scenario becomes important, add a new focused seed file instead of overloading this one.

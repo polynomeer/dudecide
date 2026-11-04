@@ -15,6 +15,8 @@ management:
         include: health,info
 
 dudecide:
+  auth:
+    dev-actors-enabled: ${DUDECIDE_AUTH_DEV_ACTORS_ENABLED:false}
   ai:
     provider: ${DUDECIDE_AI_PROVIDER:fake}
     max-concurrency: 4

@@ -178,7 +178,8 @@ Behavior:
 - the current actor model first checks an HTTP session, then development headers, then falls back to a local host identity
 - `POST /api/v1/auth/guest-sessions` creates a guest-backed local session for browser-style flows
 - invite-link joins also bind the joined user into the current HTTP session
-- use `X-Actor-Id: <user-uuid>` and optional `X-Actor-Name: <display-name>` to simulate different callers locally
+- requests without a session get `401` by default
+- for curl or seed-data work only, start the backend with `DUDECIDE_AUTH_DEV_ACTORS_ENABLED=true`: `X-Actor-Id: <user-uuid>` and optional `X-Actor-Name: <display-name>` then simulate callers, and requests with neither a session nor a header act as the shared `Local Host` user. Never set this outside local development; anyone could act as anyone
 - meeting membership is required for read access and `host` or `co_host` is required for protected mutations
 
 ## Seed Data

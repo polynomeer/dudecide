@@ -34,7 +34,7 @@ class WorkerFlowTest {
         val dsl = dsl()
         val objectMapper = ObjectMapper().findAndRegisterModules()
         val eventStreamService = EventStreamService(objectMapper)
-        val localActorProvider = LocalActorProvider(dsl)
+        val localActorProvider = LocalActorProvider(dsl, devActorsEnabled = true)
         val meetingAccessService = MeetingAccessService(dsl, localActorProvider)
         val notificationService = NotificationService(dsl, objectMapper, localActorProvider, meetingAccessService, eventStreamService)
         val worker = NotificationDispatchWorker(notificationService)
