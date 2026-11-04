@@ -19,7 +19,7 @@ export function getApiErrorMessage(
   }
 
   if (error.status === 401) {
-    return "세션이 없거나 만료되었습니다. `/start`에서 게스트 세션을 다시 시작해 주세요.";
+    return "세션이 없거나 만료되었습니다. /start 에서 이름을 정하고 다시 시작해 주세요.";
   }
 
   if (error.status === 403) {

@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
@@ -11,7 +12,7 @@ type FormValues = {
   displayName: string;
 };
 
-export function CreateGuestSessionForm() {
+export function CreateGuestSessionForm({ next = "/meetings/new" }: { next?: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -26,7 +27,7 @@ export function CreateGuestSessionForm() {
     mutationFn: (values: FormValues) => apiClient.createGuestSession(values),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["current-actor"] });
-      router.push("/meetings/new");
+      router.push(next as Route);
     },
     onError: (error: Error) => {
       setErrorMessage(error.message);
