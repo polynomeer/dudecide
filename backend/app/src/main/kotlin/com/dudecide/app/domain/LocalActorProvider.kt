@@ -77,6 +77,16 @@ class LocalActorProvider(
         )
     }
 
+    /** The actor of the browser session, or null without one. Never uses the development fallbacks. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    fun sessionActorOrNull(): CurrentActor? {
+        val request = (RequestContextHolder.getRequestAttributes() as? ServletRequestAttributes)?.request
+        val session = request?.getSession(false) ?: return null
+        val actorId = session.getAttribute(SESSION_ACTOR_ID_KEY)?.toString()?.trim().orEmpty()
+        if (actorId.isBlank()) return null
+        return buildActor(actorId, session.getAttribute(SESSION_ACTOR_NAME_KEY)?.toString()?.trim()?.ifBlank { null }, "session")
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     fun createSessionActor(displayName: String): CurrentActor {
         val actorId = UUID.randomUUID()

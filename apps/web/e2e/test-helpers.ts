@@ -57,6 +57,29 @@ export async function stubCurrentActor(
   });
 }
 
+/** `/auth/me` answers 401 until the page creates a guest session or joins an invite, like a first-time visitor. */
+export async function stubCurrentActorAfterSignIn(
+  page: Page,
+  actor: { userId: string; displayName: string } = {
+    userId: "user-host-1",
+    displayName: "Host One",
+  },
+) {
+  let signedIn = false;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && /\/auth\/guest-sessions$|\/invite-links\/[^/]+\/join$/.test(request.url())) {
+      signedIn = true;
+    }
+  });
+  await page.route(`${API_BASE_URL}/api/v1/auth/me`, async (route) => {
+    if (signedIn) {
+      await fulfillJson(route, { ...actor, authSource: "session" });
+    } else {
+      await fulfillJson(route, { status: 401 }, 401);
+    }
+  });
+}
+
 export async function stubGuestSessionCreation(page: Page) {
   await page.route(`${API_BASE_URL}/api/v1/auth/guest-sessions`, async (route) => {
     const body = route.request().postDataJSON() as { displayName?: string };

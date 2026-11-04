@@ -6,6 +6,8 @@ import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { FormErrorSummary } from "@/components/form-error-summary";
 import { apiClient } from "@/lib/api/client";
+import { getApiErrorMessage } from "@/lib/api/error-display";
+import { useCurrentActor } from "@/lib/session";
 
 type FormValues = {
   displayName: string;
@@ -14,6 +16,7 @@ type FormValues = {
 export function JoinInviteForm({ token }: { token: string }) {
   const router = useRouter();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { data: actor } = useCurrentActor();
   const form = useForm<FormValues>({
     mode: "onBlur",
     defaultValues: {
@@ -27,9 +30,35 @@ export function JoinInviteForm({ token }: { token: string }) {
       router.push(`/meetings/${response.meetingId}`);
     },
     onError: (error: Error) => {
-      setErrorMessage(error.message);
+      setErrorMessage(getApiErrorMessage(error, { resourceName: "초대 링크" }));
     },
   });
+
+  // A browser that already has an identity joins as that user, so there is no name to ask for.
+  if (actor) {
+    return (
+      <section id="join" aria-label="모임 참여" className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] bg-surface p-6">
+        <div>
+          <h2 className="m-0 text-[17px] font-bold">참여하고 투표하기</h2>
+          <p className="m-0 mt-1 text-[13px] text-muted">
+            <b className="text-ink">{actor.displayName}</b> 이름으로 참여해요.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setErrorMessage(null);
+            mutation.mutate({ displayName: actor.displayName });
+          }}
+          disabled={mutation.isPending}
+          className="action-primary min-h-[48px] px-6"
+        >
+          {mutation.isPending ? "참여하는 중…" : "참여하기"}
+        </button>
+        {errorMessage ? <p className="m-0 w-full text-sm text-danger">{errorMessage}</p> : null}
+      </section>
+    );
+  }
 
   return (
     <form

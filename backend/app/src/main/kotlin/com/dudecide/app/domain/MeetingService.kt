@@ -260,16 +260,24 @@ class MeetingService(
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "invite link is no longer valid")
         }
 
-        val userId = UUID.randomUUID()
+        val meetingId = requireNotNull(invite.meetingId)
+        // A browser that already has an identity joins as that user, so its other meetings stay reachable.
+        val sessionActor = localActorProvider.sessionActorOrNull()
+        if (sessionActor != null) {
+            existingMembership(meetingId, sessionActor)?.let { return it }
+        }
+        val userId = sessionActor?.userId ?: UUID.randomUUID()
+        val displayName = sessionActor?.displayName ?: request.displayName
         val membershipId = UUID.randomUUID()
         val joinedAt = OffsetDateTime.now()
-        val meetingId = requireNotNull(invite.meetingId)
 
-        dsl.insertInto(APP_USER)
-            .set(APP_USER.ID, userId)
-            .set(APP_USER.DISPLAY_NAME, request.displayName)
-            .set(APP_USER.STATUS, "active")
-            .execute()
+        if (sessionActor == null) {
+            dsl.insertInto(APP_USER)
+                .set(APP_USER.ID, userId)
+                .set(APP_USER.DISPLAY_NAME, displayName)
+                .set(APP_USER.STATUS, "active")
+                .execute()
+        }
 
         dsl.insertInto(MEMBERSHIP)
             .set(MEMBERSHIP.ID, membershipId)
@@ -313,12 +321,29 @@ class MeetingService(
             id = membershipId,
             meetingId = meetingId,
             userId = userId,
-            displayName = request.displayName,
+            displayName = displayName,
             role = MeetingRole.guest.literal,
             attendanceStatus = AttendanceStatus.accepted.literal,
             joinedAt = joinedAt,
         )
     }
+
+    private fun existingMembership(meetingId: UUID, actor: LocalActorProvider.CurrentActor): MembershipResponse? =
+        dsl.selectFrom(MEMBERSHIP)
+            .where(MEMBERSHIP.MEETING_ID.eq(meetingId))
+            .and(MEMBERSHIP.USER_ID.eq(actor.userId))
+            .fetchOne()
+            ?.let { row ->
+                MembershipResponse(
+                    id = requireNotNull(row.id),
+                    meetingId = meetingId,
+                    userId = actor.userId,
+                    displayName = actor.displayName,
+                    role = requireNotNull(row.role).literal,
+                    attendanceStatus = requireNotNull(row.attendanceStatus).literal,
+                    joinedAt = requireNotNull(row.joinedAt),
+                )
+            }
 
     @Transactional(readOnly = true)
     fun listMembers(meetingId: UUID): List<MembershipResponse> {

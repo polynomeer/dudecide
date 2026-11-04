@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
-  stubCurrentActor,
+  stubCurrentActorAfterSignIn,
   stubDecisionList,
   stubInviteJoin,
   stubInviteMeetingOverview,
@@ -9,7 +9,7 @@ import {
 
 test("invite join redirects into the target meeting workspace", async ({ page }) => {
   await stubRealtimeBridge(page);
-  await stubCurrentActor(page, {
+  await stubCurrentActorAfterSignIn(page, {
     userId: "user-guest-1",
     displayName: "Guest One",
   });

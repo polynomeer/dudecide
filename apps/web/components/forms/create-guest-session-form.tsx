@@ -1,12 +1,14 @@
 "use client";
 
 import type { Route } from "next";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FormErrorSummary } from "@/components/form-error-summary";
 import { apiClient } from "@/lib/api/client";
+import { getApiErrorMessage } from "@/lib/api/error-display";
+import { useCurrentActor } from "@/lib/session";
 
 type FormValues = {
   displayName: string;
@@ -16,6 +18,14 @@ export function CreateGuestSessionForm({ next = "/meetings/new" }: { next?: stri
   const router = useRouter();
   const queryClient = useQueryClient();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { data: actor } = useCurrentActor();
+
+  // Someone who already started keeps their identity and goes straight on.
+  useEffect(() => {
+    if (actor) {
+      router.replace(next as Route);
+    }
+  }, [actor, next, router]);
   const form = useForm<FormValues>({
     mode: "onBlur",
     defaultValues: {
@@ -30,7 +40,7 @@ export function CreateGuestSessionForm({ next = "/meetings/new" }: { next?: stri
       router.push(next as Route);
     },
     onError: (error: Error) => {
-      setErrorMessage(error.message);
+      setErrorMessage(getApiErrorMessage(error, { resourceName: "게스트 세션" }));
     },
   });
 

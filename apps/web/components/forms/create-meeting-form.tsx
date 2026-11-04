@@ -7,6 +7,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { FormErrorSummary } from "@/components/form-error-summary";
 import { apiClient } from "@/lib/api/client";
+import { getApiErrorMessage } from "@/lib/api/error-display";
 import { BUDGET_OPTIONS, MEETING_TYPES } from "@/lib/display";
 
 type FormValues = {
@@ -62,7 +63,7 @@ export function CreateMeetingForm() {
       router.push(`/meetings/${response.id}`);
     },
     onError: (error: Error) => {
-      setErrorMessage(error.message);
+      setErrorMessage(getApiErrorMessage(error, { resourceName: "모임" }));
     },
   });
 

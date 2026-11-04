@@ -574,6 +574,33 @@ class AppServicesIntegrationTest {
     }
 
     @Test
+    fun `a browser with a session joins other meetings as the same user`() {
+        testContext().use { context ->
+            val meeting = context.meetingService.createMeeting(CreateMeetingRequest(title = "Second Trip", meetingType = "trip"))
+            val invite = context.meetingService.createInviteLink(meeting.id, CreateInviteLinkRequest())
+            val guest = context.meetingService.joinWithInvite(invite.token, JoinInviteRequest(displayName = "Returning Guest"))
+
+            val again = withSessionActor(guest.userId, "Returning Guest") {
+                context.meetingService.joinWithInvite(invite.token, JoinInviteRequest(displayName = "Other Name"))
+            }
+            assertEquals(guest.id, again.id, "joining twice returns the same membership")
+            assertEquals(2, context.dsl.fetchCount(MEMBERSHIP, MEMBERSHIP.MEETING_ID.eq(meeting.id)))
+
+            val other = context.meetingService.createMeeting(CreateMeetingRequest(title = "Third Trip", meetingType = "trip"))
+            val otherInvite = context.meetingService.createInviteLink(other.id, CreateInviteLinkRequest())
+            val joined = withSessionActor(guest.userId, "Returning Guest") {
+                context.meetingService.joinWithInvite(otherInvite.token, JoinInviteRequest(displayName = "Other Name"))
+            }
+            assertEquals(guest.userId, joined.userId)
+            assertEquals("Returning Guest", joined.displayName)
+            withSessionActor(guest.userId, "Returning Guest") {
+                assertEquals(meeting.id, context.meetingService.getMeeting(meeting.id).id)
+                assertEquals(other.id, context.meetingService.getMeeting(other.id).id)
+            }
+        }
+    }
+
+    @Test
     fun `meeting-wide notifications reach other members but not the actor`() {
         testContext().use { context ->
             val meeting = context.meetingService.createMeeting(
@@ -1399,6 +1426,25 @@ class AppServicesIntegrationTest {
             meterRegistry = meterRegistry,
             chatImportServiceFactory = chatImportServiceFactory,
         )
+    }
+
+    private fun <T> withSessionActor(actorUserId: UUID, displayName: String, block: () -> T): T {
+        val previous: RequestAttributes? = RequestContextHolder.getRequestAttributes()
+        val request = MockHttpServletRequest()
+        request.getSession(true)!!.apply {
+            setAttribute(LocalActorProvider.SESSION_ACTOR_ID_KEY, actorUserId.toString())
+            setAttribute(LocalActorProvider.SESSION_ACTOR_NAME_KEY, displayName)
+        }
+        RequestContextHolder.setRequestAttributes(ServletRequestAttributes(request))
+        return try {
+            block()
+        } finally {
+            if (previous != null) {
+                RequestContextHolder.setRequestAttributes(previous)
+            } else {
+                RequestContextHolder.resetRequestAttributes()
+            }
+        }
     }
 
     private fun <T> withActor(actorUserId: UUID, displayName: String, block: () -> T): T {

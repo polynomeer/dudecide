@@ -7,6 +7,8 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   reporter: "list",
+  // A cold dev server compiles the next route on navigation, which can take longer than the 5s default.
+  expect: { timeout: 20_000 },
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     trace: "on-first-retry",

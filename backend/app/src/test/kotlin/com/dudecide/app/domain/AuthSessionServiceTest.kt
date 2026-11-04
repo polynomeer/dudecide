@@ -108,6 +108,23 @@ class AuthSessionServiceTest {
         }
     }
 
+    @Test
+    fun `starting again with a session keeps the same user`() {
+        val localActorProvider = LocalActorProvider(dsl())
+        val authSessionService = AuthSessionService(localActorProvider)
+        val request = MockHttpServletRequest()
+        val first = authSessionService.createGuestSession(CreateGuestSessionRequest(displayName = "First"), request)
+
+        RequestContextHolder.setRequestAttributes(ServletRequestAttributes(request))
+        try {
+            val second = authSessionService.createGuestSession(CreateGuestSessionRequest(displayName = "Second"), request)
+            assertEquals(first.userId, second.userId)
+            assertEquals("First", second.displayName)
+        } finally {
+            RequestContextHolder.resetRequestAttributes()
+        }
+    }
+
     private fun dsl() = JdbcDataSource().apply {
         setURL("jdbc:h2:mem:${UUID.randomUUID()};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1")
         user = "sa"
