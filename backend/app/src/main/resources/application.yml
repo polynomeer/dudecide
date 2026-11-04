@@ -7,6 +7,23 @@ spring:
     password: ${DB_PASSWORD:dudecide}
   flyway:
     enabled: true
+  session:
+    # Tables come from Flyway (V8). Guests have no other way back in, so sessions last while they keep planning.
+    jdbc:
+      initialize-schema: never
+    timeout: 90d
+
+server:
+  # Set to "native" only behind a trusted proxy; rate limits then use the real client address.
+  forward-headers-strategy: ${DUDECIDE_FORWARD_HEADERS:none}
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
+        # Must be true wherever the app is served over HTTPS.
+        secure: ${DUDECIDE_SESSION_COOKIE_SECURE:false}
+        max-age: 365d
 
 management:
   endpoints:

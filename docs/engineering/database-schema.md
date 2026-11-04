@@ -11,6 +11,7 @@ This document maps the MVP relational model to the Flyway migrations.
 - migration: [`V5__notification_read_state.sql`](../../backend/app/src/main/resources/db/migration/V5__notification_read_state.sql)
 - migration: [`V6__decision_suggestions.sql`](../../backend/app/src/main/resources/db/migration/V6__decision_suggestions.sql)
 - migration: [`V7__korean_default_thread_titles.sql`](../../backend/app/src/main/resources/db/migration/V7__korean_default_thread_titles.sql) (data only: renames untouched English default topic titles)
+- migration: [`V8__spring_session.sql`](../../backend/app/src/main/resources/db/migration/V8__spring_session.sql) (Spring Session JDBC tables; browser sessions live in PostgreSQL)
 - model reference: [`data-model-erd.md`](./data-model-erd.md)
 
 ## Scope
