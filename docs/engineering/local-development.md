@@ -171,6 +171,22 @@ Behavior:
 - starts `apps/web` dev server with `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080`
 - stops all started child processes when you press `Ctrl+C`
 
+## Container Images
+
+Try the production-like images locally; `POSTGRES_PORT`, `API_PORT`, and `WEB_PORT` change the host ports:
+
+```bash
+docker compose --profile app up --build postgres api web
+```
+
+- `backend/app/Dockerfile` builds from the repository root. Flyway migrates on startup, and `/actuator/health` reports readiness. A build without cache takes a long time because of jOOQ generation and the Gradle dependency download.
+- `apps/web/Dockerfile` builds from `apps/web`. `NEXT_PUBLIC_API_BASE_URL` is compiled into the bundle, so the build fails without it and each environment needs its own image.
+- `backend/worker` has no image yet: its module has no jobs, and the scheduled workers run inside the API.
+
+## Continuous Integration
+
+`.github/workflows/ci.yml` runs on pull requests and on pushes to `main`: backend tests plus migrations on real PostgreSQL, web typecheck, lint, unit tests, and build, Playwright E2E, and both image builds. It builds images but does not publish or deploy them.
+
 ## Current Runtime Notes
 
 - API realtime uses in-memory Spring `SseEmitter` subscriptions
