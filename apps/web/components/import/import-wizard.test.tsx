@@ -124,8 +124,9 @@ describe("ImportWizard", () => {
         sourceType: "kakao_export",
         sourceFormat: "kakao_android",
         sourceRoomName: "제주 여행",
-        rangeStart: "2026-09-01T00:00:00+09:00",
-        rangeEnd: "2026-10-02T00:00:00+09:00",
+        // Export timestamps are read as local time, so the watermark has to be local too.
+        rangeStart: new Date(2026, 8, 1).toISOString(),
+        rangeEnd: new Date(2026, 9, 2).toISOString(),
         messageCount: 4,
         duplicateCount: 0,
         status: "applied",
