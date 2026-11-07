@@ -22,6 +22,7 @@ When code is added to the repository, create focused docs here instead of overlo
 - [`frontend-implementation-plan.md`](./frontend-implementation-plan.md): frontend scope, route design, and phased delivery order
 - [`web-redesign-plan.md`](./web-redesign-plan.md): design tokens, board-to-route mapping, and work units for the web redesign
 - [`local-development.md`](./local-development.md): local infra and backend development commands
+- [`operations-runbook.md`](./operations-runbook.md): production configuration, health and metrics, logs, backup and restore
 - [`dev-seed-data.md`](./dev-seed-data.md): reusable local sample meeting and vote dataset
 - [`database-schema.md`](./database-schema.md): initial Flyway schema and relational design notes
 - [`data-model-erd.md`](./data-model-erd.md): ERD and storage modeling notes
