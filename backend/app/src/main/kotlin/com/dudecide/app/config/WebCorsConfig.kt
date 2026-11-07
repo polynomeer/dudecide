@@ -21,6 +21,7 @@ class WebCorsConfig(
             .allowedOrigins(*origins)
             .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
             .allowedHeaders("*")
+            .exposedHeaders("X-Request-Id", "Retry-After")
             .allowCredentials(true)
             .maxAge(3600)
     }

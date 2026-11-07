@@ -5,15 +5,28 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/dudecide}
     username: ${DB_USER:dudecide}
     password: ${DB_PASSWORD:dudecide}
+    # A stalled database must fail requests quickly instead of holding threads until the whole API hangs.
+    hikari:
+      connection-timeout: 5000
+      data-source-properties:
+        socketTimeout: 30
   flyway:
     enabled: true
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
   session:
     # Tables come from Flyway (V8). Guests have no other way back in, so sessions last while they keep planning.
     jdbc:
       initialize-schema: never
     timeout: 90d
 
+logging:
+  pattern:
+    # Plain local logs carry the request id too; the container image switches to structured JSON.
+    level: "%5p [%X{requestId:-}]"
+
 server:
+  shutdown: graceful
   # Set to "native" only behind a trusted proxy; rate limits then use the real client address.
   forward-headers-strategy: ${DUDECIDE_FORWARD_HEADERS:none}
   servlet:
@@ -26,9 +39,17 @@ server:
         max-age: 365d
 
 management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db
   endpoints:
     web:
       exposure:
+        # The container image adds prometheus and moves all of these to an internal port.
         include: health,info
 
 dudecide:
