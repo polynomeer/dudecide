@@ -453,12 +453,14 @@ const API_BASE_URL =
 export class ApiError extends Error {
   status: number;
   body: string;
+  requestId: string | null;
 
-  constructor(status: number, body: string) {
+  constructor(status: number, body: string, requestId: string | null = null) {
     super(body || `Request failed with ${status}`);
     this.name = "ApiError";
     this.status = status;
     this.body = body;
+    this.requestId = requestId;
   }
 }
 
@@ -475,7 +477,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const text = await response.text();
-    throw new ApiError(response.status, text || `Request failed with ${response.status}`);
+    throw new ApiError(response.status, text || `Request failed with ${response.status}`, response.headers.get("X-Request-Id"));
   }
 
   if (response.status === 204) {

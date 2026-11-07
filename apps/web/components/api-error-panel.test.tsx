@@ -11,6 +11,14 @@ describe("ApiErrorPanel", () => {
     expect(screen.getByText(/회의 작업공간을\(를\) 찾을 수 없습니다/)).toBeInTheDocument();
   });
 
+  it("hides server failure details and shows a code to report", () => {
+    render(<ApiErrorPanel error={new ApiError(500, '{"trace":"internal detail"}', "req-12345678")} resourceName="회의 작업공간" />);
+
+    expect(screen.queryByText(/internal detail/)).toBeNull();
+    expect(screen.getByText(/요청을 처리하지 못했습니다/)).toBeInTheDocument();
+    expect(screen.getByText("오류 코드 req-12345678")).toBeInTheDocument();
+  });
+
   it("renders conflict message when provided", () => {
     render(
       <ApiErrorPanel

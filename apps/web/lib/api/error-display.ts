@@ -38,5 +38,10 @@ export function getApiErrorMessage(
     return conflictMessage ?? `현재 ${resourceName} 상태에서는 이 작업을 수행할 수 없습니다. 새로고침 후 다시 시도해 주세요.`;
   }
 
+  // Server failures carry internals and a stack-free JSON body at best; people get a message and a code to report.
+  if (error.status >= 500) {
+    return fallbackMessage;
+  }
+
   return error.body || fallbackMessage;
 }
