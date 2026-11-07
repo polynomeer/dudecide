@@ -87,7 +87,7 @@ Deliver a first experience where users say:
 - live booking integrations
 - voice or video chat
 - enterprise-grade workspace and permission systems
-- KakaoTalk crawling or unofficial API sync
+- KakaoTalk crawling or unofficial API sync (user-initiated chat export and paste import is proposed in [`chat-import-planning.md`](./chat-import-planning.md))
 
 ## Core User Flows
 

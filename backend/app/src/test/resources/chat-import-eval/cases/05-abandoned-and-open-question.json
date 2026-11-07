@@ -1,0 +1,14 @@
+{
+  "id": "05-abandoned-and-open-question",
+  "description": "A lodging idea nobody answered for days and an unanswered rental question",
+  "messages": [
+    {"speaker": "A", "minute": 0, "text": "숙소는 캠핑장으로 할까?"},
+    {"speaker": "B", "minute": 4320, "text": "렌트는 누가 알아봐?"},
+    {"speaker": "C", "minute": 4330, "text": "ㅋㅋㅋ"}
+  ],
+  "expected": {
+    "decisions": [{"decisionType": "lodging", "status": "abandoned"}],
+    "openQuestions": 1,
+    "taskOwners": []
+  }
+}

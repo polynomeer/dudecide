@@ -1,0 +1,15 @@
+{
+  "id": "10-no-agreement",
+  "description": "Competing days with a condition and no agreement yet",
+  "messages": [
+    {"speaker": "A", "minute": 0, "text": "금요일 출발 어때?"},
+    {"speaker": "B", "minute": 1, "text": "나 금요일은 6시 이후면 가능"},
+    {"speaker": "C", "minute": 2, "text": "난 토요일이 좋아"},
+    {"speaker": "D", "minute": 3, "text": "흠 생각해볼게"}
+  ],
+  "expected": {
+    "decisions": [{"decisionType": "date", "status": "open"}],
+    "openQuestions": 0,
+    "taskOwners": []
+  }
+}

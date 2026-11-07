@@ -6,6 +6,38 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /auth/guest-sessions:
+    post:
+      operationId: createGuestSession
+      summary: Start a guest session, or return the current user when the browser already has one
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGuestSessionRequest'
+      responses:
+        '201':
+          description: The session's user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentActorResponse'
+        '429':
+          description: Rate limited; see the Retry-After header
+  /auth/me:
+    get:
+      operationId: getCurrentActor
+      summary: Get the user of the current session
+      responses:
+        '200':
+          description: The session's user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentActorResponse'
+        '401':
+          description: No session
   /meetings:
     post:
       operationId: createMeeting
@@ -36,6 +68,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MeetingDetailResponse'
+    patch:
+      operationId: updateMeeting
+      summary: Update meeting metadata (host or co-host)
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMeetingRequest'
+      responses:
+        '200':
+          description: Updated meeting detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeetingDetailResponse'
   /meetings/{meetingId}/invite-links:
     post:
       operationId: createInviteLink
@@ -55,6 +105,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InviteLinkResponse'
+  /invite-links/{token}/preview:
+    get:
+      operationId: previewInvite
+      summary: Preview the meeting behind an invite link without joining
+      description: Titles, statuses, and counts only. No quotes and no speaker names.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invite preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitePreviewResponse'
+        '404':
+          description: Unknown invite token
+        '410':
+          description: Invite link expired or inactive
   /invite-links/{token}/join:
     post:
       operationId: joinWithInvite
@@ -72,12 +144,29 @@ paths:
             schema:
               $ref: '#/components/schemas/JoinInviteRequest'
       responses:
+        '429':
+          description: Rate limited; see the Retry-After header
         '201':
           description: Membership created
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MembershipResponse'
+  /meetings/{meetingId}/members:
+    get:
+      operationId: listMembers
+      summary: List meeting members with display names
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '200':
+          description: Members ordered by join time
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MembershipResponse'
   /meetings/{meetingId}/members/{memberId}:
     patch:
       operationId: updateMembership
@@ -350,6 +439,40 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/NotificationView'
+  /meetings/{meetingId}/notifications/{notificationId}/read:
+    post:
+      operationId: markNotificationRead
+      summary: Mark one notification as read (keeps the first read time)
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Notification after the update
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationView'
+        '404':
+          description: Not a notification of the current user in this meeting
+  /meetings/{meetingId}/notifications/read-all:
+    post:
+      operationId: markAllNotificationsRead
+      summary: Mark every unread notification of the current user as read
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '200':
+          description: Number of notifications updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkNotificationsReadResponse'
   /meetings/{meetingId}/events:
     get:
       operationId: streamMeetingEvents
@@ -359,6 +482,57 @@ paths:
       responses:
         '200':
           description: SSE stream opened
+  /threads/{threadId}/decision-suggestions:
+    get:
+      operationId: listDecisionSuggestions
+      summary: List pending AI decision suggestions for a topic thread
+      description: Suggestions come from the live analysis worker; see docs/engineering/decision-suggestions.md.
+      parameters:
+        - name: threadId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Pending suggestions, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DecisionSuggestionView'
+  /decision-suggestions/{suggestionId}/accept:
+    post:
+      operationId: acceptDecisionSuggestion
+      summary: Turn a suggestion into a decision draft with its evidence (host or co-host)
+      parameters:
+        - $ref: '#/components/parameters/SuggestionId'
+      responses:
+        '201':
+          description: Decision created (proposed when likely decided, in_discussion when contested)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResponse'
+        '409':
+          description: Suggestion was already accepted or dismissed
+  /decision-suggestions/{suggestionId}/dismiss:
+    post:
+      operationId: dismissDecisionSuggestion
+      summary: Dismiss a suggestion so the same subject is not suggested again (host or co-host)
+      parameters:
+        - $ref: '#/components/parameters/SuggestionId'
+      responses:
+        '200':
+          description: Dismissed suggestion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionSuggestionView'
+        '409':
+          description: Suggestion was already accepted or dismissed
   /threads/{threadId}/messages:
     get:
       operationId: listMessages
@@ -386,12 +560,16 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateMessageRequest'
       responses:
+        '429':
+          description: Rate limited; see the Retry-After header
         '201':
           description: Message created
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageView'
+        '422':
+          description: Thread is read-only
   /messages/{messageId}:
     patch:
       operationId: updateMessage
@@ -416,6 +594,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MessageView'
+        '422':
+          description: Imported messages cannot be edited
   /tasks/{taskId}:
     patch:
       operationId: updateTask
@@ -485,8 +665,251 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VoteResponseView'
+  /imports:
+    post:
+      operationId: createChatImport
+      summary: Import a chat into a new draft meeting
+      description: Creates a draft meeting owned by the caller. Unconverted guest imports are purged after 7 days.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChatImportRequest'
+      responses:
+        '202':
+          description: Import accepted for analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatImportCreatedResponse'
+        '400':
+          description: Invalid payload or a limit was exceeded; the reason names the limit
+        '413':
+          description: Request body exceeds 2 MB
+        '429':
+          description: Daily import limit reached (3 per person, 10 per meeting in 24 hours)
+  /meetings/{meetingId}/imports:
+    get:
+      operationId: listChatImports
+      summary: List chat imports of a meeting
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '200':
+          description: Imports, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatImportView'
+    post:
+      operationId: createMeetingChatImport
+      summary: Import a chat into an existing meeting
+      description: Requires host or co-host. Messages already imported into the same source room thread are skipped.
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateChatImportRequest'
+      responses:
+        '202':
+          description: Import accepted for analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatImportCreatedResponse'
+        '400':
+          description: Invalid payload or a limit was exceeded; the reason names the limit
+        '409':
+          description: All messages were already imported
+        '413':
+          description: Request body exceeds 2 MB
+        '429':
+          description: Daily import limit reached (3 per person, 10 per meeting in 24 hours)
+  /telemetry/import-parse:
+    post:
+      operationId: reportImportParse
+      summary: Report anonymous chat export parse results (line shapes only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParseTelemetryRequest'
+      responses:
+        '429':
+          description: Rate limited; see the Retry-After header
+        '204':
+          description: Recorded
+  /imports/{importId}:
+    get:
+      operationId: getChatImport
+      summary: Get chat import status and result
+      parameters:
+        - $ref: '#/components/parameters/ImportId'
+        - name: includeDeletionImpact
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Import detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatImportView'
+    delete:
+      operationId: deleteChatImport
+      summary: Delete an import, its messages, and evidence built on them
+      description: Allowed for the uploader, host, or co-host. The import row remains as a deleted tombstone.
+      parameters:
+        - $ref: '#/components/parameters/ImportId'
+      responses:
+        '200':
+          description: Import deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteChatImportResponse'
+  /imports/{importId}/evidence:
+    get:
+      operationId: getChatImportEvidence
+      summary: Get the messages cited by a staged import result
+      description: Evidence and objection messages of all result items, with the same speaker visibility as the thread view.
+      parameters:
+        - $ref: '#/components/parameters/ImportId'
+      responses:
+        '200':
+          description: Cited messages in chronological order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MessageView'
+  /imports/{importId}/apply:
+    post:
+      operationId: applyChatImport
+      summary: Apply selected staged items to the meeting board
+      description: >-
+        Requires host or co-host. Decisions are created as proposed (likely decided) or in_discussion,
+        never confirmed. Already applied items are skipped. A draft meeting becomes active.
+      parameters:
+        - $ref: '#/components/parameters/ImportId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyChatImportRequest'
+      responses:
+        '200':
+          description: Items applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyChatImportResponse'
+        '400':
+          description: Unknown item, or an item that cannot be applied (open questions, abandoned decisions)
+        '409':
+          description: Import is not ready
+  /meetings/{meetingId}/import-speakers:
+    get:
+      operationId: listImportSpeakers
+      summary: List imported speakers and their member mapping
+      description: Exported display names and pseudonyms are returned only to hosts, co-hosts, and the thread uploader.
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      responses:
+        '200':
+          description: Speakers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ImportSpeakerView'
+  /meetings/{meetingId}/import-speakers/claim:
+    post:
+      operationId: claimImportSpeaker
+      summary: Claim the imported speaker that is the current member
+      description: Matches the typed messenger name against unmapped speakers in the meeting (case and whitespace insensitive).
+      parameters:
+        - $ref: '#/components/parameters/MeetingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimImportSpeakerRequest'
+      responses:
+        '200':
+          description: Speakers claimed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimImportSpeakerResponse'
+        '404':
+          description: No unclaimed speaker with that name
+        '409':
+          description: The member already claimed a different speaker
+  /import-speakers/{speakerId}:
+    patch:
+      operationId: updateImportSpeaker
+      summary: Map or unmap an imported speaker to a member
+      parameters:
+        - name: speakerId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateImportSpeakerRequest'
+      responses:
+        '200':
+          description: Speaker updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportSpeakerView'
 components:
   parameters:
+    SuggestionId:
+      name: suggestionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ImportId:
+      name: importId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
     MeetingId:
       name: meetingId
       in: path
@@ -516,6 +939,30 @@ components:
         type: string
         format: uuid
   schemas:
+    CreateGuestSessionRequest:
+      type: object
+      required:
+        - displayName
+      properties:
+        displayName:
+          type: string
+    CurrentActorResponse:
+      type: object
+      required:
+        - userId
+        - displayName
+        - authSource
+      properties:
+        userId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        authSource:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
     CreateMeetingRequest:
       type: object
       required:
@@ -533,6 +980,35 @@ components:
           type: string
         budget:
           $ref: '#/components/schemas/BudgetRange'
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+    UpdateMeetingRequest:
+      type: object
+      description: Omitted fields keep their current value.
+      properties:
+        title:
+          type: string
+        meetingType:
+          type: string
+        status:
+          type: string
+        originRegion:
+          type: string
+        expectedHeadcount:
+          type: integer
+          minimum: 1
+        budget:
+          $ref: '#/components/schemas/BudgetRange'
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
     BudgetRange:
       type: object
       properties:
@@ -585,6 +1061,12 @@ components:
           type: integer
         budget:
           $ref: '#/components/schemas/BudgetRange'
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
         ownerUserId:
           type: string
           format: uuid
@@ -696,6 +1178,61 @@ components:
           type: string
         attendanceStatus:
           type: string
+    DecisionSuggestionView:
+      type: object
+      required:
+        - id
+        - meetingId
+        - threadId
+        - status
+        - analysisStatus
+        - decisionType
+        - title
+        - proposedResult
+        - evidence
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        meetingId:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, accepted, dismissed]
+        analysisStatus:
+          type: string
+          enum: [likely_decided, contested]
+        decisionType:
+          type: string
+        title:
+          type: string
+        proposedResult:
+          type: object
+          additionalProperties: true
+        evidence:
+          type: array
+          items:
+            type: object
+            required:
+              - messageId
+              - role
+            properties:
+              messageId:
+                type: string
+                format: uuid
+              role:
+                type: string
+        decisionId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
     DecisionResponse:
       type: object
       required:
@@ -869,6 +1406,9 @@ components:
           type: integer
         openVoteCount:
           type: integer
+        readOnly:
+          type: boolean
+          description: Import threads are read-only and reject new messages.
     CreateThreadRequest:
       type: object
       required:
@@ -903,12 +1443,35 @@ components:
           items:
             type: object
             additionalProperties: true
+    MessageSpeakerView:
+      type: object
+      required:
+        - displayName
+        - pseudonymized
+      properties:
+        displayName:
+          type: string
+          description: Member display name, exported name (uploader only), or pseudonym.
+        userId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        importSpeakerId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        pseudonymized:
+          type: boolean
     MessageView:
       type: object
       required:
         - id
         - threadId
         - senderUserId
+        - origin
+        - speaker
         - body
         - attachments
         - aiLabels
@@ -921,8 +1484,18 @@ components:
           type: string
           format: uuid
         senderUserId:
-          type: string
+          type:
+            - string
+            - 'null'
           format: uuid
+          description: Null for imported messages.
+        origin:
+          type: string
+          enum:
+            - native
+            - imported
+        speaker:
+          $ref: '#/components/schemas/MessageSpeakerView'
         body:
           type: string
         attachments:
@@ -1089,9 +1662,19 @@ components:
         sentAt:
           type: string
           format: date-time
+        readAt:
+          type: string
+          format: date-time
         createdAt:
           type: string
           format: date-time
+    MarkNotificationsReadResponse:
+      type: object
+      required:
+        - updatedCount
+      properties:
+        updatedCount:
+          type: integer
     ConfirmDecisionRequest:
       type: object
       required:
@@ -1293,3 +1876,480 @@ components:
     VoteResponseValue:
       type: string
       enum: [available, maybe, unavailable, good, okay, dislike, yes, no]
+    CreateChatImportRequest:
+      type: object
+      description: Normalized, masked chat produced by the browser parser. Raw export files are never uploaded.
+      required:
+        - source
+        - range
+        - speakers
+        - messages
+        - consent
+      properties:
+        source:
+          type: object
+          required:
+            - type
+            - format
+          properties:
+            type:
+              type: string
+              enum: [kakao_export, paste]
+            format:
+              type: string
+              maxLength: 64
+            formatVersion:
+              type:
+                - string
+                - 'null'
+            roomName:
+              type:
+                - string
+                - 'null'
+              maxLength: 200
+        range:
+          type: object
+          description: At most 90 days. Every message sentAt must fall inside it.
+          required:
+            - start
+            - end
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+        speakers:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/ChatImportSpeakerInput'
+        messages:
+          type: array
+          minItems: 1
+          maxItems: 3000
+          items:
+            $ref: '#/components/schemas/ChatImportMessageInput'
+        consent:
+          type: object
+          required:
+            - isParticipant
+            - version
+          properties:
+            isParticipant:
+              type: boolean
+              description: Must be true.
+            version:
+              type: string
+        mediaCounts:
+          type:
+            - array
+            - 'null'
+          items:
+            type: object
+            required:
+              - date
+              - count
+            properties:
+              date:
+                type: string
+                format: date
+              count:
+                type: integer
+        stats:
+          type:
+            - object
+            - 'null'
+          properties:
+            parsedCount:
+              type: integer
+            uploadedCount:
+              type: integer
+            maskedCount:
+              type: integer
+            unparsedLineCount:
+              type: integer
+        meetingTitle:
+          type:
+            - string
+            - 'null'
+          description: Guest import only; defaults to the room name.
+        meetingType:
+          type:
+            - string
+            - 'null'
+          description: Guest import only; defaults to outing.
+    ChatImportSpeakerInput:
+      type: object
+      required:
+        - key
+        - displayName
+      properties:
+        key:
+          type: string
+        displayName:
+          type: string
+          maxLength: 120
+        isSelf:
+          type:
+            - boolean
+            - 'null'
+          description: Maps the speaker to the uploader's membership.
+        membershipId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+    ChatImportMessageInput:
+      type: object
+      required:
+        - speakerKey
+        - sentAt
+        - body
+      properties:
+        speakerKey:
+          type: string
+        sentAt:
+          type: string
+          format: date-time
+        body:
+          type: string
+          description: Truncated to 4000 characters.
+    ChatImportCreatedResponse:
+      type: object
+      required:
+        - importId
+        - meetingId
+        - threadId
+        - status
+        - messageCount
+        - duplicateCount
+      properties:
+        importId:
+          type: string
+          format: uuid
+        meetingId:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/ChatImportStatus'
+        messageCount:
+          type: integer
+        duplicateCount:
+          type: integer
+    ChatImportView:
+      type: object
+      required:
+        - id
+        - meetingId
+        - threadId
+        - uploadedByUserId
+        - sourceType
+        - sourceFormat
+        - rangeStart
+        - rangeEnd
+        - messageCount
+        - duplicateCount
+        - status
+        - progress
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        meetingId:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+          format: uuid
+        uploadedByUserId:
+          type: string
+          format: uuid
+        sourceType:
+          type: string
+        sourceFormat:
+          type: string
+        sourceRoomName:
+          type:
+            - string
+            - 'null'
+        rangeStart:
+          type: string
+          format: date-time
+        rangeEnd:
+          type: string
+          format: date-time
+        messageCount:
+          type: integer
+        duplicateCount:
+          type: integer
+        status:
+          $ref: '#/components/schemas/ChatImportStatus'
+        progress:
+          type: object
+          additionalProperties: true
+        result:
+          type:
+            - object
+            - 'null'
+          additionalProperties: true
+        failureReason:
+          type:
+            - string
+            - 'null'
+        purgeAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        deletionImpact:
+          oneOf:
+            - $ref: '#/components/schemas/ChatImportDeletionImpact'
+            - type: 'null'
+          description: Present only with includeDeletionImpact=true.
+    ChatImportDeletionImpact:
+      type: object
+      required:
+        - removedMessages
+        - removedEvidence
+        - affectedConfirmedDecisions
+      properties:
+        removedMessages:
+          type: integer
+        removedEvidence:
+          type: integer
+        affectedConfirmedDecisions:
+          type: integer
+    DeleteChatImportResponse:
+      type: object
+      required:
+        - importId
+        - removedMessages
+        - removedEvidence
+        - affectedConfirmedDecisions
+      properties:
+        importId:
+          type: string
+          format: uuid
+        removedMessages:
+          type: integer
+        removedEvidence:
+          type: integer
+        affectedConfirmedDecisions:
+          type: integer
+    ApplyChatImportRequest:
+      type: object
+      required:
+        - itemIds
+      properties:
+        itemIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+    ApplyChatImportResponse:
+      type: object
+      required:
+        - importId
+        - appliedItemIds
+        - skippedItemIds
+        - decisionIds
+        - taskIds
+        - meetingStatus
+      properties:
+        importId:
+          type: string
+          format: uuid
+        appliedItemIds:
+          type: array
+          items:
+            type: string
+        skippedItemIds:
+          type: array
+          items:
+            type: string
+        decisionIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        taskIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        meetingStatus:
+          type: string
+    ImportSpeakerView:
+      type: object
+      required:
+        - id
+        - threadId
+        - label
+        - mapped
+        - mine
+      properties:
+        id:
+          type: string
+          format: uuid
+        threadId:
+          type: string
+          format: uuid
+        label:
+          type: string
+          description: Mapped member name, otherwise the pseudonym.
+        mapped:
+          type: boolean
+        membershipId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        displayName:
+          type:
+            - string
+            - 'null'
+          description: Exported name; hosts, co-hosts, and the thread uploader only.
+        pseudonym:
+          type:
+            - string
+            - 'null'
+          description: Hosts, co-hosts, and the thread uploader only.
+        mine:
+          type: boolean
+          description: True when the speaker is mapped to the caller's membership.
+    InvitePreviewResponse:
+      type: object
+      required:
+        - meetingTitle
+        - meetingStatus
+        - memberCount
+        - decisions
+        - pendingDecisionCount
+        - confirmedDecisionCount
+        - openTaskCount
+        - openQuestionCount
+      properties:
+        meetingTitle:
+          type: string
+        meetingStatus:
+          type: string
+        memberCount:
+          type: integer
+        decisions:
+          type: array
+          items:
+            type: object
+            required:
+              - title
+              - decisionType
+              - status
+            properties:
+              title:
+                type: string
+              decisionType:
+                type: string
+              status:
+                type: string
+              decidedAt:
+                type: string
+                format: date-time
+        pendingDecisionCount:
+          type: integer
+        confirmedDecisionCount:
+          type: integer
+        openTaskCount:
+          type: integer
+        openQuestionCount:
+          type: integer
+        meetingType:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        tasks:
+          type: array
+          description: Tasks without owner names; `hasOwner` only says whether someone took it. Cancelled tasks are left out.
+          items:
+            type: object
+            required:
+              - title
+              - status
+              - hasOwner
+            properties:
+              title:
+                type: string
+              status:
+                type: string
+              hasOwner:
+                type: boolean
+              dueAt:
+                type: string
+                format: date-time
+    UpdateImportSpeakerRequest:
+      type: object
+      properties:
+        membershipId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+          description: Null clears the mapping.
+    ClaimImportSpeakerRequest:
+      type: object
+      required:
+        - displayName
+      properties:
+        displayName:
+          type: string
+    ClaimImportSpeakerResponse:
+      type: object
+      required:
+        - claimedSpeakerIds
+      properties:
+        claimedSpeakerIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    ParseTelemetryRequest:
+      type: object
+      required:
+        - format
+      properties:
+        format:
+          type: string
+        formatVersion:
+          type:
+            - string
+            - 'null'
+        parsedCount:
+          type: integer
+        unparsedLineCount:
+          type: integer
+        signatures:
+          type: array
+          maxItems: 5
+          items:
+            type: string
+            pattern: "^[DHW* .,:;\\-\\[\\]()/~!?']{1,80}$"
+          description: Line shapes only; values outside the pattern are dropped.
+    ChatImportStatus:
+      type: string
+      enum: [submitted, analyzing, ready, applied, failed, deleted]

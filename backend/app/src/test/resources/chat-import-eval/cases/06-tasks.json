@@ -1,0 +1,15 @@
+{
+  "id": "06-tasks",
+  "description": "Two people take on bookings after a question",
+  "messages": [
+    {"speaker": "A", "minute": 0, "text": "배편 예약은 누가 할래?"},
+    {"speaker": "B", "minute": 1, "text": "제가 할게요"},
+    {"speaker": "C", "minute": 2, "text": "숙소는 내가 예약할게"},
+    {"speaker": "D", "minute": 3, "text": "고마워!"}
+  ],
+  "expected": {
+    "decisions": [],
+    "openQuestions": 0,
+    "taskOwners": ["B", "C"]
+  }
+}

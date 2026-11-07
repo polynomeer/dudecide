@@ -19,6 +19,8 @@ It must not:
 - hide meaningful dissent
 - invent evidence or rationale
 
+Implementation status: chat import runs the batch pipeline; live topic threads run the decision suggestion stage on quiet conversations ([`decision-suggestions.md`](./decision-suggestions.md)). Per-message topic classification is not implemented yet.
+
 ## Pipeline Overview
 
 ```mermaid
@@ -262,3 +264,9 @@ Store for each AI artifact:
 - generation timestamp
 
 This is required to debug trust failures later.
+
+## Batch Import Analysis
+
+Imported chat history is analyzed as a batch (prefilter, episode segmentation, map, reduce, deterministic status rules) rather than per message. See [`chat-import-design.md`](./chat-import-design.md).
+
+Providers, prompt versions, and the evaluation harness for imports are described in [`chat-import-design.md`](./chat-import-design.md) (Model Configuration, Testing).

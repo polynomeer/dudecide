@@ -21,6 +21,9 @@ class AuthSessionService(
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "displayName must not be blank")
         }
 
+        // A browser that already has an identity keeps it; a new user would lose access to its meetings.
+        localActorProvider.sessionActorOrNull()?.let { return it.toResponse() }
+
         val actor = localActorProvider.createSessionActor(displayName)
         rememberActor(servletRequest, actor.userId, actor.displayName)
         return actor.toResponse()

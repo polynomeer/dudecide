@@ -1,4 +1,5 @@
-import { SectionShell } from "@/components/section-shell";
+import { SessionGate } from "@/components/session-gate";
+import { StandaloneShell } from "@/components/standalone-shell";
 import { VoteWorkspace } from "@/components/vote-workspace";
 
 export default async function VotePage({
@@ -9,12 +10,10 @@ export default async function VotePage({
   const { voteId } = await params;
 
   return (
-    <SectionShell
-      eyebrow="Vote Detail"
-      title={`Vote ${voteId.slice(0, 8)}`}
-      description="투표 상세, 내 응답 제출, 집계 결과 확인, 호스트 마감 액션을 지원합니다."
-    >
-      <VoteWorkspace voteId={voteId} />
-    </SectionShell>
+    <StandaloneShell width="max-w-[1100px]">
+      <SessionGate>
+        <VoteWorkspace voteId={voteId} />
+      </SessionGate>
+    </StandaloneShell>
   );
 }

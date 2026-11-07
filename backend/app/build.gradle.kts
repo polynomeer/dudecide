@@ -17,12 +17,16 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-jooq")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
+    implementation("org.springframework.session:spring-session-jdbc")
     implementation("org.flywaydb:flyway-core")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("org.postgresql:postgresql:42.7.7")
     implementation("org.jooq:jooq:$jooqVersion")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9")
+    implementation("com.anthropic:anthropic-java:2.73.0")
+    implementation("com.openai:openai-java:4.86.0")
 
     jooqGenerator("org.postgresql:postgresql:42.7.7")
     jooqGenerator("org.jooq:jooq-meta-extensions:$jooqVersion")
@@ -64,12 +68,28 @@ jooq {
 }
 
 flyway {
-    url = providers.gradleProperty("flyway.jdbc.url").orNull ?: "jdbc:postgresql://localhost:5432/dudecide"
-    user = providers.gradleProperty("flyway.jdbc.user").orNull ?: "dudecide"
-    password = providers.gradleProperty("flyway.jdbc.password").orNull ?: "dudecide"
+    // Local defaults. Override with Flyway's own -Pflyway.url / -Pflyway.user / -Pflyway.password;
+    // the plugin rejects any other flyway.* property name.
+    url = "jdbc:postgresql://localhost:5432/dudecide"
+    user = "dudecide"
+    password = "dudecide"
     locations = arrayOf("filesystem:${projectDir}/src/main/resources/db/migration")
 }
 
 tasks.named("compileKotlin") {
     dependsOn("generateJooq")
+}
+
+tasks.register<JavaExec>("evalChatImport") {
+    group = "verification"
+    description = "Scores chat import analysis on the labeled cases. -PevalProvider=fake|anthropic|openai (real providers spend API credits)."
+    dependsOn("testClasses")
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("com.dudecide.app.domain.chatimport.eval.ChatImportEvaluationKt")
+    workingDir = projectDir
+    args = listOf(
+        providers.gradleProperty("evalProvider").orElse("fake").get(),
+        "src/test/resources/chat-import-eval/cases",
+        layout.buildDirectory.dir("reports/chat-import-eval").get().asFile.path,
+    )
 }

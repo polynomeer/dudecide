@@ -13,6 +13,7 @@ data class ThreadSummaryView(
     val messageCount: Int,
     val decisionCount: Int,
     val openVoteCount: Int,
+    val readOnly: Boolean = false,
 )
 
 data class CreateMessageRequest(
@@ -20,10 +21,19 @@ data class CreateMessageRequest(
     val attachments: List<Map<String, Any?>> = emptyList(),
 )
 
+data class MessageSpeakerView(
+    val displayName: String,
+    val userId: UUID? = null,
+    val importSpeakerId: UUID? = null,
+    val pseudonymized: Boolean = false,
+)
+
 data class MessageView(
     val id: UUID,
     val threadId: UUID,
-    val senderUserId: UUID,
+    val senderUserId: UUID?,
+    val origin: String = "native",
+    val speaker: MessageSpeakerView,
     val body: String,
     val attachments: List<Map<String, Any?>> = emptyList(),
     val aiLabels: Map<String, Any?> = emptyMap(),

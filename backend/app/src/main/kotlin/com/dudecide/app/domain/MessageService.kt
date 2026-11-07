@@ -2,13 +2,19 @@ package com.dudecide.app.domain
 
 import com.dudecide.app.api.dto.UpdateMessageRequest
 import com.dudecide.app.api.dto.CreateMessageRequest
+import com.dudecide.app.api.dto.MessageSpeakerView
 import com.dudecide.app.api.dto.MessageView
-import com.dudecide.app.jooq.tables.TopicThread
+import com.dudecide.app.jooq.enums.MessageOrigin
+import com.dudecide.app.jooq.tables.AppUser.Companion.APP_USER
+import com.dudecide.app.jooq.tables.ChatImport.Companion.CHAT_IMPORT
+import com.dudecide.app.jooq.tables.ImportSpeaker.Companion.IMPORT_SPEAKER
+import com.dudecide.app.jooq.tables.Membership.Companion.MEMBERSHIP
 import com.dudecide.app.jooq.tables.Message.Companion.MESSAGE
 import com.dudecide.app.jooq.tables.TopicThread.Companion.TOPIC_THREAD
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.jooq.DSLContext
 import org.jooq.JSON
+import org.jooq.Record
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -34,30 +40,77 @@ class MessageService(
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "limit must be between 1 and 100")
         }
 
-        val query = dsl.selectFrom(MESSAGE)
-            .where(MESSAGE.THREAD_ID.eq(threadId))
-
+        val query = messageViewQuery().where(MESSAGE.THREAD_ID.eq(threadId))
         if (before != null) {
             query.and(MESSAGE.CREATED_AT.lt(before))
         }
 
+        val actorId = localActorProvider.currentUserId()
         return query
             .orderBy(MESSAGE.CREATED_AT.desc())
             .limit(limit)
             .fetch()
             .reversed()
-            .map { record ->
-                MessageView(
-                    id = requireNotNull(record.id),
-                    threadId = requireNotNull(record.threadId),
-                    senderUserId = requireNotNull(record.senderUserId),
-                    body = requireNotNull(record.body),
-                    attachments = jsonToList(record.attachments),
-                    aiLabels = jsonToMap(record.aiLabels),
-                    createdAt = requireNotNull(record.createdAt),
-                    editedAt = record.editedAt,
-                )
-            }
+            .map { toView(it, actorId) }
+    }
+
+    /** Messages of one thread by id, in chronological order; used to show evidence quotes. */
+    @Transactional(readOnly = true)
+    fun listMessagesByIds(threadId: UUID, messageIds: Collection<UUID>): List<MessageView> {
+        meetingAccessService.requireThreadMember(threadId)
+        if (messageIds.isEmpty()) {
+            return emptyList()
+        }
+        val actorId = localActorProvider.currentUserId()
+        return messageIds.distinct().chunked(ID_LOOKUP_CHUNK).flatMap { chunk ->
+            messageViewQuery()
+                .where(MESSAGE.THREAD_ID.eq(threadId))
+                .and(MESSAGE.ID.`in`(chunk))
+                .fetch()
+                .map { toView(it, actorId) }
+        }.sortedWith(compareBy<MessageView> { it.createdAt }.thenBy { it.id })
+    }
+
+    private fun messageViewQuery() =
+        dsl.select(
+            MESSAGE.ID,
+            MESSAGE.THREAD_ID,
+            MESSAGE.SENDER_USER_ID,
+            MESSAGE.ORIGIN,
+            MESSAGE.BODY,
+            MESSAGE.ATTACHMENTS,
+            MESSAGE.AI_LABELS,
+            MESSAGE.CREATED_AT,
+            MESSAGE.EDITED_AT,
+            SENDER_USER.DISPLAY_NAME,
+            IMPORT_SPEAKER.ID,
+            IMPORT_SPEAKER.DISPLAY_NAME,
+            IMPORT_SPEAKER.PSEUDONYM,
+            MAPPED_USER.ID,
+            MAPPED_USER.DISPLAY_NAME,
+            CHAT_IMPORT.UPLOADED_BY_USER_ID,
+        )
+            .from(MESSAGE)
+            .leftJoin(SENDER_USER).on(SENDER_USER.ID.eq(MESSAGE.SENDER_USER_ID))
+            .leftJoin(IMPORT_SPEAKER).on(IMPORT_SPEAKER.ID.eq(MESSAGE.IMPORT_SPEAKER_ID))
+            .leftJoin(MAPPED_MEMBERSHIP).on(MAPPED_MEMBERSHIP.ID.eq(IMPORT_SPEAKER.MEMBERSHIP_ID))
+            .leftJoin(MAPPED_USER).on(MAPPED_USER.ID.eq(MAPPED_MEMBERSHIP.USER_ID))
+            .leftJoin(CHAT_IMPORT).on(CHAT_IMPORT.ID.eq(MESSAGE.IMPORT_ID))
+
+    private fun toView(record: Record, actorId: UUID): MessageView {
+        val origin = requireNotNull(record.get(MESSAGE.ORIGIN))
+        return MessageView(
+            id = requireNotNull(record.get(MESSAGE.ID)),
+            threadId = requireNotNull(record.get(MESSAGE.THREAD_ID)),
+            senderUserId = record.get(MESSAGE.SENDER_USER_ID),
+            origin = origin.literal,
+            speaker = resolveSpeaker(record, origin, actorId),
+            body = requireNotNull(record.get(MESSAGE.BODY)),
+            attachments = jsonToList(record.get(MESSAGE.ATTACHMENTS)),
+            aiLabels = jsonToMap(record.get(MESSAGE.AI_LABELS)),
+            createdAt = requireNotNull(record.get(MESSAGE.CREATED_AT)),
+            editedAt = record.get(MESSAGE.EDITED_AT),
+        )
     }
 
     @Transactional
@@ -65,6 +118,9 @@ class MessageService(
         meetingAccessService.requireThreadMember(threadId)
         val senderUserId = localActorProvider.currentUserId()
         val thread = requireThread(threadId)
+        if (thread.readOnly == true) {
+            throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "thread is read-only")
+        }
 
         val messageId = UUID.randomUUID()
         val now = OffsetDateTime.now()
@@ -111,6 +167,7 @@ class MessageService(
             id = messageId,
             threadId = threadId,
             senderUserId = senderUserId,
+            speaker = nativeSpeaker(senderUserId),
             body = request.body,
             attachments = request.attachments,
             aiLabels = emptyMap(),
@@ -159,12 +216,54 @@ class MessageService(
         return MessageView(
             id = messageId,
             threadId = requireNotNull(record.threadId),
-            senderUserId = requireNotNull(record.senderUserId),
+            senderUserId = record.senderUserId,
+            speaker = nativeSpeaker(requireNotNull(record.senderUserId)),
             body = request.body,
             attachments = request.attachments,
             aiLabels = jsonToMap(record.aiLabels),
             createdAt = requireNotNull(record.createdAt),
             editedAt = editedAt,
+        )
+    }
+
+    private fun nativeSpeaker(userId: UUID): MessageSpeakerView {
+        val displayName = dsl.select(APP_USER.DISPLAY_NAME)
+            .from(APP_USER)
+            .where(APP_USER.ID.eq(userId))
+            .fetchOne(APP_USER.DISPLAY_NAME)
+        return MessageSpeakerView(displayName = displayName ?: UNKNOWN_SPEAKER, userId = userId)
+    }
+
+    // Imported speakers show a member's name once mapped; otherwise only the uploader sees the exported name.
+    private fun resolveSpeaker(record: Record, origin: MessageOrigin, actorId: UUID): MessageSpeakerView {
+        val importSpeakerId = record.get(IMPORT_SPEAKER.ID)
+        if (origin != MessageOrigin.imported || importSpeakerId == null) {
+            return MessageSpeakerView(
+                displayName = record.get(SENDER_USER.DISPLAY_NAME) ?: UNKNOWN_SPEAKER,
+                userId = record.get(MESSAGE.SENDER_USER_ID),
+            )
+        }
+
+        val mappedUserId = record.get(MAPPED_USER.ID)
+        if (mappedUserId != null) {
+            return MessageSpeakerView(
+                displayName = record.get(MAPPED_USER.DISPLAY_NAME) ?: UNKNOWN_SPEAKER,
+                userId = mappedUserId,
+                importSpeakerId = importSpeakerId,
+            )
+        }
+
+        if (record.get(CHAT_IMPORT.UPLOADED_BY_USER_ID) == actorId) {
+            return MessageSpeakerView(
+                displayName = requireNotNull(record.get(IMPORT_SPEAKER.DISPLAY_NAME)),
+                importSpeakerId = importSpeakerId,
+            )
+        }
+
+        return MessageSpeakerView(
+            displayName = requireNotNull(record.get(IMPORT_SPEAKER.PSEUDONYM)),
+            importSpeakerId = importSpeakerId,
+            pseudonymized = true,
         )
     }
 
@@ -191,5 +290,14 @@ class MessageService(
 
         @Suppress("UNCHECKED_CAST")
         return objectMapper.readValue(value.data(), List::class.java) as List<Map<String, Any?>>
+    }
+
+    private companion object {
+        const val UNKNOWN_SPEAKER = "Unknown"
+        const val ID_LOOKUP_CHUNK = 500
+
+        val SENDER_USER = APP_USER.`as`("sender_user")
+        val MAPPED_MEMBERSHIP = MEMBERSHIP.`as`("mapped_membership")
+        val MAPPED_USER = APP_USER.`as`("mapped_user")
     }
 }

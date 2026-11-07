@@ -1,5 +1,7 @@
 import type { Config } from "tailwindcss";
 
+const token = (name: string) => `rgb(var(--${name}) / <alpha-value>)`;
+
 const config: Config = {
   content: [
     "./app/**/*.{ts,tsx}",
@@ -9,15 +11,38 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "var(--color-ink)",
-        mist: "var(--color-mist)",
-        sand: "var(--color-sand)",
-        ember: "var(--color-ember)",
-        pine: "var(--color-pine)",
-        sky: "var(--color-sky)",
+        bg: token("bg"),
+        surface: token("surface"),
+        "surface-2": token("surface-2"),
+        ink: token("ink"),
+        "on-ink": token("on-ink"),
+        muted: token("muted"),
+        line: token("line"),
+        accent: token("accent"),
+        "on-accent": token("on-accent"),
+        "accent-text": token("accent-text"),
+        "accent-soft": token("accent-soft"),
+        "accent-soft-ink": token("accent-soft-ink"),
+        "warn-soft": token("warn-soft"),
+        "warn-ink": token("warn-ink"),
+        "risk-soft": token("risk-soft"),
+        "risk-ink": token("risk-ink"),
+        danger: token("danger"),
+        band: token("band"),
+        "band-card": token("band-card"),
+        // Legacy names kept so older components follow the new tokens.
+        mist: token("on-ink"),
+        sand: token("surface-2"),
+        ember: token("risk-ink"),
+        pine: token("accent"),
+        sky: token("accent-soft"),
+      },
+      fontFamily: {
+        body: "var(--font-body)",
+        mono: "var(--font-mono-ui)",
       },
       boxShadow: {
-        panel: "0 18px 60px rgba(15, 23, 42, 0.14)",
+        panel: "var(--shadow-panel)",
       },
       borderRadius: {
         "4xl": "2rem",

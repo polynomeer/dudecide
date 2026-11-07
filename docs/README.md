@@ -12,4 +12,6 @@
 - Prefer updating an existing document before creating a new top-level category.
 - When adding a high-value document, link it from this index.
 - For Codex operating guidance, start with [`engineering/codex-workflows.md`](./engineering/codex-workflows.md).
+- For Claude Code operating guidance, start with [`engineering/claude-code-workflows.md`](./engineering/claude-code-workflows.md).
 - For implementation kickoff, start with [`engineering/architecture-overview.md`](./engineering/architecture-overview.md).
+- For messenger chat import, start with [`product/chat-import-planning.md`](./product/chat-import-planning.md).

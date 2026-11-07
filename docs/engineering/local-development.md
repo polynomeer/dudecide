@@ -73,6 +73,8 @@ GRADLE_OPTS='-Djava.io.tmpdir=/private/tmp/dudecide-gradle-tmp' \
 /opt/homebrew/bin/gradle --no-daemon :backend:app:flywayMigrate
 ```
 
+It targets `jdbc:postgresql://localhost:5432/dudecide` (user and password `dudecide`) by default. Point it elsewhere with Flyway's own properties, for example `-Pflyway.url=jdbc:postgresql://localhost:55433/dudecide`; other `flyway.*` property names are rejected by the plugin. Create `/private/tmp/dudecide-gradle-tmp` first if it was cleared.
+
 ## jOOQ
 
 Generate jOOQ classes from Flyway SQL without requiring a running database:
@@ -124,10 +126,11 @@ Run frontend checks:
 cd apps/web
 npm run typecheck
 npm run test
+npm run lint
 npm run test:e2e
 ```
 
-Playwright browser binaries are required for `npm run test:e2e`.
+Playwright browser binaries are required for `npm run test:e2e`. It starts (or reuses) a dev server on port 3000; if another app already holds that port, set `PLAYWRIGHT_PORT`, for example `PLAYWRIGHT_PORT=3017 npm run test:e2e`.
 
 Optional API base URL:
 
@@ -168,6 +171,22 @@ Behavior:
 - starts `apps/web` dev server with `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080`
 - stops all started child processes when you press `Ctrl+C`
 
+## Container Images
+
+Try the production-like images locally; `POSTGRES_PORT`, `API_PORT`, and `WEB_PORT` change the host ports:
+
+```bash
+docker compose --profile app up --build postgres api web
+```
+
+- `backend/app/Dockerfile` builds from the repository root. Flyway migrates on startup, and `/actuator/health` reports readiness. A build without cache takes a long time because of jOOQ generation and the Gradle dependency download.
+- `apps/web/Dockerfile` builds from `apps/web`. `NEXT_PUBLIC_API_BASE_URL` is compiled into the bundle, so the build fails without it and each environment needs its own image.
+- `backend/worker` has no image yet: its module has no jobs, and the scheduled workers run inside the API.
+
+## Continuous Integration
+
+`.github/workflows/ci.yml` runs on pull requests and on pushes to `main`: backend tests plus migrations on real PostgreSQL, web typecheck, lint, unit tests, and build, Playwright E2E, and both image builds. It builds images but does not publish or deploy them.
+
 ## Current Runtime Notes
 
 - API realtime uses in-memory Spring `SseEmitter` subscriptions
@@ -175,7 +194,10 @@ Behavior:
 - the current actor model first checks an HTTP session, then development headers, then falls back to a local host identity
 - `POST /api/v1/auth/guest-sessions` creates a guest-backed local session for browser-style flows
 - invite-link joins also bind the joined user into the current HTTP session
-- use `X-Actor-Id: <user-uuid>` and optional `X-Actor-Name: <display-name>` to simulate different callers locally
+- requests without a session get `401` by default
+- production needs `DUDECIDE_SESSION_COOKIE_SECURE=true` (HTTPS) and, behind a trusted proxy, `DUDECIDE_FORWARD_HEADERS=native` so rate limits see the real client address instead of the proxy's
+- rate limits apply locally too; raise them with `DUDECIDE_RATE_LIMITS_*`, for example `DUDECIDE_RATE_LIMITS_GUEST_SESSIONS_PER_HOUR=1000`
+- for curl or seed-data work only, start the backend with `DUDECIDE_AUTH_DEV_ACTORS_ENABLED=true`: `X-Actor-Id: <user-uuid>` and optional `X-Actor-Name: <display-name>` then simulate callers, and requests with neither a session nor a header act as the shared `Local Host` user. Never set this outside local development; anyone could act as anyone
 - meeting membership is required for read access and `host` or `co_host` is required for protected mutations
 
 ## Seed Data

@@ -20,11 +20,14 @@ This document defines the MVP external API surface and internal async events.
 - `POST /api/v1/auth/guest-sessions` creates a local guest-backed session
 - `GET /api/v1/auth/me` returns the currently resolved actor
 - `DELETE /api/v1/auth/session` clears the current local session
-- `X-Actor-Id` selects the caller user identity and auto-provisions the user row if needed
-- `X-Actor-Name` updates or seeds the caller display name for local development
+- requests without a session get `401`; only guest session creation, invite preview and join, and parse telemetry are public
+- local development only, with `dudecide.auth.dev-actors-enabled=true` (off by default): `X-Actor-Id` selects the caller and auto-provisions the user row, `X-Actor-Name` seeds the display name, and calls with neither fall back to the shared `Local Host` user
 - invite token join creates guest membership records and also binds the joined user into the current HTTP session
 - meeting-scope authorization is enforced through membership role checks
-- signed production-grade sessions and external identity proof remain follow-up work
+- sessions live in PostgreSQL (Spring Session JDBC, V8) and survive restarts; they expire after 90 idle days, and the `SESSION` cookie is `HttpOnly`, `SameSite=Lax`, and `Secure` when `DUDECIDE_SESSION_COOKIE_SECURE=true`
+- a browser with a session keeps its identity: `POST /auth/guest-sessions` returns the current user, and invite joins add that user to the meeting (joining twice returns the same membership)
+- external identity proof and a way back in from another device remain follow-up work
+- rate limits answer `429` with `Retry-After`: guest sessions and invite joins per client address per hour, parse telemetry per address per hour, and messages per user per minute (`dudecide.rate-limits.*`; counted per app instance)
 
 ## Core Resources
 
@@ -60,11 +63,13 @@ This document defines the MVP external API surface and internal async events.
 `POST /api/v1/meetings`
 
 - create meeting
+- optional `startsAt` / `endsAt` (event dates, used for the D-day countdown) and per-person `budget` range; `startsAt` must not be after `endsAt`
 
 `GET /api/v1/meetings/{meetingId}`
 
 - get meeting summary and progress
 - returns thread-level counts so the client can render planning progress without separate summary calls
+- includes `startsAt`, `endsAt`, and `budget` when set
 - requires meeting membership
 
 `PATCH /api/v1/meetings/{meetingId}`
@@ -83,16 +88,48 @@ This document defines the MVP external API surface and internal async events.
 
 - join via invite
 
+`GET /api/v1/invite-links/{token}/preview`
+
+- meeting title, type, event dates, member count, decision titles, statuses, and confirmation times, task titles and statuses with only a `hasOwner` flag, and counts of pending decisions, confirmed decisions, open tasks, and open questions from imports
+- no quotes, no member or speaker names, no user ids; public with a valid token
+- the invite link doubles as the public report link: the web renders this as the pre-join report (W-4) above the join form
+- `404` unknown token, `410` expired or inactive link
+
+`GET /api/v1/meetings/{meetingId}/members`
+
+- members ordered by join time with display name, role, and attendance
+- requires meeting membership
+
 `PATCH /api/v1/meetings/{meetingId}/members/{memberId}`
 
 - update role or attendance state
 - requires `host` or `co_host`
+
+### Decision Suggestions
+
+`GET /api/v1/threads/{threadId}/decision-suggestions`
+
+- pending AI suggestions for the thread, produced by the live analysis worker ([`decision-suggestions.md`](./decision-suggestions.md))
+- requires meeting membership
+
+`POST /api/v1/decision-suggestions/{suggestionId}/accept`
+
+- creates a decision in the same thread (`proposed` when likely decided, `in_discussion` when contested) with the suggestion's evidence
+- requires `host` or `co_host`; `409` once accepted or dismissed
+
+`POST /api/v1/decision-suggestions/{suggestionId}/dismiss`
+
+- hides the suggestion; the same subject is not suggested again in that thread
+- requires `host` or `co_host`; `409` once accepted or dismissed
+
+New suggestions publish `thread.updated` (`kind: suggestion.created`) and notify hosts and co-hosts with `decision_suggested`.
 
 ### Threads And Messages
 
 `GET /api/v1/meetings/{meetingId}/threads`
 
 - list threads with badges and activity state
+- each thread reports `readOnly`; import threads are read-only
 - requires meeting membership
 
 `POST /api/v1/meetings/{meetingId}/threads`
@@ -106,18 +143,93 @@ This document defines the MVP external API surface and internal async events.
 - supports `before=<ISO-8601 timestamp>` cursor pagination
 - supports `limit=<1-100>` with default `50`
 - returns each page in chronological order
+- each message carries `origin` (`native` or `imported`) and a resolved `speaker`; `senderUserId` is null for imported messages
+- imported speaker label: member display name when the speaker is mapped, the exported name for the import uploader, otherwise the pseudonym with `pseudonymized = true`
 - requires meeting membership
 
 `POST /api/v1/threads/{threadId}/messages`
 
 - post message
 - writes `MessageCreated` into the outbox for downstream AI and notification workers
+- returns `422` when the thread is read-only
 - requires meeting membership
 
 `PATCH /api/v1/messages/{messageId}`
 
 - edit message
 - allowed for the original sender, `host`, or `co_host`
+- returns `422` for imported messages
+
+### Chat Imports
+
+Design: [`chat-import-design.md`](./chat-import-design.md).
+
+`POST /api/v1/imports`
+
+- import a normalized, masked chat into a new draft meeting owned by the caller (guest session is enough)
+- sets `purge_at` to 7 days later until the import is applied
+- supports `Idempotency-Key`
+- returns `202 Accepted` with `importId`, `meetingId`, `threadId`, `status`, `messageCount`, `duplicateCount`
+
+`POST /api/v1/meetings/{meetingId}/imports`
+
+- import into an existing meeting; messages already in the same source room thread are skipped by content hash
+- returns `409` when every message was already imported
+- supports `Idempotency-Key`
+- requires `host` or `co_host`
+
+`GET /api/v1/meetings/{meetingId}/imports`
+
+- list imports, newest first
+- requires meeting membership
+
+`GET /api/v1/imports/{importId}`
+
+- import status, progress, and staged result
+- requires meeting membership
+
+`GET /api/v1/imports/{importId}/evidence`
+
+- messages cited by the staged result (evidence and objections), chronological, with the same speaker visibility as the thread view
+- avoids paging the import thread, whose minute-precision timestamps make the `before` cursor skip messages
+- requires meeting membership
+
+`POST /api/v1/imports/{importId}/apply`
+
+- apply selected staged `itemIds`: decisions become `proposed` (likely decided) or `in_discussion` with evidence; tasks are created; nothing is confirmed
+- already applied items are reported in `skippedItemIds`; `open_question` and `abandoned` items return `400`; an import that is not `ready` or `applied` returns `409`
+- moves a draft meeting to `active`, clears `purge_at`, refreshes the report
+- supports `Idempotency-Key`
+- requires `host` or `co_host`
+
+`DELETE /api/v1/imports/{importId}`
+
+- removes the import's messages; dependent decision evidence cascades and task sources are cleared; the import stays as a `deleted` tombstone
+- `GET /api/v1/imports/{importId}?includeDeletionImpact=true` previews `removedMessages`, `removedEvidence`, `affectedConfirmedDecisions`
+- allowed for the uploader, `host`, or `co_host`
+
+`GET /api/v1/meetings/{meetingId}/import-speakers`
+
+- list speakers with `label` (member name or pseudonym), mapping, and `mine` (mapped to the caller); `displayName` and `pseudonym` only for `host`, `co_host`, and the thread uploader
+- requires meeting membership
+
+`PATCH /api/v1/import-speakers/{speakerId}`
+
+- set or clear `membershipId`
+- requires `host` or `co_host`
+
+`POST /api/v1/meetings/{meetingId}/import-speakers/claim`
+
+- the caller types their messenger name; all unmapped speakers in the meeting with that name map to the caller
+- `404` when nothing matches, `409` when the caller already claimed a different name
+- requires meeting membership
+
+`POST /api/v1/telemetry/import-parse`
+
+- anonymous parser telemetry: format, format version, counts, and up to 5 line shapes (`D`, `H`, `W`, `*`, separators); anything else is dropped
+- returns `204`; no session needed
+
+Limits (both create endpoints): `429` after 3 imports per person or 10 per meeting in 24 hours. `400` when consent is missing, the source type is not `kakao_export` or `paste`, the range exceeds 90 days, a message falls outside the range, or there are more than 3,000 messages or 200 speakers; the reason names the limit. `413` when the body exceeds 2 MB. Message bodies are truncated to 4,000 characters.
 
 ### Decisions
 
@@ -203,6 +315,21 @@ This document defines the MVP external API surface and internal async events.
 `GET /api/v1/meetings/{meetingId}/notifications`
 
 - list notifications for the current local actor
+- each item carries `readAt` (null while unread)
+- recipients by type:
+  - `invite_joined`: every host and co-host (not the joiner)
+  - `decision_confirmed`, `vote_closed`, `report_ready`: every member except the actor who triggered it
+  - `invite_created`: the host who created the link
+  - `decision_suggested`: every host and co-host (sent by the live suggestion worker)
+
+`POST /api/v1/meetings/{meetingId}/notifications/{notificationId}/read`
+
+- mark one of the current actor's notifications as read; repeat calls keep the first read time
+- `404` when the notification belongs to someone else or another meeting
+
+`POST /api/v1/meetings/{meetingId}/notifications/read-all`
+
+- mark every unread notification of the current actor in the meeting as read; returns `updatedCount`
 - requires meeting membership
 
 `GET /api/v1/meetings/{meetingId}/reports/latest`
@@ -322,6 +449,10 @@ Current implementation detail:
 - `NotificationRequested`
 - `TaskCreated`
 - `TaskUpdated`
+- `ChatImportSubmitted`
+- `ChatImportApplied`
+- `ChatImportDeleted`
+- `ImportSpeakerMapped`
 
 ## Event Flows
 
@@ -373,6 +504,10 @@ sequenceDiagram
 - `decision.updated`
 - `report.updated`
 - `notification.created`
+- `import.progress`
+- `import.completed`
+- `import.failed`
+- `import.deleted`
 
 ## Idempotency Guidance
 

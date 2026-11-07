@@ -14,6 +14,10 @@ data class CreateMeetingRequest(
     val expectedHeadcount: Int? = null,
     val originRegion: String? = null,
     val budget: BudgetRangeDto? = null,
+    @field:Schema(description = "Planned start of the event (trip departure, meetup start)")
+    val startsAt: OffsetDateTime? = null,
+    @field:Schema(description = "Planned end of the event")
+    val endsAt: OffsetDateTime? = null,
 )
 
 data class UpdateMeetingRequest(
@@ -47,6 +51,8 @@ data class MeetingDetailResponse(
     val originRegion: String? = null,
     val expectedHeadcount: Int? = null,
     val budget: BudgetRangeDto? = null,
+    val startsAt: OffsetDateTime? = null,
+    val endsAt: OffsetDateTime? = null,
     val ownerUserId: UUID,
     val memberCount: Int,
     val decisionCount: Int,

@@ -4,7 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
+import { FormErrorSummary } from "@/components/form-error-summary";
 import { apiClient } from "@/lib/api/client";
+import { getApiErrorMessage } from "@/lib/api/error-display";
+import { useCurrentActor } from "@/lib/session";
 
 type FormValues = {
   displayName: string;
@@ -13,7 +16,9 @@ type FormValues = {
 export function JoinInviteForm({ token }: { token: string }) {
   const router = useRouter();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { data: actor } = useCurrentActor();
   const form = useForm<FormValues>({
+    mode: "onBlur",
     defaultValues: {
       displayName: "",
     },
@@ -25,34 +30,78 @@ export function JoinInviteForm({ token }: { token: string }) {
       router.push(`/meetings/${response.meetingId}`);
     },
     onError: (error: Error) => {
-      setErrorMessage(error.message);
+      setErrorMessage(getApiErrorMessage(error, { resourceName: "초대 링크" }));
     },
   });
 
+  // A browser that already has an identity joins as that user, so there is no name to ask for.
+  if (actor) {
+    return (
+      <section id="join" aria-label="모임 참여" className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] bg-surface p-6">
+        <div>
+          <h2 className="m-0 text-[17px] font-bold">참여하고 투표하기</h2>
+          <p className="m-0 mt-1 text-[13px] text-muted">
+            <b className="text-ink">{actor.displayName}</b> 이름으로 참여해요.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setErrorMessage(null);
+            mutation.mutate({ displayName: actor.displayName });
+          }}
+          disabled={mutation.isPending}
+          className="action-primary min-h-[48px] px-6"
+        >
+          {mutation.isPending ? "참여하는 중…" : "참여하기"}
+        </button>
+        {errorMessage ? <p className="m-0 w-full text-sm text-danger">{errorMessage}</p> : null}
+      </section>
+    );
+  }
+
   return (
     <form
-      className="panel max-w-2xl space-y-5 px-6 py-6"
+      id="join"
+      aria-label="모임 참여"
+      className="flex flex-col gap-4 rounded-[22px] bg-surface p-6"
       onSubmit={form.handleSubmit((values) => {
         setErrorMessage(null);
         mutation.mutate(values);
       })}
     >
       <div>
-        <label className="mb-2 block text-sm font-semibold">Your display name</label>
-        <input
-          {...form.register("displayName", { required: true, minLength: 2 })}
-          className="w-full rounded-3xl border border-[color:var(--color-line)] bg-white/80 px-4 py-3 outline-none transition focus:border-ink"
-          placeholder="e.g. Cabin Driver"
-        />
+        <h2 className="m-0 text-[17px] font-bold">참여하고 투표하기</h2>
+        <p className="m-0 mt-1 text-[13px] text-muted">가입 없이 이름만 정하면 돼요.</p>
       </div>
-      {errorMessage ? <p className="text-sm text-ember">{errorMessage}</p> : null}
-      <button
-        type="submit"
-        disabled={mutation.isPending}
-        className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {mutation.isPending ? "Joining..." : "Join meeting"}
-      </button>
+      <FormErrorSummary
+        errors={
+          form.formState.submitCount > 0 && form.formState.errors.displayName
+            ? [{ fieldId: "invite-display-name", message: "이름을 두 글자 이상 적어 주세요." }]
+            : []
+        }
+      />
+      <div className="flex flex-wrap items-start gap-2">
+        <div className="min-w-0 flex-[1_1_240px]">
+          <label htmlFor="invite-display-name" className="mb-1.5 block text-xs font-bold">
+            모임에서 보일 이름
+          </label>
+          <input
+            {...form.register("displayName", { required: true, minLength: 2 })}
+            id="invite-display-name"
+            className="field h-12 text-[15px]"
+            placeholder="예: 도윤"
+            aria-invalid={form.formState.errors.displayName ? "true" : "false"}
+          />
+          {form.formState.errors.displayName ? (
+            <p className="mt-2 text-sm text-danger">두 글자 이상 적어 주세요.</p>
+          ) : null}
+        </div>
+        <button type="submit" disabled={mutation.isPending} className="action-primary mt-[22px] min-h-[48px] px-6">
+          {mutation.isPending ? "참여하는 중…" : "참여하기"}
+        </button>
+      </div>
+      {errorMessage ? <p className="m-0 text-sm text-danger">{errorMessage}</p> : null}
     </form>
   );
 }

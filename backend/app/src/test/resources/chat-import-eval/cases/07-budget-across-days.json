@@ -1,0 +1,15 @@
+{
+  "id": "07-budget-across-days",
+  "description": "Budget discussion that continues the next morning",
+  "messages": [
+    {"speaker": "A", "minute": 0, "text": "예산은 1인당 20만원 어때?"},
+    {"speaker": "B", "minute": 1, "text": "좋아"},
+    {"speaker": "C", "minute": 840, "text": "20만원 괜찮아"},
+    {"speaker": "D", "minute": 842, "text": "ㅇㅇ 20만원으로 확정하자"}
+  ],
+  "expected": {
+    "decisions": [{"decisionType": "budget", "status": "likely_decided", "option": "20만원"}],
+    "openQuestions": 0,
+    "taskOwners": []
+  }
+}

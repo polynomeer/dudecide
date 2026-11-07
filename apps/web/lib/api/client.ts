@@ -9,11 +9,24 @@ export type CreateGuestSessionRequest = {
   displayName: string;
 };
 
+export type BudgetRange = {
+  min?: number | null;
+  max?: number | null;
+};
+
 export type CreateMeetingRequest = {
   title: string;
   meetingType: string;
   expectedHeadcount?: number;
   originRegion?: string;
+  budget?: BudgetRange;
+  startsAt?: string;
+  endsAt?: string;
+};
+
+/** Omitted fields keep their current value. */
+export type UpdateMeetingRequest = Partial<CreateMeetingRequest> & {
+  status?: string;
 };
 
 export type CreateMeetingResponse = {
@@ -47,6 +60,7 @@ export type ThreadSummaryView = {
   decisionCount: number;
   openVoteCount: number;
   lastActivityAt?: string | null;
+  readOnly?: boolean;
 };
 
 export type MeetingDetailResponse = {
@@ -56,6 +70,9 @@ export type MeetingDetailResponse = {
   status: string;
   originRegion?: string | null;
   expectedHeadcount?: number | null;
+  budget?: BudgetRange | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
   ownerUserId: string;
   memberCount: number;
   decisionCount: number;
@@ -63,10 +80,19 @@ export type MeetingDetailResponse = {
   threads: ThreadSummaryView[];
 };
 
+export type MessageSpeakerView = {
+  displayName: string;
+  userId?: string | null;
+  importSpeakerId?: string | null;
+  pseudonymized: boolean;
+};
+
 export type MessageView = {
   id: string;
   threadId: string;
-  senderUserId: string;
+  senderUserId: string | null;
+  origin: "native" | "imported";
+  speaker: MessageSpeakerView;
   body: string;
   attachments: Array<Record<string, unknown>>;
   aiLabels: Record<string, unknown>;
@@ -114,6 +140,20 @@ export type DecisionHistoryView = {
 export type DecisionDetailResponse = DecisionResponse & {
   evidence: DecisionEvidenceView[];
   history: DecisionHistoryView[];
+};
+
+export type DecisionSuggestionView = {
+  id: string;
+  meetingId: string;
+  threadId: string;
+  status: "pending" | "accepted" | "dismissed";
+  analysisStatus: "likely_decided" | "contested";
+  decisionType: string;
+  title: string;
+  proposedResult: Record<string, unknown>;
+  evidence: Array<{ messageId: string; role: string }>;
+  decisionId?: string | null;
+  createdAt: string;
 };
 
 export type CreateDecisionRequest = {
@@ -267,6 +307,143 @@ export type NotificationView = {
   type: string;
   payload: Record<string, unknown>;
   sentAt?: string | null;
+  readAt?: string | null;
+  createdAt: string;
+};
+
+export type MarkNotificationsReadResponse = {
+  updatedCount: number;
+};
+
+export type ChatImportSourceType = "kakao_export" | "paste";
+
+export type ChatImportStatus = "submitted" | "analyzing" | "ready" | "applied" | "failed" | "deleted";
+
+export type ChatImportSpeakerInput = {
+  key: string;
+  displayName: string;
+  isSelf?: boolean | null;
+  membershipId?: string | null;
+};
+
+export type ChatImportMessageInput = {
+  speakerKey: string;
+  sentAt: string;
+  body: string;
+};
+
+export type CreateChatImportRequest = {
+  source: {
+    type: ChatImportSourceType;
+    format: string;
+    formatVersion?: string | null;
+    roomName?: string | null;
+  };
+  range: { start: string; end: string };
+  speakers: ChatImportSpeakerInput[];
+  messages: ChatImportMessageInput[];
+  consent: { isParticipant: boolean; version: string };
+  mediaCounts?: Array<{ date: string; count: number }> | null;
+  stats?: {
+    parsedCount?: number;
+    uploadedCount?: number;
+    maskedCount?: number;
+    unparsedLineCount?: number;
+  } | null;
+  meetingTitle?: string | null;
+  meetingType?: string | null;
+};
+
+export type ChatImportCreatedResponse = {
+  importId: string;
+  meetingId: string;
+  threadId: string;
+  status: ChatImportStatus;
+  messageCount: number;
+  duplicateCount: number;
+};
+
+export type ChatImportView = {
+  id: string;
+  meetingId: string;
+  threadId: string;
+  uploadedByUserId: string;
+  sourceType: string;
+  sourceFormat: string;
+  sourceRoomName?: string | null;
+  rangeStart: string;
+  rangeEnd: string;
+  messageCount: number;
+  duplicateCount: number;
+  status: ChatImportStatus;
+  progress: Record<string, unknown>;
+  result?: Record<string, unknown> | null;
+  failureReason?: string | null;
+  purgeAt?: string | null;
+  createdAt: string;
+  completedAt?: string | null;
+  deletionImpact?: ChatImportDeletionImpact | null;
+};
+
+export type ChatImportDeletionImpact = {
+  removedMessages: number;
+  removedEvidence: number;
+  affectedConfirmedDecisions: number;
+};
+
+export type DeleteChatImportResponse = ChatImportDeletionImpact & {
+  importId: string;
+};
+
+export type ApplyChatImportResponse = {
+  importId: string;
+  appliedItemIds: string[];
+  skippedItemIds: string[];
+  decisionIds: string[];
+  taskIds: string[];
+  meetingStatus: string;
+};
+
+export type ImportSpeakerView = {
+  id: string;
+  threadId: string;
+  label: string;
+  mapped: boolean;
+  membershipId?: string | null;
+  displayName?: string | null;
+  pseudonym?: string | null;
+  mine: boolean;
+};
+
+export type InvitePreviewTask = {
+  title: string;
+  status: string;
+  hasOwner: boolean;
+  dueAt?: string | null;
+};
+
+/** What the shared link shows before joining: no quotes and no member names. */
+export type InvitePreviewResponse = {
+  meetingTitle: string;
+  meetingStatus: string;
+  memberCount: number;
+  decisions: Array<{ title: string; decisionType: string; status: string; decidedAt?: string | null }>;
+  pendingDecisionCount: number;
+  confirmedDecisionCount: number;
+  openTaskCount: number;
+  openQuestionCount: number;
+  meetingType?: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  tasks?: InvitePreviewTask[];
+};
+
+export type InviteLinkResponse = {
+  id: string;
+  meetingId: string;
+  token: string;
+  status: string;
+  expiresAt?: string | null;
   createdAt: string;
 };
 
@@ -324,12 +501,24 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  previewInvite: (token: string) => request<InvitePreviewResponse>(`/api/v1/invite-links/${token}/preview`),
+  createInviteLink: (meetingId: string, expiresAt?: string) =>
+    request<InviteLinkResponse>(`/api/v1/meetings/${meetingId}/invite-links`, {
+      method: "POST",
+      body: JSON.stringify({ expiresAt: expiresAt ?? null }),
+    }),
   joinInvite: (token: string, body: JoinInviteRequest) =>
     request<MembershipResponse>(`/api/v1/invite-links/${token}/join`, {
       method: "POST",
       body: JSON.stringify(body),
     }),
   getMeeting: (meetingId: string) => request<MeetingDetailResponse>(`/api/v1/meetings/${meetingId}`),
+  updateMeeting: (meetingId: string, body: UpdateMeetingRequest) =>
+    request<MeetingDetailResponse>(`/api/v1/meetings/${meetingId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  listMembers: (meetingId: string) => request<MembershipResponse[]>(`/api/v1/meetings/${meetingId}/members`),
   listMessages: (threadId: string, before?: string, limit = 50) => {
     const query = new URLSearchParams();
     if (before) {
@@ -346,8 +535,65 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  createChatImport: (body: CreateChatImportRequest, idempotencyKey?: string) =>
+    request<ChatImportCreatedResponse>("/api/v1/imports", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+    }),
+  createMeetingChatImport: (meetingId: string, body: CreateChatImportRequest, idempotencyKey?: string) =>
+    request<ChatImportCreatedResponse>(`/api/v1/meetings/${meetingId}/imports`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+    }),
+  listChatImports: (meetingId: string) => request<ChatImportView[]>(`/api/v1/meetings/${meetingId}/imports`),
+  reportImportParse: (body: {
+    format: string;
+    formatVersion: string;
+    parsedCount: number;
+    unparsedLineCount: number;
+    signatures: string[];
+  }) =>
+    request<void>("/api/v1/telemetry/import-parse", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  getChatImport: (importId: string, includeDeletionImpact = false) =>
+    request<ChatImportView>(
+      `/api/v1/imports/${importId}${includeDeletionImpact ? "?includeDeletionImpact=true" : ""}`,
+    ),
+  getChatImportEvidence: (importId: string) => request<MessageView[]>(`/api/v1/imports/${importId}/evidence`),
+  applyChatImport: (importId: string, itemIds: string[], idempotencyKey?: string) =>
+    request<ApplyChatImportResponse>(`/api/v1/imports/${importId}/apply`, {
+      method: "POST",
+      body: JSON.stringify({ itemIds }),
+      headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+    }),
+  deleteChatImport: (importId: string) =>
+    request<DeleteChatImportResponse>(`/api/v1/imports/${importId}`, {
+      method: "DELETE",
+    }),
+  listImportSpeakers: (meetingId: string) =>
+    request<ImportSpeakerView[]>(`/api/v1/meetings/${meetingId}/import-speakers`),
+  updateImportSpeaker: (speakerId: string, membershipId: string | null) =>
+    request<ImportSpeakerView>(`/api/v1/import-speakers/${speakerId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ membershipId }),
+    }),
+  claimImportSpeaker: (meetingId: string, displayName: string) =>
+    request<{ claimedSpeakerIds: string[] }>(`/api/v1/meetings/${meetingId}/import-speakers/claim`, {
+      method: "POST",
+      body: JSON.stringify({ displayName }),
+    }),
   listDecisions: (meetingId: string) =>
     request<DecisionResponse[]>(`/api/v1/meetings/${meetingId}/decisions`),
+  listDecisionSuggestions: (threadId: string) =>
+    request<DecisionSuggestionView[]>(`/api/v1/threads/${threadId}/decision-suggestions`),
+  acceptDecisionSuggestion: (suggestionId: string) =>
+    request<DecisionResponse>(`/api/v1/decision-suggestions/${suggestionId}/accept`, { method: "POST" }),
+  dismissDecisionSuggestion: (suggestionId: string) =>
+    request<DecisionSuggestionView>(`/api/v1/decision-suggestions/${suggestionId}/dismiss`, { method: "POST" }),
   getDecision: (decisionId: string) =>
     request<DecisionDetailResponse>(`/api/v1/decisions/${decisionId}`),
   createDecision: (meetingId: string, body: CreateDecisionRequest) =>
@@ -410,4 +656,12 @@ export const apiClient = {
     }),
   listNotifications: (meetingId: string) =>
     request<NotificationView[]>(`/api/v1/meetings/${meetingId}/notifications`),
+  markNotificationRead: (meetingId: string, notificationId: string) =>
+    request<NotificationView>(`/api/v1/meetings/${meetingId}/notifications/${notificationId}/read`, {
+      method: "POST",
+    }),
+  markAllNotificationsRead: (meetingId: string) =>
+    request<MarkNotificationsReadResponse>(`/api/v1/meetings/${meetingId}/notifications/read-all`, {
+      method: "POST",
+    }),
 };

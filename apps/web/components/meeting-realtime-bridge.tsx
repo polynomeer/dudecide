@@ -8,6 +8,12 @@ const API_BASE_URL =
 
 type RealtimeStatus = "connecting" | "connected" | "reconnecting";
 
+const STATUS_LABELS: Record<RealtimeStatus, string> = {
+  connecting: "연결 중",
+  connected: "연결됨",
+  reconnecting: "다시 연결 중",
+};
+
 export function MeetingRealtimeBridge({
   meetingId,
   voteId,
@@ -44,6 +50,7 @@ export function MeetingRealtimeBridge({
     const invalidateMeetingQueries = async (eventType: string) => {
       const invalidations = [
         queryClient.invalidateQueries({ queryKey: ["meeting", meetingId] }),
+        queryClient.invalidateQueries({ queryKey: ["meeting-members", meetingId] }),
         queryClient.invalidateQueries({ queryKey: ["meeting-decisions", meetingId] }),
         queryClient.invalidateQueries({ queryKey: ["meeting-search", meetingId] }),
         queryClient.invalidateQueries({ queryKey: ["meeting-report", meetingId] }),
@@ -63,10 +70,18 @@ export function MeetingRealtimeBridge({
         eventType === "thread.updated"
       ) {
         await queryClient.invalidateQueries({ queryKey: ["thread-messages"] });
+        await queryClient.invalidateQueries({ queryKey: ["decision-suggestions"] });
       }
 
       if (eventType === "decision.updated") {
         await queryClient.invalidateQueries({ queryKey: ["decision-detail"] });
+      }
+
+      if (eventType.startsWith("import.")) {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["chat-import"] }),
+          queryClient.invalidateQueries({ queryKey: ["meeting-imports", meetingId] }),
+        ]);
       }
     };
 
@@ -96,6 +111,9 @@ export function MeetingRealtimeBridge({
       eventSource.addEventListener("notification.created", () =>
         void handleEvent("notification.created"),
       );
+      ["import.progress", "import.completed", "import.failed", "import.deleted"].forEach((eventType) =>
+        eventSource?.addEventListener(eventType, () => void handleEvent(eventType)),
+      );
       eventSource.onerror = () => {
         eventSource?.close();
         scheduleReconnect();
@@ -112,8 +130,15 @@ export function MeetingRealtimeBridge({
   }, [meetingId, queryClient, voteId]);
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 rounded-full border border-[color:var(--color-line)] bg-white/88 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-ink/58 shadow-[0_16px_30px_rgba(15,23,42,0.08)] backdrop-blur">
-      Realtime {status}
+    <div
+      role="status"
+      className="num fixed bottom-[84px] right-4 z-50 lg:bottom-4 inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[11px] font-semibold text-muted"
+    >
+      <span
+        aria-hidden="true"
+        className={`h-1.5 w-1.5 rounded-full ${status === "connected" ? "bg-[#2FA36B]" : "bg-[#F2B33D]"}`}
+      />
+      Realtime {STATUS_LABELS[status]}
     </div>
   );
 }

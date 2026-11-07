@@ -109,6 +109,7 @@ class ThreadService(
             messageCount = dsl.fetchCount(MESSAGE, MESSAGE.THREAD_ID.eq(threadId)),
             decisionCount = dsl.fetchCount(DECISION, DECISION.THREAD_ID.eq(threadId)),
             openVoteCount = dsl.fetchCount(VOTE, VOTE.THREAD_ID.eq(threadId).and(VOTE.STATUS.eq(VoteStatus.open))),
+            readOnly = thread.readOnly == true,
         )
     }
 }

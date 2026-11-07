@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run build:*)",
+      "Bash(gradle --no-daemon:*)",
+      "Bash(/opt/homebrew/bin/gradle --no-daemon:*)",
+      "Bash(GRADLE_USER_HOME=/private/tmp/dudecide-gradle-home GRADLE_OPTS='-Djava.io.tmpdir=/private/tmp/dudecide-gradle-tmp' gradle --no-daemon:*)",
+      "Bash(docker compose ps:*)",
+      "Bash(docker compose logs:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git reset --hard:*)",
+      "Read(./.env)",
+      "Read(./.env.*)"
+    ]
+  }
+}

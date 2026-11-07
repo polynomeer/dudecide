@@ -44,7 +44,7 @@ class ReportService(
 
     @Transactional
     fun refreshReport(meetingId: UUID): MeetingReportResponse {
-        meetingAccessService.requireMeetingHostOrCoHost(meetingId)
+        val actorId = meetingAccessService.requireMeetingHostOrCoHost(meetingId)
         val meeting = dsl.selectFrom(MEETING)
             .where(MEETING.ID.eq(meetingId))
             .fetchOne()
@@ -114,8 +114,9 @@ class ReportService(
                 "version" to nextVersion,
             ),
         )
-        notificationService.createNotification(
+        notificationService.notifyMembers(
             meetingId = meetingId,
+            excludeUserId = actorId,
             type = NotificationType.report_ready,
             payload = mapOf(
                 "reportId" to reportId,

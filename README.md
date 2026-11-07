@@ -5,6 +5,8 @@
 ## Documentation Map
 
 - [`AGENTS.md`](./AGENTS.md): rules for Codex and other coding agents working in this repository
+- [`CLAUDE.md`](./CLAUDE.md): Claude Code entry point; imports `AGENTS.md` and adds commands and verification steps
+- [`.claude/`](./.claude/): Claude Code settings, subagents, and slash commands
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md): contribution workflow and commit convention
 - [`.agents/README.md`](./.agents/README.md): subagent role definitions for parallel Codex work
 - [`.codex/README.md`](./.codex/README.md): reusable Codex prompt assets and task templates

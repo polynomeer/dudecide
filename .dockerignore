@@ -1,0 +1,14 @@
+# Build context for backend/app/Dockerfile (repository root).
+.git
+.gradle
+.kotlin
+.claude
+.codex
+.agents
+apps
+contracts
+docs
+scripts
+build
+**/build
+**/.DS_Store

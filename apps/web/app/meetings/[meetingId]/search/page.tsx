@@ -1,20 +1,20 @@
+import { MeetingPageHeader } from "@/components/meeting/meeting-page-header";
 import { SearchWorkspace } from "@/components/search-workspace";
-import { SectionShell } from "@/components/section-shell";
 
 export default async function SearchPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ meetingId: string }>;
+  searchParams: Promise<{ q?: string }>;
 }) {
   const { meetingId } = await params;
+  const { q } = await searchParams;
 
   return (
-    <SectionShell
-      eyebrow="Search"
-      title="Keyword search"
-      description="회의 범위의 메시지, 의사결정, 태스크를 하나의 키워드 검색 흐름에서 확인할 수 있습니다."
-    >
-      <SearchWorkspace meetingId={meetingId} />
-    </SectionShell>
+    <>
+      <MeetingPageHeader kicker="검색" title="모임에서 검색" description="메시지, 결정, 할 일을 한 번에 찾아요." />
+      <SearchWorkspace meetingId={meetingId} initialQuery={q ?? ""} />
+    </>
   );
 }

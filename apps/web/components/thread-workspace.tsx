@@ -1,12 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import type { Route } from "next";
+import { Fragment, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiErrorPanel } from "@/components/api-error-panel";
 import { useForm } from "react-hook-form";
+import { MeetingPageHeader } from "@/components/meeting/meeting-page-header";
 import { getApiErrorMessage } from "@/lib/api/error-display";
 import { apiClient } from "@/lib/api/client";
-import { useCurrentActor } from "@/lib/session";
+import { avatarColor, initialOf } from "@/lib/display";
+import { DecisionSuggestionCard } from "@/components/thread/decision-suggestion-card";
+import { useCurrentActor, useMeetingHostAccess } from "@/lib/session";
 
 type ThreadWorkspaceProps = {
   meetingId: string;
@@ -23,6 +28,11 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
   const meetingQuery = useQuery({
     queryKey: ["meeting", meetingId],
     queryFn: () => apiClient.getMeeting(meetingId),
+  });
+  const { isHost } = useMeetingHostAccess(meetingId);
+  const suggestionsQuery = useQuery({
+    queryKey: ["decision-suggestions", threadId],
+    queryFn: () => apiClient.listDecisionSuggestions(threadId),
   });
   const messagesQuery = useQuery({
     queryKey: ["thread-messages", threadId],
@@ -67,6 +77,21 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
   );
 
   const messages = [...olderMessages, ...(messagesQuery.data ?? [])];
+  // Each suggestion sits under its latest evidence message, like the Discussion design; unmatched ones go last.
+  const suggestionsAfter = new Map<string, NonNullable<typeof suggestionsQuery.data>>();
+  const trailingSuggestions: NonNullable<typeof suggestionsQuery.data> = [];
+  const positions = new Map(messages.map((message, index) => [message.id, index]));
+  for (const suggestion of suggestionsQuery.data ?? []) {
+    const anchor = suggestion.evidence
+      .map((item) => item.messageId)
+      .filter((id) => positions.has(id))
+      .sort((a, b) => positions.get(b)! - positions.get(a)!)[0];
+    if (anchor) {
+      suggestionsAfter.set(anchor, [...(suggestionsAfter.get(anchor) ?? []), suggestion]);
+    } else {
+      trailingSuggestions.push(suggestion);
+    }
+  }
 
   async function loadOlderMessages() {
     if (loadingOlder || messages.length === 0) {
@@ -94,137 +119,145 @@ export function ThreadWorkspace({ meetingId, threadId }: ThreadWorkspaceProps) {
   }
 
   if (meetingQuery.isLoading || messagesQuery.isLoading) {
-    return <div className="panel px-6 py-6 text-sm text-ink/60">스레드 작업공간을 불러오는 중입니다.</div>;
+    return <div className="panel px-6 py-6 text-sm text-muted">토픽을 불러오는 중이에요…</div>;
   }
 
-  if (meetingQuery.error || messagesQuery.error || !thread) {
+  if (meetingQuery.error || messagesQuery.error || !thread || !meetingQuery.data) {
     return <ApiErrorPanel error={meetingQuery.error ?? messagesQuery.error} resourceName="스레드 작업공간" />;
   }
 
+  const meeting = meetingQuery.data;
+
   return (
-    <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-      <section className="panel px-6 py-6">
-        <div className="eyebrow">Thread context</div>
-        <h2 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
-          {thread.title}
-        </h2>
-        <div className="mt-5 space-y-3 text-sm text-ink/72">
-          <ContextRow label="Category" value={thread.category} />
-          <ContextRow label="Status" value={thread.status} />
-          <ContextRow label="Messages" value={String(thread.messageCount)} />
-          <ContextRow label="Decisions" value={String(thread.decisionCount)} />
-          <ContextRow label="Open votes" value={String(thread.openVoteCount)} />
-        </div>
-        <div className="mt-6 rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/72 p-4 text-sm leading-6 text-ink/72">
-          다음 단계에서는 이 화면에 스레드 상태 업데이트, 메시지 수정, SSE 실시간 반영, 결정/투표 연계 액션이 추가될 예정입니다.
-        </div>
-      </section>
+    <>
+      <MeetingPageHeader
+        kicker={`토픽 · 메시지 ${thread.messageCount} · 결정 ${thread.decisionCount}${thread.openVoteCount ? ` · 투표 ${thread.openVoteCount}` : ""}`}
+        title={`# ${thread.title}`}
+        actions={
+          thread.decisionCount ? (
+            <Link href={`/meetings/${meetingId}/decisions` as Route} className="action-secondary">
+              이 토픽의 결정 보기
+            </Link>
+          ) : null
+        }
+      />
 
-      <section className="panel flex min-h-[36rem] flex-col px-6 py-6">
-        <div className="flex items-start justify-between gap-4 border-b border-[color:var(--color-line)] pb-4">
-          <div>
-            <div className="eyebrow">Discussion</div>
-            <h3 className="mt-2 font-[var(--font-display)] text-2xl font-semibold tracking-[-0.04em]">
-              메시지 흐름
-            </h3>
-          </div>
-          <div className="rounded-full border border-[color:var(--color-line)] bg-white/70 px-4 py-2 text-sm">
-            {actorQuery.data?.displayName ?? "Local Host"}
-          </div>
-        </div>
-
-        <div className="flex-1 space-y-4 py-5">
-          {messages.length > 0 ? (
-            <button
-              type="button"
-              onClick={loadOlderMessages}
-              disabled={loadingOlder}
-              className="rounded-full border border-[color:var(--color-line)] px-4 py-2 text-sm font-semibold transition hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-60"
+      <nav aria-label="토픽" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+        {meeting.threads.map((item) => {
+          const active = item.id === threadId;
+          return (
+            <Link
+              key={item.id}
+              href={`/meetings/${meetingId}/threads/${item.id}` as Route}
+              aria-current={active ? "page" : undefined}
+              className={`inline-flex h-9 flex-none items-center gap-1 whitespace-nowrap rounded-full border px-3 text-[13px] font-semibold ${
+                active ? "border-ink bg-ink text-on-ink" : "border-line bg-surface text-ink hover:bg-surface-2"
+              }`}
             >
-              {loadingOlder ? "이전 메시지를 불러오는 중..." : "이전 메시지 더 보기"}
+              {item.title}
+              {item.openVoteCount ? <span className={active ? "text-[#F2B33D]" : "text-accent-text"}>{item.openVoteCount}</span> : null}
+            </Link>
+          );
+        })}
+      </nav>
+
+      <section aria-label="메시지" className="panel flex min-h-[32rem] flex-col p-0">
+        <div className="flex flex-1 flex-col gap-3 px-5 py-5">
+          {messages.length > 0 ? (
+            <button type="button" onClick={loadOlderMessages} disabled={loadingOlder} className="btn-ghost self-center text-xs">
+              {loadingOlder ? "이전 메시지를 불러오는 중…" : "이전 메시지 더 보기"}
             </button>
           ) : null}
 
-          <div className="space-y-3">
-            {messages.length === 0 ? (
-              <div className="rounded-[1.5rem] border border-dashed border-[color:var(--color-line)] bg-white/50 px-5 py-6 text-sm text-ink/58">
-                아직 메시지가 없습니다. 첫 번째 계획 메모를 남겨 주세요.
-              </div>
-            ) : (
-              messages.map((message) => {
-                const isOwnMessage = actorQuery.data?.userId === message.senderUserId;
-                return (
-                  <article
-                    key={message.id}
-                    className={[
-                      "rounded-[1.5rem] border px-4 py-4",
-                      isOwnMessage
-                        ? "border-pine/20 bg-pine/10"
-                        : "border-[color:var(--color-line)] bg-white/72",
-                    ].join(" ")}
-                  >
-                    <div className="flex items-center justify-between gap-4 text-xs uppercase tracking-[0.16em] text-ink/45">
-                      <span>{isOwnMessage ? "You" : message.senderUserId.slice(0, 8)}</span>
-                      <span>{formatDateTime(message.createdAt)}</span>
+          {messages.length === 0 ? (
+            <div className="empty-state">아직 메시지가 없어요. 첫 이야기를 남겨 주세요.</div>
+          ) : (
+            messages.map((message) => {
+              const isOwnMessage = message.senderUserId !== null && actorQuery.data?.userId === message.senderUserId;
+              return (
+                <Fragment key={message.id}>
+                  <article className={`flex gap-2 ${isOwnMessage ? "flex-row-reverse" : ""}`}>
+                    {isOwnMessage ? null : (
+                      <span
+                        aria-hidden="true"
+                        className="flex h-8 w-8 flex-none items-center justify-center rounded-full text-xs font-bold text-[#15171C]"
+                        style={{ background: avatarColor(message.speaker.displayName) }}
+                      >
+                        {initialOf(message.speaker.displayName)}
+                      </span>
+                    )}
+                    <div className={`flex max-w-[min(34rem,80%)] flex-col ${isOwnMessage ? "items-end" : ""}`}>
+                      <div className="mb-1 text-[11px] font-semibold text-muted">
+                        {isOwnMessage ? "나" : message.speaker.displayName} · {formatDateTime(message.createdAt)}
+                        {message.origin === "imported" ? " · 단톡방" : ""}
+                        {message.editedAt ? " · 수정됨" : ""}
+                      </div>
+                      <p
+                        className={`m-0 whitespace-pre-wrap px-3 py-2.5 text-sm leading-[1.45] ${
+                          isOwnMessage
+                            ? "rounded-[16px_4px_16px_16px] bg-accent-soft text-ink"
+                            : "rounded-[4px_16px_16px_16px] bg-surface-2 text-ink"
+                        }`}
+                      >
+                        {message.body}
+                      </p>
                     </div>
-                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink/86">{message.body}</p>
-                    {message.editedAt ? (
-                      <div className="mt-3 text-xs text-ink/45">Edited {formatDateTime(message.editedAt)}</div>
-                    ) : null}
                   </article>
-                );
-              })
-            )}
-          </div>
+                  {(suggestionsAfter.get(message.id) ?? []).map((suggestion) => (
+                    <DecisionSuggestionCard key={suggestion.id} meetingId={meetingId} suggestion={suggestion} canManage={isHost} />
+                  ))}
+                </Fragment>
+              );
+            })
+          )}
+          {trailingSuggestions.map((suggestion) => (
+            <DecisionSuggestionCard key={suggestion.id} meetingId={meetingId} suggestion={suggestion} canManage={isHost} />
+          ))}
         </div>
 
         <form
-          className="border-t border-[color:var(--color-line)] pt-4"
+          className="flex flex-col gap-2 border-t border-line px-4 py-3"
           onSubmit={form.handleSubmit((values) => {
             setErrorMessage(null);
             postMutation.mutate(values);
           })}
         >
-          <label className="mb-2 block text-sm font-semibold">새 메시지</label>
-          <textarea
-            {...form.register("body", { required: true, minLength: 2 })}
-            rows={5}
-            className="w-full rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 outline-none transition focus:border-ink"
-            placeholder="예: 9월 둘째 주는 전원 가능하고, 가평이면 차량 2대로도 이동 가능합니다."
-          />
-          {form.formState.errors.body ? (
-            <p className="mt-2 text-sm text-ember">메시지는 두 글자 이상 입력해 주세요.</p>
-          ) : null}
-          {errorMessage ? <p className="mt-2 text-sm text-ember">{errorMessage}</p> : null}
-          <div className="mt-4 flex justify-end">
+          <div className="flex items-end gap-2">
+            <label htmlFor="thread-message" className="sr-only">
+              {thread.title} 토픽에 메시지 보내기
+            </label>
+            <textarea
+              id="thread-message"
+              {...form.register("body", { required: true, minLength: 2 })}
+              rows={2}
+              className="field min-h-[46px] flex-1 resize-y"
+              placeholder={`${thread.title} 토픽에 이야기하기`}
+            />
             <button
               type="submit"
+              aria-label="보내기"
               disabled={postMutation.isPending}
-              className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex h-[46px] w-[46px] flex-none items-center justify-center rounded-[14px] bg-accent text-on-accent disabled:opacity-40"
             >
-              {postMutation.isPending ? "등록 중..." : "메시지 등록"}
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
             </button>
           </div>
+          {form.formState.errors.body ? <p className="m-0 text-sm text-danger">메시지는 두 글자 이상 입력해 주세요.</p> : null}
+          {errorMessage ? <p className="m-0 text-sm text-danger">{errorMessage}</p> : null}
         </form>
       </section>
-    </div>
-  );
-}
-
-function ContextRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between rounded-full border border-[color:var(--color-line)] bg-white/72 px-4 py-3">
-      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">{label}</span>
-      <span className="font-medium text-ink">{value}</span>
-    </div>
+    </>
   );
 }
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("ko-KR", {
-    month: "short",
+    month: "numeric",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   }).format(new Date(value));
 }

@@ -1,0 +1,15 @@
+{
+  "id": "04-location-late-objection",
+  "description": "Agreement followed by an objection keeps the location contested",
+  "messages": [
+    {"speaker": "A", "minute": 0, "text": "장소는 강남역 어때?"},
+    {"speaker": "B", "minute": 1, "text": "좋아"},
+    {"speaker": "C", "minute": 2, "text": "ㅇㅇ"},
+    {"speaker": "D", "minute": 3, "text": "근데 나 강남은 너무 멀어 ㅠ 반대"}
+  ],
+  "expected": {
+    "decisions": [{"decisionType": "location", "status": "contested"}],
+    "openQuestions": 0,
+    "taskOwners": []
+  }
+}

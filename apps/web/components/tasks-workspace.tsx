@@ -5,10 +5,17 @@ import { useState } from "react";
 import { ApiErrorPanel } from "@/components/api-error-panel";
 import { HostOnlyNotice } from "@/components/host-only-notice";
 import { getApiErrorMessage } from "@/lib/api/error-display";
-import { apiClient } from "@/lib/api/client";
+import { apiClient, type UpdateTaskRequest } from "@/lib/api/client";
+import { memberName, useMeetingMembers } from "@/lib/members";
 import { useMeetingHostAccess } from "@/lib/session";
 
-const TASK_STATUSES = ["todo", "doing", "done"];
+// Matches the backend task_status enum; "cancelled" exists but is not offered here.
+const TASK_STATUSES = ["todo", "in_progress", "done"] as const;
+const TASK_STATUS_LABELS: Record<(typeof TASK_STATUSES)[number], string> = {
+  todo: "할 일",
+  in_progress: "하는 중",
+  done: "완료",
+};
 
 export function TasksWorkspace({ meetingId }: { meetingId: string }) {
   const queryClient = useQueryClient();
@@ -17,9 +24,12 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
     queryKey: ["meeting-tasks", meetingId],
     queryFn: () => apiClient.listTasks(meetingId),
   });
+  const membersQuery = useMeetingMembers(meetingId);
+  const members = membersQuery.data ?? [];
   const [form, setForm] = useState({
     title: "",
     dueAt: "",
+    ownerUserId: "",
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -27,10 +37,11 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
     mutationFn: () =>
       apiClient.createTask(meetingId, {
         title: form.title.trim(),
-        dueAt: form.dueAt || undefined,
+        dueAt: form.dueAt ? new Date(form.dueAt).toISOString() : undefined,
+        ownerUserId: form.ownerUserId || undefined,
       }),
     onSuccess: async () => {
-      setForm({ title: "", dueAt: "" });
+      setForm({ title: "", dueAt: "", ownerUserId: "" });
       setErrorMessage(null);
       await queryClient.invalidateQueries({ queryKey: ["meeting-tasks", meetingId] });
       await queryClient.invalidateQueries({ queryKey: ["meeting-search", meetingId] });
@@ -46,8 +57,7 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
   });
 
   const updateTaskMutation = useMutation({
-    mutationFn: ({ taskId, status }: { taskId: string; status: string }) =>
-      apiClient.updateTask(taskId, { status }),
+    mutationFn: ({ taskId, ...body }: UpdateTaskRequest & { taskId: string }) => apiClient.updateTask(taskId, body),
     onSuccess: async () => {
       setErrorMessage(null);
       await queryClient.invalidateQueries({ queryKey: ["meeting-tasks", meetingId] });
@@ -64,128 +74,148 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
   });
 
   if (tasksQuery.isLoading) {
-    return <div className="panel px-6 py-6 text-sm text-ink/60">태스크 화면을 불러오는 중입니다.</div>;
+    return <div className="panel px-6 py-6 text-sm text-muted">할 일을 불러오는 중이에요…</div>;
   }
 
   if (tasksQuery.error || !tasksQuery.data) {
     return <ApiErrorPanel error={tasksQuery.error} resourceName="태스크 목록" />;
   }
 
+  const tasks = tasksQuery.data;
+  const remaining = tasks.filter((task) => task.status !== "done" && task.status !== "cancelled").length;
+
   return (
-    <div className="grid gap-5 xl:grid-cols-[0.78fr_1.22fr]">
-      <section className="panel px-6 py-6">
-        <div className="eyebrow">Create task</div>
-        <h2 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
-          회의 태스크 추가
-        </h2>
-        <p className="mt-3 text-sm leading-6 text-ink/66">
-          호스트 또는 코호스트가 후속 액션을 등록하고, 현재 상태를 `todo`, `doing`, `done`으로 관리할 수 있습니다.
+    <div className="flex flex-col gap-4">
+      {access.isHost ? (
+        <form
+          aria-label="할 일 추가"
+          className="panel flex flex-wrap items-end gap-2.5 p-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setErrorMessage(null);
+            createTaskMutation.mutate();
+          }}
+        >
+          <label className="flex min-w-0 flex-[1_1_280px] flex-col gap-1.5 text-xs font-bold">
+            할 일
+            <input
+              value={form.title}
+              onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+              className="field h-11 text-sm font-normal"
+              placeholder="예: 항공권 가격 비교해서 공유"
+              required
+            />
+          </label>
+          <label className="flex flex-[0_1_180px] flex-col gap-1.5 text-xs font-bold">
+            담당 (선택)
+            <select
+              value={form.ownerUserId}
+              onChange={(event) => setForm((current) => ({ ...current, ownerUserId: event.target.value }))}
+              className="field h-11 text-sm font-normal"
+            >
+              <option value="">정하지 않음</option>
+              {members.map((member) => (
+                <option key={member.userId} value={member.userId}>
+                  {member.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-[0_1_220px] flex-col gap-1.5 text-xs font-bold">
+            기한 (선택)
+            <input
+              type="datetime-local"
+              value={form.dueAt}
+              onChange={(event) => setForm((current) => ({ ...current, dueAt: event.target.value }))}
+              className="field h-11 text-sm font-normal"
+            />
+          </label>
+          <button type="submit" disabled={createTaskMutation.isPending} className="action-primary">
+            {createTaskMutation.isPending ? "추가하는 중…" : "추가"}
+          </button>
+        </form>
+      ) : (
+        <HostOnlyNotice message="할 일 추가와 상태 변경은 호스트만 할 수 있어요." />
+      )}
+
+      {errorMessage ? (
+        <p role="alert" className="m-0 text-sm text-danger">
+          {errorMessage}
         </p>
+      ) : null}
 
-        {access.isHost ? (
-          <form
-            className="mt-5 space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setErrorMessage(null);
-              createTaskMutation.mutate();
-            }}
-          >
-            <label className="block">
-              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                Title
-              </span>
-              <input
-                value={form.title}
-                onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
-                className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
-                placeholder="예: 숙소 후보 2곳 예산표 정리"
-                required
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/45">
-                Due at
-              </span>
-              <input
-                type="datetime-local"
-                value={form.dueAt}
-                onChange={(event) => setForm((current) => ({ ...current, dueAt: event.target.value }))}
-                className="mt-2 w-full rounded-[1.2rem] border border-[color:var(--color-line)] bg-white/85 px-4 py-3 text-sm outline-none transition focus:border-pine"
-              />
-            </label>
-
-            {errorMessage ? <div className="text-sm text-ember">{errorMessage}</div> : null}
-
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={createTaskMutation.isPending}
-                className="rounded-full bg-ink px-5 py-3 text-sm font-semibold text-mist transition hover:bg-pine disabled:cursor-not-allowed disabled:bg-ink/40"
-              >
-                {createTaskMutation.isPending ? "생성 중..." : "태스크 생성"}
-              </button>
-            </div>
-          </form>
-        ) : (
-          <div className="mt-5">
-            <HostOnlyNotice message="현재 프론트엔드에서는 회의 소유자에게만 태스크 생성과 상태 변경 액션을 노출합니다." />
-          </div>
-        )}
-      </section>
-
-      <section className="panel px-6 py-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="eyebrow">Task list</div>
-            <h3 className="mt-2 font-[var(--font-display)] text-3xl font-semibold tracking-[-0.05em]">
-              현재 태스크
-            </h3>
-          </div>
-          <div className="rounded-full border border-[color:var(--color-line)] bg-white/70 px-4 py-2 text-sm">
-            총 {tasksQuery.data.length}건
-          </div>
+      <section aria-label="할 일 목록" className="rounded-[22px] bg-surface px-6 pb-3 pt-2">
+        <div className="flex items-center justify-between pb-2 pt-4">
+          <h2 className="m-0 text-[17px] font-bold">남은 할 일</h2>
+          <span className="chip-voting">
+            {remaining} / {tasks.length}
+          </span>
         </div>
-
-        <div className="mt-5 space-y-3">
-          {tasksQuery.data.length ? (
-            tasksQuery.data.map((task) => (
-              <article
-                key={task.id}
-                className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-white/78 p-4"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-lg font-semibold text-ink">{task.title}</div>
-                    <div className="mt-2 text-sm text-ink/62">
-                      생성 {formatDateTime(task.createdAt)}
-                      {task.dueAt ? ` · 마감 ${formatDateTime(task.dueAt)}` : " · 마감 미설정"}
+        {tasks.length ? (
+          <ul className="m-0 list-none p-0">
+            {tasks.map((task) => {
+              const done = task.status === "done";
+              return (
+                <li key={task.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line py-3.5">
+                  <div className="min-w-0 flex-[1_1_260px]">
+                    <div className={`text-[15px] ${done ? "text-muted line-through" : "font-bold"}`}>{task.title}</div>
+                    <div className="num mt-0.5 text-xs text-muted">
+                      {task.dueAt ? `기한 ${formatDateTime(task.dueAt)}` : "기한 없음"}
                     </div>
                   </div>
-                  <select
-                    value={task.status}
-                    onChange={(event) =>
-                      updateTaskMutation.mutate({ taskId: task.id, status: event.target.value })
-                    }
-                    disabled={updateTaskMutation.isPending || !access.isHost}
-                    className="rounded-full border border-[color:var(--color-line)] bg-white px-4 py-2 text-sm font-semibold outline-none transition focus:border-pine"
-                  >
-                    {TASK_STATUSES.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
+                  {access.isHost ? (
+                    <select
+                      aria-label={`${task.title} 담당`}
+                      value={task.ownerUserId ?? ""}
+                      disabled={updateTaskMutation.isPending}
+                      onChange={(event) => {
+                        if (event.target.value) {
+                          updateTaskMutation.mutate({ taskId: task.id, ownerUserId: event.target.value });
+                        }
+                      }}
+                      className={`field h-[38px] w-auto py-0 text-xs font-semibold ${task.ownerUserId ? "" : "text-risk-ink"}`}
+                    >
+                      <option value="" disabled>
+                        담당 정하기
                       </option>
-                    ))}
-                  </select>
-                </div>
-              </article>
-            ))
-          ) : (
-            <div className="rounded-[1.5rem] border border-dashed border-[color:var(--color-line)] bg-white/55 px-5 py-6 text-sm text-ink/58">
-              아직 생성된 태스크가 없습니다.
-            </div>
-          )}
-        </div>
+                      {members.map((member) => (
+                        <option key={member.userId} value={member.userId}>
+                          {member.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className={`text-xs font-semibold ${task.ownerUserId ? "text-muted" : "text-risk-ink"}`}>
+                      {memberName(members, task.ownerUserId) ?? (task.ownerUserId ? "멤버" : "담당 없음")}
+                    </span>
+                  )}
+                  <div role="radiogroup" aria-label={`${task.title} 상태`} className="flex gap-0.5 rounded-[10px] bg-surface-2 p-[3px]">
+                    {TASK_STATUSES.map((status) => {
+                      const checked = task.status === status;
+                      return (
+                        <button
+                          key={status}
+                          type="button"
+                          role="radio"
+                          aria-checked={checked}
+                          disabled={updateTaskMutation.isPending || !access.isHost}
+                          onClick={() => updateTaskMutation.mutate({ taskId: task.id, status })}
+                          className={`min-h-[34px] rounded-lg px-3 text-xs font-bold transition disabled:cursor-not-allowed ${
+                            checked ? "bg-surface text-ink shadow-[0_1px_2px_rgb(0_0_0/0.08)]" : "text-muted"
+                          }`}
+                        >
+                          {TASK_STATUS_LABELS[status]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="section-copy m-0 border-t border-line py-4">아직 할 일이 없어요.</p>
+        )}
       </section>
     </div>
   );
@@ -193,9 +223,10 @@ export function TasksWorkspace({ meetingId }: { meetingId: string }) {
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("ko-KR", {
-    month: "short",
+    month: "numeric",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   }).format(new Date(value));
 }

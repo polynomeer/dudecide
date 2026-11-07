@@ -1,0 +1,19 @@
+{
+  "id": "09-chatter-dinner",
+  "description": "Dinner menu decided between chatter",
+  "messages": [
+    {"speaker": "A", "minute": 0, "text": "ㅋㅋㅋㅋ"},
+    {"speaker": "B", "minute": 1, "text": "😂😂"},
+    {"speaker": "C", "minute": 2, "text": "아 배고파"},
+    {"speaker": "A", "minute": 3, "text": "저녁은 삼겹살 어때?"},
+    {"speaker": "B", "minute": 4, "text": "ㅇㅇ"},
+    {"speaker": "C", "minute": 5, "text": "콜"},
+    {"speaker": "D", "minute": 6, "text": "ㅋㅋ 좋아"},
+    {"speaker": "A", "minute": 7, "text": "삼겹살로 결정!"}
+  ],
+  "expected": {
+    "decisions": [{"decisionType": "other", "status": "likely_decided", "option": "삼겹살"}],
+    "openQuestions": 0,
+    "taskOwners": []
+  }
+}

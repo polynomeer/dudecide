@@ -8,15 +8,17 @@ import org.jooq.conf.Settings
 import org.jooq.impl.DSL
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.jdbc.datasource.TransactionAwareDataSourceProxy
 import javax.sql.DataSource
 
 @Configuration
 class JooqConfig {
 
+    // The proxy hands jOOQ the connection bound to the current Spring transaction; a raw DataSource would autocommit.
     @Bean
     fun dslContext(dataSource: DataSource): DSLContext =
         DSL.using(
-            dataSource,
+            TransactionAwareDataSourceProxy(dataSource),
             SQLDialect.POSTGRES,
             Settings()
                 .withRenderNameCase(RenderNameCase.LOWER)

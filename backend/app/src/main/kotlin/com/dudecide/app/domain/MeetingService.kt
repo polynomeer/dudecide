@@ -45,6 +45,7 @@ class MeetingService(
 
     @Transactional
     fun createMeeting(request: CreateMeetingRequest): MeetingResponse {
+        validateMeetingFields(request.expectedHeadcount, request.budget, request.startsAt, request.endsAt)
         val ownerId = localActorProvider.currentUserId()
         val meetingId = UUID.randomUUID()
 
@@ -58,6 +59,8 @@ class MeetingService(
             .set(MEETING.EXPECTED_HEADCOUNT, request.expectedHeadcount)
             .set(MEETING.BUDGET_MIN, request.budget?.min?.toBigDecimal())
             .set(MEETING.BUDGET_MAX, request.budget?.max?.toBigDecimal())
+            .set(MEETING.STARTS_AT, request.startsAt)
+            .set(MEETING.ENDS_AT, request.endsAt)
             .execute()
 
         dsl.insertInto(MEMBERSHIP)
@@ -120,6 +123,7 @@ class MeetingService(
                     messageCount = dsl.fetchCount(com.dudecide.app.jooq.tables.Message.Companion.MESSAGE, com.dudecide.app.jooq.tables.Message.Companion.MESSAGE.THREAD_ID.eq(threadId)),
                     decisionCount = dsl.fetchCount(DECISION, DECISION.THREAD_ID.eq(threadId)),
                     openVoteCount = dsl.fetchCount(VOTE, VOTE.THREAD_ID.eq(threadId).and(VOTE.STATUS.eq(VoteStatus.open))),
+                    readOnly = thread.readOnly == true,
                 )
             }
 
@@ -136,6 +140,8 @@ class MeetingService(
                     max = record.budgetMax?.toDouble(),
                 )
             } else null,
+            startsAt = record.startsAt,
+            endsAt = record.endsAt,
             ownerUserId = requireNotNull(record.ownerUserId),
             memberCount = memberCount,
             decisionCount = decisionCount,
@@ -254,16 +260,24 @@ class MeetingService(
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "invite link is no longer valid")
         }
 
-        val userId = UUID.randomUUID()
+        val meetingId = requireNotNull(invite.meetingId)
+        // A browser that already has an identity joins as that user, so its other meetings stay reachable.
+        val sessionActor = localActorProvider.sessionActorOrNull()
+        if (sessionActor != null) {
+            existingMembership(meetingId, sessionActor)?.let { return it }
+        }
+        val userId = sessionActor?.userId ?: UUID.randomUUID()
+        val displayName = sessionActor?.displayName ?: request.displayName
         val membershipId = UUID.randomUUID()
         val joinedAt = OffsetDateTime.now()
-        val meetingId = requireNotNull(invite.meetingId)
 
-        dsl.insertInto(APP_USER)
-            .set(APP_USER.ID, userId)
-            .set(APP_USER.DISPLAY_NAME, request.displayName)
-            .set(APP_USER.STATUS, "active")
-            .execute()
+        if (sessionActor == null) {
+            dsl.insertInto(APP_USER)
+                .set(APP_USER.ID, userId)
+                .set(APP_USER.DISPLAY_NAME, displayName)
+                .set(APP_USER.STATUS, "active")
+                .execute()
+        }
 
         dsl.insertInto(MEMBERSHIP)
             .set(MEMBERSHIP.ID, membershipId)
@@ -285,10 +299,13 @@ class MeetingService(
                 "userId" to userId,
             ),
         )
-        notificationService.createNotification(
+        // The people who run the meeting need to know someone joined; the joiner already knows.
+        notificationService.notifyMembers(
             meetingId = meetingId,
             type = NotificationType.invite_joined,
             payload = mapOf("membershipId" to membershipId, "userId" to userId),
+            excludeUserId = userId,
+            roles = setOf(MeetingRole.host, MeetingRole.co_host),
         )
         eventStreamService.publish(
             meetingId = meetingId,
@@ -304,11 +321,51 @@ class MeetingService(
             id = membershipId,
             meetingId = meetingId,
             userId = userId,
-            displayName = request.displayName,
+            displayName = displayName,
             role = MeetingRole.guest.literal,
             attendanceStatus = AttendanceStatus.accepted.literal,
             joinedAt = joinedAt,
         )
+    }
+
+    private fun existingMembership(meetingId: UUID, actor: LocalActorProvider.CurrentActor): MembershipResponse? =
+        dsl.selectFrom(MEMBERSHIP)
+            .where(MEMBERSHIP.MEETING_ID.eq(meetingId))
+            .and(MEMBERSHIP.USER_ID.eq(actor.userId))
+            .fetchOne()
+            ?.let { row ->
+                MembershipResponse(
+                    id = requireNotNull(row.id),
+                    meetingId = meetingId,
+                    userId = actor.userId,
+                    displayName = actor.displayName,
+                    role = requireNotNull(row.role).literal,
+                    attendanceStatus = requireNotNull(row.attendanceStatus).literal,
+                    joinedAt = requireNotNull(row.joinedAt),
+                )
+            }
+
+    @Transactional(readOnly = true)
+    fun listMembers(meetingId: UUID): List<MembershipResponse> {
+        meetingAccessService.requireMeetingMember(meetingId)
+        requireMeeting(meetingId)
+        return dsl.select(MEMBERSHIP.asterisk(), APP_USER.DISPLAY_NAME)
+            .from(MEMBERSHIP)
+            .join(APP_USER).on(APP_USER.ID.eq(MEMBERSHIP.USER_ID))
+            .where(MEMBERSHIP.MEETING_ID.eq(meetingId))
+            .orderBy(MEMBERSHIP.JOINED_AT.asc(), MEMBERSHIP.ID.asc())
+            .fetch()
+            .map { row ->
+                MembershipResponse(
+                    id = requireNotNull(row.get(MEMBERSHIP.ID)),
+                    meetingId = requireNotNull(row.get(MEMBERSHIP.MEETING_ID)),
+                    userId = requireNotNull(row.get(MEMBERSHIP.USER_ID)),
+                    displayName = requireNotNull(row.get(APP_USER.DISPLAY_NAME)),
+                    role = requireNotNull(row.get(MEMBERSHIP.ROLE)).literal,
+                    attendanceStatus = requireNotNull(row.get(MEMBERSHIP.ATTENDANCE_STATUS)).literal,
+                    joinedAt = requireNotNull(row.get(MEMBERSHIP.JOINED_AT)),
+                )
+            }
     }
 
     @Transactional
@@ -368,11 +425,11 @@ class MeetingService(
 
     private fun createDefaultThreads(meetingId: UUID) {
         val defaults = listOf(
-            ThreadSeed(ThreadCategory.date, "Date"),
-            ThreadSeed(ThreadCategory.location, "Location"),
-            ThreadSeed(ThreadCategory.lodging, "Lodging"),
-            ThreadSeed(ThreadCategory.transport, "Transport"),
-            ThreadSeed(ThreadCategory.free_chat, "Free Chat"),
+            ThreadSeed(ThreadCategory.date, "날짜"),
+            ThreadSeed(ThreadCategory.location, "장소"),
+            ThreadSeed(ThreadCategory.lodging, "숙소"),
+            ThreadSeed(ThreadCategory.transport, "교통"),
+            ThreadSeed(ThreadCategory.free_chat, "자유수다"),
         )
 
         defaults.forEachIndexed { index, seed ->
@@ -402,16 +459,24 @@ class MeetingService(
         runCatching { MeetingStatus.valueOf(raw.lowercase()) }
             .getOrElse { throw ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid meeting status: $raw") }
 
-    private fun validateMeetingUpdate(request: UpdateMeetingRequest) {
-        if (request.expectedHeadcount != null && request.expectedHeadcount <= 0) {
+    private fun validateMeetingUpdate(request: UpdateMeetingRequest) =
+        validateMeetingFields(request.expectedHeadcount, request.budget, request.startsAt, request.endsAt)
+
+    private fun validateMeetingFields(
+        expectedHeadcount: Int?,
+        budget: com.dudecide.app.api.dto.BudgetRangeDto?,
+        startsAt: OffsetDateTime?,
+        endsAt: OffsetDateTime?,
+    ) {
+        if (expectedHeadcount != null && expectedHeadcount <= 0) {
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "expectedHeadcount must be positive")
         }
-        val minBudget = request.budget?.min
-        val maxBudget = request.budget?.max
+        val minBudget = budget?.min
+        val maxBudget = budget?.max
         if (minBudget != null && maxBudget != null && minBudget > maxBudget) {
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "budget.min must be less than or equal to budget.max")
         }
-        if (request.startsAt != null && request.endsAt != null && request.startsAt.isAfter(request.endsAt)) {
+        if (startsAt != null && endsAt != null && startsAt.isAfter(endsAt)) {
             throw ResponseStatusException(HttpStatus.BAD_REQUEST, "startsAt must be before or equal to endsAt")
         }
     }

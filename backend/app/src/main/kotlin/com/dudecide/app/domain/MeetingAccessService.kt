@@ -1,6 +1,7 @@
 package com.dudecide.app.domain
 
 import com.dudecide.app.jooq.enums.MeetingRole
+import com.dudecide.app.jooq.enums.MessageOrigin
 import com.dudecide.app.jooq.tables.Decision.Companion.DECISION
 import com.dudecide.app.jooq.tables.Meeting.Companion.MEETING
 import com.dudecide.app.jooq.tables.Membership.Companion.MEMBERSHIP
@@ -147,7 +148,7 @@ class MeetingAccessService(
     @Transactional(readOnly = true)
     fun requireMessageEditor(messageId: UUID): UUID {
         val actorId = localActorProvider.currentUserId()
-        val record = dsl.select(MESSAGE.SENDER_USER_ID, TOPIC_THREAD.MEETING_ID, MEMBERSHIP.ROLE)
+        val record = dsl.select(MESSAGE.SENDER_USER_ID, MESSAGE.ORIGIN, TOPIC_THREAD.MEETING_ID, MEMBERSHIP.ROLE)
             .from(MESSAGE)
             .join(TOPIC_THREAD).on(TOPIC_THREAD.ID.eq(MESSAGE.THREAD_ID))
             .leftJoin(MEMBERSHIP).on(
@@ -160,7 +161,10 @@ class MeetingAccessService(
 
         val role = record.get(MEMBERSHIP.ROLE)
             ?: throw ResponseStatusException(HttpStatus.FORBIDDEN, "meeting membership is required")
-        val senderUserId = requireNotNull(record.get(MESSAGE.SENDER_USER_ID))
+        if (record.get(MESSAGE.ORIGIN) == MessageOrigin.imported) {
+            throw ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "imported messages cannot be edited")
+        }
+        val senderUserId = record.get(MESSAGE.SENDER_USER_ID)
         if (senderUserId == actorId || role == MeetingRole.host || role == MeetingRole.co_host) {
             return actorId
         }

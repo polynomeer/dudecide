@@ -1,0 +1,16 @@
+{
+  "id": "08-english",
+  "description": "English chat with a confirmed date and a task",
+  "messages": [
+    {"speaker": "A", "minute": 0, "text": "How about the 25th for the trip?"},
+    {"speaker": "B", "minute": 1, "text": "sounds good"},
+    {"speaker": "C", "minute": 2, "text": "works for me"},
+    {"speaker": "D", "minute": 3, "text": "Let's go with the 25th then"},
+    {"speaker": "C", "minute": 4, "text": "I'll book the train"}
+  ],
+  "expected": {
+    "decisions": [{"decisionType": "date", "status": "likely_decided", "option": "25th"}],
+    "openQuestions": 0,
+    "taskOwners": ["C"]
+  }
+}
